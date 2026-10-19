@@ -26,6 +26,7 @@ pub struct BrowserState {
     pub workspaces: Vec<Workspace>,
     pub sidebar_collapsed: bool,
     pub is_loading: bool,
+    pub can_restore_closed_tab: bool,
     #[serde(skip)]
     next_tab_id: usize,
     pub homepage: String,
@@ -72,6 +73,7 @@ impl BrowserState {
             workspaces,
             sidebar_collapsed: false,
             is_loading: false,
+            can_restore_closed_tab: false,
             next_tab_id: 2,
             homepage: "felaris://newtab".to_string(),
             closed_tabs: Vec::new(),
@@ -103,6 +105,7 @@ impl BrowserState {
         let idx = self.tabs.iter().position(|t| t.id == tab_id)?;
         let removed = self.tabs.remove(idx);
         self.closed_tabs.push(removed);
+        self.can_restore_closed_tab = true;
 
         if self.tabs.is_empty() {
             let new_id = self.add_tab(None, false);
@@ -110,7 +113,6 @@ impl BrowserState {
         }
 
         if self.active_tab_id == tab_id {
-            // Find another tab in the same workspace if possible
             let same_workspace: Vec<usize> = self
                 .tabs
                 .iter()
@@ -135,8 +137,10 @@ impl BrowserState {
             self.next_tab_id += 1;
             tab.is_sleeping = false;
             let id = tab.id;
+            self.active_workspace_id = tab.workspace_id;
             self.tabs.push(tab);
             self.active_tab_id = id;
+            self.can_restore_closed_tab = !self.closed_tabs.is_empty();
             Some(id)
         } else {
             None
@@ -196,9 +200,42 @@ impl BrowserState {
         }
     }
 
+    pub fn toggle_pin(&mut self, tab_id: usize) {
+        if let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == tab_id) {
+            tab.is_pinned = !tab.is_pinned;
+        }
+    }
+
+    pub fn cycle_tab(&mut self, backwards: bool) -> Option<&Tab> {
+        let ids: Vec<usize> = self
+            .tabs
+            .iter()
+            .filter(|tab| tab.workspace_id == self.active_workspace_id)
+            .map(|tab| tab.id)
+            .collect();
+        let index = ids.iter().position(|id| *id == self.active_tab_id)?;
+        let next = if backwards {
+            (index + ids.len() - 1) % ids.len()
+        } else {
+            (index + 1) % ids.len()
+        };
+        self.switch_tab(ids[next])
+    }
+
     pub fn clear_unpinned_tabs(&mut self) {
-        let active_id = self.active_tab_id;
-        self.tabs.retain(|t| t.is_pinned || t.id == active_id);
+        let to_close: Vec<usize> = self
+            .tabs
+            .iter()
+            .filter(|tab| {
+                tab.workspace_id == self.active_workspace_id
+                    && !tab.is_pinned
+                    && tab.id != self.active_tab_id
+            })
+            .map(|tab| tab.id)
+            .collect();
+        for id in to_close {
+            self.close_tab(id);
+        }
     }
 
     pub fn active_tab(&self) -> Option<&Tab> {
@@ -218,5 +255,74 @@ impl BrowserState {
 
     pub fn set_loading(&mut self, loading: bool) {
         self.is_loading = loading;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pinning_and_closing_others_preserves_other_workspaces_and_undo() {
+        let mut state = BrowserState::new();
+        let pinned = state.add_tab(Some("https://example.com".into()), false);
+        state.toggle_pin(pinned);
+        state.switch_workspace(2);
+        let other_workspace = state.active_tab_id;
+        state.switch_workspace(1);
+        let active = state.add_tab(None, false);
+        state.clear_unpinned_tabs();
+        assert_eq!(state.tabs.len(), 3);
+        assert!(
+            state
+                .tabs
+                .iter()
+                .any(|tab| tab.id == pinned && tab.is_pinned)
+        );
+        assert!(state.tabs.iter().any(|tab| tab.id == other_workspace));
+        assert_eq!(state.active_tab_id, active);
+        assert!(state.can_restore_closed_tab);
+        state.restore_closed_tab();
+        assert_eq!(state.tabs.len(), 4);
+        assert!(!state.can_restore_closed_tab);
+    }
+
+    #[test]
+    fn restoration_selects_original_workspace_and_wakes_tab() {
+        let mut state = BrowserState::new();
+        state.switch_workspace(2);
+        let id = state.add_tab(Some("https://example.com".into()), false);
+        state.close_tab(id);
+        state.switch_workspace(1);
+        state.restore_closed_tab().unwrap();
+        let tab = state.active_tab().unwrap();
+        assert_eq!(tab.workspace_id, state.active_workspace_id);
+        assert_eq!(state.active_workspace_id, 2);
+        assert!(!tab.is_sleeping);
+        assert_ne!(tab.id, id);
+    }
+
+    #[test]
+    fn cycling_wraps_within_workspace_and_wakes_tab() {
+        let mut state = BrowserState::new();
+        let second = state.add_tab(None, false);
+        state.switch_workspace(2);
+        state.switch_tab(second);
+        state.sleep_inactive_tabs();
+        assert_eq!(state.cycle_tab(false).unwrap().id, 1);
+        assert!(!state.active_tab().unwrap().is_sleeping);
+        assert_eq!(state.cycle_tab(true).unwrap().id, second);
+    }
+
+    #[test]
+    fn closing_last_tab_creates_a_recoverable_new_tab() {
+        let mut state = BrowserState::new();
+        state.close_tab(1);
+        assert_eq!(state.tabs.len(), 1);
+        assert_eq!(state.active_tab().unwrap().url, "felaris://newtab");
+        assert!(state.can_restore_closed_tab);
+        state.restore_closed_tab();
+        assert_eq!(state.tabs.len(), 2);
+        assert!(!state.can_restore_closed_tab);
     }
 }

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Felaris — New tab search</title>
+<style>
+/* A dark root color-scheme makes the WebView canvas opaque; scope it to the panel. */
+:root { color-scheme:normal; font-family:"Segoe UI",system-ui,sans-serif; color:#f5f5f7; --muted:#b2b2b8; --line:#323236; --focus:#dedee3; }
+* { box-sizing:border-box; }
+html { background:transparent; }
+body { margin:0; height:100vh; background:rgb(0 0 0 / .48); padding:clamp(40px,18vh,160px) 24px 24px; display:flex; align-items:flex-start; justify-content:center; overflow:hidden; }
+.palette { color-scheme:dark; width:min(640px,100%); max-height:100%; display:flex; flex-direction:column; background:#171719; border:1px solid #424246; border-radius:16px; box-shadow:0 24px 80px rgb(0 0 0 / .5); overflow:hidden; }
+form { display:flex; align-items:center; gap:14px; padding:14px 16px; flex-shrink:0; }
+svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; color:var(--muted); }
+input,button { font:inherit; } input { min-width:0; width:100%; border:0; background:transparent; color:#f5f5f7; caret-color:var(--focus); font-size:17px; height:36px; outline:none; }
+input::placeholder { color:var(--muted); opacity:1; } ::selection { color:white; background:#45454b; }
+form:focus-within { box-shadow:inset 0 -1px var(--focus); }
+.close { width:30px; height:30px; display:grid; place-items:center; border:0; border-radius:7px; background:none; color:var(--muted); cursor:pointer; flex-shrink:0; } .close svg { width:16px; height:16px; } .close:hover { background:#303034; color:white; } .close:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+.results { padding:6px; overflow:auto; min-height:0; scrollbar-width:thin; scrollbar-color:#45454b transparent; }
+.option { display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:9px; cursor:pointer; }
+.option[aria-selected="true"] { background:#2d2d32; } .option:hover { background:#27272b; } .option[aria-selected="true"]:hover { background:#2d2d32; }
+.option>svg { width:18px; height:18px; } .option-text { min-width:0; flex:1; } .option-title,.option-detail { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .option-title { font-size:14px; line-height:1.5; } .option-detail { color:var(--muted); font-size:12px; line-height:1.5; }
+.empty { margin:0; padding:18px 16px 22px; font-size:13px; color:var(--muted); line-height:1.6; }
+footer { border-top:1px solid var(--line); display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:12px 18px; font-size:12px; color:var(--muted); flex-shrink:0; }
+kbd { font:11px "Segoe UI",system-ui,sans-serif; color:#dedee3; border:1px solid #4a4a50; padding:1px 5px; border-radius:4px; margin-right:5px; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+[hidden] { display:none!important; }
+@media(max-width:500px) { body { padding:40px 12px 12px; } form { padding:12px; gap:10px; } input { font-size:15px; } }
+.close,.option { transition:background-color 120ms ease,color 120ms ease; }
+.close:active { transform:scale(.94); }
+@media(prefers-reduced-motion:reduce) { .close,.option { transition-duration:80ms; } .close:active { transform:none; } }
+</style>
+</head>
+<body>
+<section class="palette" role="dialog" aria-modal="true" aria-label="Open a new tab">
+<form id="new-tab-form" role="search">
+<svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 5 5"/></svg>
+<label for="new-tab-input" class="sr-only">Search the web or enter address</label>
+<input id="new-tab-input" placeholder="Search the web or enter address" role="combobox" aria-autocomplete="list" aria-controls="new-tab-results" aria-expanded="false" autocomplete="off" spellcheck="false">
+<button class="close" type="button" id="dismiss" title="Cancel (Escape)" aria-label="Cancel new tab"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+</form>
+<div class="results" id="new-tab-results" role="listbox" aria-label="Search or switch to an open tab"></div>
+<p class="empty" id="empty">Search the web or enter a URL. Your current page stays open.</p>
+<div class="sr-only" role="status" id="result-status" aria-live="polite"></div>
+<footer><span><kbd>Enter</kbd>Open <span aria-hidden="true"> · </span><kbd>↑ ↓</kbd>Choose</span><span><kbd>Esc</kbd>Cancel</span></footer>
+</section>
+<script>__COMMON_SCRIPT__</script>
+<script>
+const input=document.getElementById('new-tab-input');
+const results=document.getElementById('new-tab-results');
+let state={tabs:[],workspaces:[]};
+let options=[];
+let selected=0;
+let submitting=false;
+let composing=false;
+const panel=document.querySelector('.palette');
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+reducedMotion.addEventListener('change',()=>{if(reducedMotion.matches)document.getAnimations().forEach(animation=>animation.finish());});
+function finish(action,payload={}) {
+ if(submitting) return;
+ submitting=true;
+ input.readOnly=true;
+ const style=getComputedStyle(panel);
+ const from={opacity:style.opacity,transform:style.transform,filter:style.filter};
+ document.getAnimations().forEach(animation=>animation.cancel());
+ if(reducedMotion.matches) {Felaris.send(action,payload);return;}
+ document.body.animate([{backgroundColor:'rgb(0 0 0 / .48)'},{backgroundColor:'rgb(0 0 0 / 0)'}],{duration:100,fill:'forwards',id:'palette-scrim'});
+ const exit=panel.animate([from,{opacity:0,transform:'translateY(-6px) scale(.99)',filter:'blur(1px)'}],{duration:100,easing:'cubic-bezier(.4,0,1,1)',fill:'forwards',id:'palette-close'});
+ exit.finished.then(()=>Felaris.send(action,payload)).catch(()=>{});
+}
+const dismiss=()=>finish('dismiss_new_tab');
+function select(index) {
+ selected=index;
+ for(const [i,row] of [...results.children].entries()) row.setAttribute('aria-selected',String(i===selected));
+ const row=results.children[selected];
+ if(row) { input.setAttribute('aria-activedescendant',row.id); row.scrollIntoView({block:'nearest'}); }
+ else input.removeAttribute('aria-activedescendant');
+}
+function render() {
+ const query=input.value.trim();
+ const target=Felaris.resolveAddress(query);
+ options=[];
+ if(target) options.push({title:query,detail:target==='https://search.brave.com/search?q='+encodeURIComponent(query)?'Search with Brave':'Open in a new tab',url:target});
+ for(const tab of state.tabs.filter(tab=>tab.url!=='felaris://newtab'&&(!query||(tab.title+' '+tab.url).toLowerCase().includes(query.toLowerCase()))).slice(0,6)) {
+  const workspace=state.workspaces.find(space=>space.id===tab.workspace_id);
+  options.push({title:tab.title||tab.url,detail:`Switch to tab${workspace?' · '+workspace.name:''} · ${tab.url}`,id:tab.id});
+ }
+ results.replaceChildren();
+ options.forEach((option,index)=>{
+  const row=document.createElement('div'); row.id='new-tab-option-'+index; row.className='option'; row.setAttribute('role','option');
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'); svg.setAttribute('viewBox','0 0 24 24'); svg.setAttribute('aria-hidden','true');
+  const path=document.createElementNS(svg.namespaceURI,'path'); path.setAttribute('d',option.id?'M4 5h16v14H4zM4 9h16':'M5 12h14m-6-6 6 6-6 6'); svg.append(path);
+  const text=document.createElement('span'); text.className='option-text';
+  const title=document.createElement('span'); title.className='option-title'; title.textContent=option.title;
+  const detail=document.createElement('span'); detail.className='option-detail'; detail.textContent=option.detail;
+  text.append(title,detail); row.append(svg,text);
+  row.onmousedown=event=>event.preventDefault(); row.onclick=()=>{select(index);submit();};
+  results.append(row);
+ });
+ input.setAttribute('aria-expanded',String(options.length>0));
+ document.getElementById('empty').hidden=options.length>0;
+ document.getElementById('result-status').textContent=options.length?`${options.length} ${options.length===1?'suggestion':'suggestions'} available`:'';
+ select(0);
+}
+function submit() {
+ if(submitting||composing) return;
+ const option=options[selected];
+ if(!option) return;
+ finish(option.id?'switch_tab':'submit_new_tab',option.id?{id:option.id}:{url:option.url});
+}
+window.openNewTab=browserState=>{
+ document.getAnimations().forEach(animation=>animation.cancel());
+ state=browserState; input.value=''; input.readOnly=false; submitting=false; composing=false; render(); input.focus();
+ if(!reducedMotion.matches) {
+  document.body.animate([{backgroundColor:'rgb(0 0 0 / 0)'},{backgroundColor:'rgb(0 0 0 / .48)'}],{duration:180,id:'palette-scrim'});
+  panel.animate([{opacity:.6,transform:'translateY(-10px) scale(.985)',filter:'blur(2px)'},{opacity:1,transform:'translateY(0) scale(1)',filter:'blur(0)'}],{duration:220,easing:'cubic-bezier(.16,1,.3,1)',id:'palette-open'});
+ }
+};
+input.addEventListener('compositionstart',()=>{composing=true;});
+input.addEventListener('compositionend',()=>{composing=false;});
+input.oninput=()=>{if(!submitting)render();};
+document.getElementById('new-tab-form').onsubmit=event=>{event.preventDefault();submit();};
+document.getElementById('dismiss').onclick=dismiss;
+document.body.onmousedown=event=>{if(event.target===document.body)dismiss();};
+window.addEventListener('keydown',event=>{
+ if(event.isComposing) return;
+ if(event.key==='Escape'||(event.ctrlKey&&event.key.toLowerCase()==='w')) {event.preventDefault();dismiss();}
+ else if(event.ctrlKey&&['t','l'].includes(event.key.toLowerCase())) {event.preventDefault();if(submitting)window.openNewTab(state);input.focus();input.select();}
+ else if(['ArrowDown','ArrowUp'].includes(event.key)&&options.length) {event.preventDefault();select((selected+(event.key==='ArrowDown'?1:-1)+options.length)%options.length);input.focus();}
+ else if(event.key==='Tab') {event.preventDefault();(document.activeElement===input?document.getElementById('dismiss'):input).focus();}
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Felaris UI regression checks</title>
+<style>
+body { margin:0; display:flex; height:100vh; background:#101011; }
+iframe { border:0; height:100%; display:block; }
+#sidebar { width:260px; flex-shrink:0; }
+#page { flex:1; min-width:0; margin:8px; height:calc(100% - 16px); border-radius:10px; }
+#palette { position:fixed; inset:0; width:100%; height:100%; z-index:2; }
+#results { position:fixed; bottom:0; right:0; background:#fff; color:#111; padding:6px; font:12px system-ui; }
+</style>
+<iframe id="sidebar" title="Sidebar under test"></iframe>
+<iframe id="page" title="New tab under test"></iframe>
+<iframe id="palette" title="New tab search under test" hidden></iframe>
+<output id="results">Running…</output>
+<script>
+window.messages=[];
+window.fixtureState={
+ tabs:[
+  {id:1,workspace_id:1,title:'New Tab',url:'felaris://newtab',is_pinned:false,is_sleeping:false},
+  {id:2,workspace_id:1,title:'The Rust Programming Language',url:'https://doc.rust-lang.org/book/',is_pinned:true,is_sleeping:false},
+  {id:3,workspace_id:1,title:'GitHub · Build and ship software',url:'https://github.com',is_pinned:false,is_sleeping:false},
+  {id:4,workspace_id:1,title:'A long title to check truncation safely',url:'https://example.com',is_pinned:false,is_sleeping:true},
+  {id:5,workspace_id:2,title:'Other workspace',url:'https://example.org',is_pinned:false,is_sleeping:false}
+ ],
+ active_tab_id:1,active_workspace_id:1,sidebar_collapsed:false,is_loading:false,can_restore_closed_tab:true,
+ workspaces:[{id:1,name:'General'},{id:2,name:'Dev & Code'},{id:3,name:'Deep Dive'}]
+};
+async function load(frame,file,common) {
+ const html=await fetch('../src/'+file).then(r=>r.text());
+ await new Promise(resolve=>{frame.onload=resolve;frame.srcdoc=html.replace('__COMMON_SCRIPT__',common);});
+ frame.contentWindow.ipc={postMessage:json=>messages.push(JSON.parse(json))};
+}
+window.runChecks=async()=>{
+ const w=sidebar.contentWindow,d=w.document,p=page.contentWindow.document;
+ const passed=[];
+ const check=(name,ok)=>{if(!ok)throw Error(name);passed.push(name);};
+ w.updateState(structuredClone(fixtureState));
+ check('current workspace tabs only',d.querySelectorAll('.tab').length===4);
+ check('sidebar shortcut dock removed',!d.querySelector('.essentials,.essential'));
+ const originalRow=d.querySelector('.tab');
+ const originalWorkspace=d.querySelector('.space');
+ w.updateState({...structuredClone(fixtureState),is_loading:true});
+ check('loading keeps tab and workspace nodes stable',d.querySelector('.tab')===originalRow&&d.querySelector('.space')===originalWorkspace);
+ w.updateState({...structuredClone(fixtureState),active_tab_id:3});
+ check('active selection reuses tab rows',d.querySelector('.tab')===originalRow&&d.querySelector('.tab.active .tab-main').dataset.tabId==='3');
+ w.updateState(structuredClone(fixtureState));
+ check('pinned section',d.querySelectorAll('#pinned-tabs .tab').length===1);
+ w.focusAddress();
+ d.getElementById('url-input').value='unfinished draft';
+ w.updateState({...structuredClone(fixtureState),is_loading:true});
+ check('address draft survives loading update',d.getElementById('url-input').value==='unfinished draft');
+ check('stop while loading',d.getElementById('btn-reload').getAttribute('aria-label')==='Stop loading');
+ d.getElementById('url-input').blur();
+ d.getElementById('btn-search-tabs').click();
+ const filter=d.getElementById('tab-search');
+ filter.value='rust';filter.dispatchEvent(new Event('input'));
+ check('search by title and URL',d.querySelectorAll('.tab').length===1);
+ filter.value='not found';filter.dispatchEvent(new Event('input'));
+ check('empty search',!d.getElementById('empty-tabs').hidden);
+ d.getElementById('btn-search-tabs').click();
+ d.querySelector('.tab-main').click();check('select IPC',messages.at(-1).action==='switch_tab'&&messages.at(-1).id===2);
+ d.getElementById('btn-pin-tab').click();check('pin IPC',messages.at(-1).action==='toggle_pin');
+ d.querySelector('#tabs-container .close-tab').click();check('close IPC',messages.at(-1).action==='close_tab');
+ d.getElementById('toast-undo').click();check('undo IPC',messages.at(-1).action==='restore_closed_tab');
+ w.updateState({...structuredClone(fixtureState),tabs:[...fixtureState.tabs,{id:6,workspace_id:1,title:'<img src=x onerror=alert(1)>',url:'https://example.net'}]});
+ check('untrusted titles stay text',!d.querySelector('.tab img'));
+ check('tab motion respects reduced motion',w.matchMedia('(prefers-reduced-motion: reduce)').matches?!d.getAnimations().some(animation=>animation.id==='tab-layout'):d.getAnimations().some(animation=>animation.id==='tab-layout'));
+ d.querySelector('.tab-main').focus();w.updateState(structuredClone(fixtureState));
+ check('keyboard focus survives updates',d.activeElement.classList.contains('tab-main'));
+ w.updateState({...structuredClone(fixtureState),active_tab_id:2});
+ check('clean domain display',d.getElementById('url-input').value==='doc.rust-lang.org');
+ w.focusAddress();check('full URL editing',d.getElementById('url-input').value==='https://doc.rust-lang.org/book/');
+ const input=p.getElementById('search-input');input.value='rust async';p.getElementById('search-form').requestSubmit();
+ check('new tab search IPC',messages.at(-1).url==='https://search.brave.com/search?q=rust%20async');
+ d.getElementById('url-input').value='rust async';d.getElementById('address-form').requestSubmit();
+ check('sidebar search uses Brave',messages.at(-1).action==='navigate'&&messages.at(-1).url==='https://search.brave.com/search?q=rust%20async');
+ check('Brave Home shortcut and label',p.querySelector('.search-note').textContent==='Web searches use Brave Search'&&p.querySelector('.shortcut[href="https://search.brave.com"]').textContent==='Brave Search');
+ p.querySelector('.shortcut').click();check('shortcut IPC',messages.at(-1).url==='https://github.com/');
+ w.updateState({...structuredClone(fixtureState),sidebar_collapsed:true});
+ d.querySelector('summary').click();check('collapsed menu requests expansion',messages.at(-1).action==='toggle_sidebar');
+ w.updateState(structuredClone(fixtureState));check('expanded menu opens',d.getElementById('browser-menu').open);
+ d.getElementById('browser-menu').open=false;
+ w.updateState(structuredClone(fixtureState));
+ palette.hidden=false;
+ const n=palette.contentWindow,nd=n.document,ni=nd.getElementById('new-tab-input');
+ const change=value=>{ni.value=value;ni.dispatchEvent(new Event('input'));};
+ const submit=()=>nd.getElementById('new-tab-form').requestSubmit();
+ const settle=()=>Promise.all(nd.getAnimations().filter(animation=>animation.id.startsWith('palette-')).map(animation=>animation.finished.catch(()=>{})));
+ const countBefore=messages.length;
+ n.openNewTab(structuredClone(fixtureState));
+ check('opening palette does not create a tab',messages.length===countBefore);
+ check('palette input receives focus',nd.activeElement===ni);
+ check('palette entry respects reduced motion',n.matchMedia('(prefers-reduced-motion: reduce)').matches?!nd.getAnimations().some(animation=>animation.id==='palette-open'):nd.getAnimations().some(animation=>animation.id==='palette-open'));
+ change('new search query');
+ check('palette identifies Brave Search',nd.querySelector('.option-detail').textContent==='Search with Brave');
+ submit();submit();await settle();
+ check('palette searches in a new tab once',messages.length===countBefore+1&&messages.at(-1).action==='submit_new_tab'&&messages.at(-1).url==='https://search.brave.com/search?q=new%20search%20query');
+ n.openNewTab(structuredClone(fixtureState));change('localhost:5173');submit();await settle();
+ check('palette resolves addresses',messages.at(-1).url==='http://localhost:5173');
+ n.openNewTab(structuredClone(fixtureState));change('github');
+ n.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown'}));submit();await settle();
+ check('palette keyboard switches existing tab',messages.at(-1).action==='switch_tab'&&messages.at(-1).id===3);
+ n.openNewTab(structuredClone(fixtureState));change('cancel me');n.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));await settle();
+ check('Escape dismisses without navigation',messages.at(-1).action==='dismiss_new_tab');
+ n.openNewTab(structuredClone(fixtureState));
+ check('reopening clears draft',ni.value==='');
+ n.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',cancelable:true}));
+ check('palette traps focus',nd.activeElement.id==='dismiss');
+ n.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',cancelable:true}));
+ check('palette focus wraps to input',nd.activeElement===ni);
+ ni.dispatchEvent(new CompositionEvent('compositionstart'));change('入力');const beforeComposition=messages.length;submit();
+ check('IME composition does not submit',messages.length===beforeComposition);
+ ni.dispatchEvent(new CompositionEvent('compositionend'));
+ n.openNewTab({tabs:[{id:7,title:'<img src=x onerror=alert(1)>',url:'https://example.net',workspace_id:1}],workspaces:fixtureState.workspaces});
+ check('palette titles are text only',!nd.querySelector('img')&&nd.querySelector('.option-title').textContent.startsWith('<img'));
+ nd.body.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));await settle();
+ check('backdrop cancels',messages.at(-1).action==='dismiss_new_tab');
+ n.openNewTab(structuredClone(fixtureState));
+ check('palette canvas stays transparent',n.getComputedStyle(nd.documentElement).colorScheme==='normal'&&n.getComputedStyle(nd.documentElement).backgroundColor==='rgba(0, 0, 0, 0)'&&n.getComputedStyle(nd.querySelector('.palette')).colorScheme==='dark');
+ check('black theme is shared',d.defaultView.getComputedStyle(d.body).backgroundColor==='rgb(16, 16, 17)'&&page.contentWindow.getComputedStyle(p.body).backgroundColor==='rgb(12, 12, 14)');
+ const beforeReopen=messages.length;
+ nd.getElementById('dismiss').click();
+ n.dispatchEvent(new KeyboardEvent('keydown',{key:'t',ctrlKey:true}));await settle();
+ check('rapid reopen cancels a pending animated close',messages.length===beforeReopen+(n.matchMedia('(prefers-reduced-motion: reduce)').matches?1:0)&&nd.activeElement===ni&&!ni.readOnly);
+ nd.getAnimations().forEach(animation=>animation.cancel());
+ palette.hidden=true;
+ results.textContent=passed.length+' checks passed';
+ return passed;
+};
+(async()=>{
+ const common=await fetch('../src/browser.js').then(r=>r.text());
+ await Promise.all([load(sidebar,'ui.html',common),load(page,'start_page.html',common),load(palette,'new_tab.html',common)]);
+ window.checkResults=await runChecks();
+})().catch(error=>{results.textContent='FAIL: '+error.message;console.error(error);});
+</script>
+</html>

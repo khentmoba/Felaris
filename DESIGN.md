@@ -24,7 +24,7 @@ User-requested black theme: sidebar `#101011`, page `#0c0c0e`, neutral accent `#
 - Pinning is workspace-scoped and protects a tab from Close Others. Closing others affects only the current workspace and retains restoration history.
 - Search filters tab titles and URLs within the selected workspace; Escape clears the filter and returns focus to its trigger.
 - The compact rail uses title tooltips. Opening its actions menu expands the rail first rather than clipping a menu into a narrow WebView. Ctrl+L also expands it and focuses the address field.
-- Loading changes Reload to Stop. Sleeping tabs use subdued text and a moon icon; never report invented MB savings.
+- Back and Forward reflect native history availability. Loading changes Reload to Stop. Sleeping tabs use subdued text and a moon icon; never report invented MB savings.
 - The user-highlighted four-tile Essentials dock is removed entirely, including compact-mode markup/styles. The separate Home page shortcuts remain.
 
 ## Research used
@@ -45,4 +45,4 @@ Tab rows preserve identity and use 200ms position transitions when the list chan
 
 ## Deliberate limits
 
-No new UI dependency, fake settings, permission badges, private mode, downloads/bookmarks backend, audio controls, floating edge-hover sidebar, or multi-WebView tab engine. Only the new-tab palette is a floating overlay; suggestions are local open tabs, not a network autocomplete/history service. Tab/workspace state is still session-only. Switching tabs still reloads URLs in the single content WebView; this redesign does not imply independent live sessions or measured memory reclamation.
+No new UI dependency, fake settings, permission badges, private mode, bookmarks backend, audio controls, or floating edge-hover sidebar. Only the new-tab palette is a floating overlay; suggestions are local open tabs, not a network autocomplete/history service. Live tabs use independent WebViews; sleeping unloads a page and waking reloads its saved URL. Native WebView2 downloads provide progress and file actions. Sessions persist URLs, pins, workspaces, and recent closed tabs; unsaved forms and native page history do not survive restart. Site permissions use origin-labelled native prompts, and page errors provide Retry. Status messages persist until dismissed. Downloads and update activity disable conflicting actions. The Windows title follows the active tab.

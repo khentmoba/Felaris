@@ -42,4 +42,25 @@ for (const file of ['src/ui.html', 'src/start_page.html', 'src/new_tab.html']) {
   for (const script of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new vm.Script(script[1], { filename: file });
   assert.ok(!html.includes('__COMMON_SCRIPT__'));
 }
-console.log('Address resolution, shortcut routing, and embedded script syntax passed.');
+const uiHtml = fs.readFileSync('src/ui.html', 'utf8');
+assert.ok(uiHtml.includes('<symbol id="felaris"'), 'src/ui.html must define #felaris logo symbol');
+assert.ok(uiHtml.includes("icon('felaris')"), 'src/ui.html must render #felaris icon for felaris://newtab');
+const expectedAssets = [
+  'app-icon-polaris.jpg',
+  'favicon.svg',
+  'felaris-icon.png',
+  'icon.ico',
+  'icon_64.rgba',
+  'logo-monochrome.svg',
+  'logo-wordmark.svg',
+  'logo.svg',
+];
+assert.deepEqual(fs.readdirSync('assets').sort(), expectedAssets, 'assets/ must contain only canonical branding files');
+for (const required of ['scripts/build.py', 'scripts/notify_discord.py', '.agents/skills/discord-release/SKILL.md']) {
+  assert.ok(fs.existsSync(required), `Missing tracked release file: ${required}`);
+}
+assert.ok(
+  fs.readFileSync('scripts/notify_discord.py', 'utf8').includes('LOCALAPPDATA'),
+  'scripts/notify_discord.py must support LOCALAPPDATA/Felaris/discord_webhook.txt fallback across worktrees',
+);
+console.log('Address resolution, shortcut routing, asset hygiene, and embedded script syntax passed.');

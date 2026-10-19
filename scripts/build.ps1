@@ -23,7 +23,7 @@ Write-Host "==================================================" -ForegroundColor
 
 Push-Location $ProjectRoot
 try {
-    cargo build --release
+    & (Join-Path $PSScriptRoot "package.ps1")
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[Build] Compilation failed with exit code $LASTEXITCODE." -ForegroundColor Red
         exit $LASTEXITCODE
@@ -46,7 +46,7 @@ Write-Host "[Build] Compilation successful: $($fileItem.Name) ($sizeMb)" -Foregr
 $cargoToml = Get-Content (Join-Path $ProjectRoot "Cargo.toml") -Raw
 $version = if ($cargoToml -match 'version\s*=\s*"([^"]+)"') { $Matches[1] } else { "0.1.0" }
 if (-not $Summary) {
-    $Summary = "Felaris v$version release — smooth, lightweight, Zen-inspired browser built in Rust."
+    $Summary = "Felaris v$version release - smooth, lightweight, Zen-inspired browser built in Rust."
 }
 
 # Sync version.json
@@ -70,7 +70,7 @@ if (-not $SkipGitHub) {
         if ($DryRun) {
             Write-Host "[DryRun] Would run: gh release create $tag $exePath --title 'Felaris $tag' --notes '$Summary'" -ForegroundColor DarkYellow
         } else {
-            & gh release create $tag $exePath --title "Felaris $tag" --notes $Summary
+            & gh release create $tag $exePath (Join-Path $ProjectRoot "target\release\felaris-setup.exe") (Join-Path $ProjectRoot "target\release\SHA256SUMS") --title "Felaris $tag" --notes $Summary
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "[GitHub] Release $tag created successfully." -ForegroundColor Green
             } else {

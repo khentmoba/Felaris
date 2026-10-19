@@ -11,12 +11,12 @@
 
 ## Highlights
 
-- **100% Rust Application Shell:** Zero garbage-collection stutter, instantaneous cold startup (<100ms), and 0.0% idle CPU usage.
-- **Hardware-Accelerated Web Engine:** Powered by `wry` and native OS WebView2—flawlessly renders modern web apps (YouTube 4K 60fps, WebGL, Spotify, Discord, Google Docs) without downloading or compiling 60GB of C++ engine binaries.
-- **Ultra-Lean Footprint:**
-  - Full application binary is only **~2.5 MB**.
-  - Entire development environment uses less than **3 GB** of storage.
-- **Smart Tab Sleeping:** Conserves system RAM by sleeping backgrounded tabs and instantly reviving them upon selection.
+- **Rust desktop shell:** Tao handles the Windows window and Wry hosts WebView2.
+- **Independent live tabs:** Switching tabs preserves page state and native back/forward history while the tabs stay awake.
+- **Session recovery:** Tabs, workspace selection, pins, and recent closed tabs are saved locally, with a backup for recovery. Site storage uses a persistent WebView2 profile.
+- **Windows integration:** Per-user setup, Start menu and desktop shortcuts, Installed apps registration, default-browser eligibility, and link handoff to the running instance.
+- **Native downloads:** WebView2 provides download progress and file actions; Felaris reports completion and warns before closing active downloads.
+- **Explicit tab sleeping:** Unloads inactive pages. Selecting a sleeping tab reloads its saved URL; unsaved form state and page history do not survive sleeping or an app restart.
 - **Built-in Upstream Sync & Conflict Inspector:** Includes an automated local tool and agent skill to fetch upstream sources, compare local changes, and simulate pre-merge conflict status in memory before applying.
 
 ---
@@ -61,7 +61,8 @@
 | `Ctrl + Tab` / `Ctrl + Shift + Tab` | Cycle tabs within the workspace |
 | `Alt + 1` / `2` / `3` | Switch workspace |
 | `Ctrl + S` | Expand / collapse sidebar |
-| `Ctrl + Shift + S` | Mark background tabs as sleeping |
+| `Ctrl + Shift + S` | Unload background tabs (except active downloads) |
+| `Ctrl + J` | Open Downloads |
 | `Enter` (in URL bar) | Smart navigate (detects URLs vs. web search) |
 
 **New tabs work like Zen:** press `Ctrl+T` or click **New tab** to open a floating search/address bar over the current page. Enter opens the destination in a new tab; matching open tabs can be selected with the arrow keys. Escape, the close button, or clicking outside cancels without creating an empty tab or reloading the page. The startup/Home page remains available separately. The sidebar, Home page, native title bar, and palette share a black/charcoal theme.
@@ -140,6 +141,65 @@ A dedicated agent skill is available at `.agents/skills/upstream-sync/SKILL.md` 
 
 ## Installation & Updates
 
+### Windows App & Setup
+
+Felaris is a Rust desktop app using Tao and Wry (Windows WebView2). Release
+builds include an Explorer icon, Windows product/version details, and a taskbar
+identity, and open without a console window.
+
+Build the app and double-click setup executable locally:
+
+```powershell
+.\scripts\package.ps1
+```
+
+Double-click `target\release\felaris-setup.exe` to install for the current user,
+with Start menu and desktop shortcuts and an entry in Windows Installed apps.
+Setup shows the result in a Windows dialog. No administrator access is needed.
+The portable app is `target\release\felaris.exe`; it also accepts `--setup`.
+After installation, choose **Set default browser?** from the sidebar menu, then
+select Felaris in Windows Settings. Felaris registers HTTP, HTTPS, and HTML
+file support; Windows keeps the final choice with you.
+Uninstall from Windows Settings to remove the app and shortcuts. Browser data
+is preserved. This is a simple self-installer, without an MSI or setup wizard.
+
+### Verification and signing
+
+`package.ps1` verifies Windows icons/version resources and runs the release app
+headlessly against local fixtures using a temporary profile. The tests cover
+live tab form retention, native history, pop-ups, downloads, error/retry,
+address and palette drafts, second-launch link handoff, forced-exit recovery,
+and fallback from a corrupt session file. It then writes `target/release/SHA256SUMS`.
+The same verification runs in Windows CI, which retains the app, setup, and checksums.
+
+To sign with an existing certificate in your Windows user certificate store:
+
+```powershell
+.\scripts\package.ps1 -CertificateThumbprint YOUR_THUMBPRINT -TimestampServer YOUR_TIMESTAMP_URL
+```
+
+Without a signing certificate, the package remains unsigned. Checksums detect
+file changes; they do not establish publisher identity. Packaging does not
+publish a GitHub release or send a Discord message.
+
+### Browser data and recovery
+
+Browser data is stored in `%LOCALAPPDATA%\Felaris`. `session.json` and
+`session.json.bak` retain tab URLs, workspaces, pins, and recently closed tabs.
+`WebView2` contains persistent site storage. Restarting restores URLs, rather
+than unsaved forms or per-tab navigation history. Uninstall preserves this data.
+
+Page failures offer Retry; renderer failures preserve tab URLs for reload.
+Camera, microphone, location, notifications, and clipboard-read requests show
+an origin-labelled native prompt. Unknown permission types are denied. Standard
+file pickers and downloads use WebView2's native interfaces.
+
+For an isolated headless development check after `cargo build --locked`:
+
+```powershell
+python tests/native_smoke.py
+```
+
 ### One-Line Install (PowerShell)
 
 Install the latest release to `%LOCALAPPDATA%\Programs\Felaris` with Start Menu & Desktop shortcuts:
@@ -159,7 +219,7 @@ felaris.exe --install
 # Check for updates from command line
 felaris.exe --check-update
 
-# Cleanly remove shortcuts and registry entries
+# Remove the installed app, shortcuts and registry entry (preserves browser data)
 felaris.exe --uninstall
 ```
 

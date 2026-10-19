@@ -66,7 +66,10 @@ try {
 
 # Run the built-in installer mode to create shortcuts & uninstall registry
 Write-Host "[Install] Configuring shortcuts and Windows registration..." -ForegroundColor Gray
-& $TargetExe --install
+$installProcess = Start-Process -FilePath $TargetExe -ArgumentList '--install' -Wait -PassThru -WindowStyle Hidden
+if ($installProcess.ExitCode -ne 0) {
+    throw "Felaris registration failed with exit code $($installProcess.ExitCode)"
+}
 
 Write-Host "`n[Install] Felaris installed successfully!" -ForegroundColor Green
 

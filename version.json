@@ -1,6 +1,6 @@
 {
-  "version": "0.1.0",
-  "release_url": "https://github.com/khentmoba/Felaris/releases/tag/v0.1.0",
-  "download_url": "https://github.com/khentmoba/Felaris/releases/download/v0.1.0/felaris.exe",
-  "summary": "Felaris v0.1.0 \u2014 Initial release featuring Zen Browser-inspired sidebar, floating new-tab search palette, built-in in-app auto-updater, and one-click Windows installer."
+  "version": "0.1.1",
+  "release_url": "https://github.com/khentmoba/Felaris/releases/tag/v0.1.1",
+  "download_url": "https://github.com/khentmoba/Felaris/releases/download/v0.1.1/felaris.exe",
+  "summary": "Your tabs, workspaces, pins, and recently closed tabs now survive restarts, with recovery after a crash. Switch between tabs without losing page state. Install Felaris with a double-click Windows setup app, desktop and Start menu shortcuts, and support for opening web links. Updates now validate downloads and restore the previous app if installation fails. This release also fixes tab controls, pop-ups, downloads, and page error recovery."
 }

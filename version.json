@@ -2,5 +2,5 @@
   "version": "0.1.0",
   "release_url": "https://github.com/khentmoba/Felaris/releases/tag/v0.1.0",
   "download_url": "https://github.com/khentmoba/Felaris/releases/download/v0.1.0/felaris.exe",
-  "summary": "Felaris v0.1.0 release \u2014 smooth, lightweight, Zen-inspired browser built in Rust."
+  "summary": "Felaris v0.1.0 \u2014 Initial release featuring Zen Browser-inspired sidebar, floating new-tab search palette, built-in in-app auto-updater, and one-click Windows installer."
 }

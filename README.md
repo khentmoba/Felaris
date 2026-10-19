@@ -138,15 +138,48 @@ A dedicated agent skill is available at `.agents/skills/upstream-sync/SKILL.md` 
 
 ---
 
-## Releases & Discord Notifications
+## Installation & Updates
 
-Felaris includes automated Discord release scripts that publish announcements, changelogs, and binary uploads (`felaris.exe`) directly to the `#felaris-releases` Discord channel:
+### One-Line Install (PowerShell)
+
+Install the latest release to `%LOCALAPPDATA%\Programs\Felaris` with Start Menu & Desktop shortcuts:
+
+```powershell
+irm https://raw.githubusercontent.com/khentmoba/Felaris/main/scripts/install.ps1 | iex
+```
+
+### Portable Executable & Self-Installer
+
+Felaris runs fully portably. You can also self-install or uninstall directly via CLI:
+
+```bash
+# Register Start Menu & Desktop shortcuts
+felaris.exe --install
+
+# Check for updates from command line
+felaris.exe --check-update
+
+# Cleanly remove shortcuts and registry entries
+felaris.exe --uninstall
+```
+
+### Native In-App Auto-Updater
+
+- On launch, Felaris automatically checks for new versions in the background.
+- When an update is available, an "Update Available" banner appears in the sidebar and browser menu.
+- Clicking **Update now** downloads the binary, swaps the executable in-place, and restarts seamlessly.
+
+---
+
+## Releases & Distribution Pipeline
+
+Felaris automates releases to both GitHub Releases and Discord (`#felaris-releases`):
 
 ```bash
 # Test Discord webhook connectivity
 python scripts/notify_discord.py --test
 
-# Build release and publish with changelog and binary upload
+# Build release, publish to GitHub Releases, and notify Discord
 python scripts/build.py -s "Release summary"
 ```
 

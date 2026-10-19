@@ -1,6 +1,7 @@
 mod start_page;
 mod state;
 mod ui;
+mod updater;
 
 use serde::Deserialize;
 use state::BrowserState;
@@ -53,6 +54,12 @@ enum IpcMessage {
     CycleTab { backwards: bool },
     #[serde(rename = "stop")]
     Stop,
+    #[serde(rename = "check_updates")]
+    CheckUpdates,
+    #[serde(rename = "apply_update")]
+    ApplyUpdate,
+    #[serde(rename = "install_app")]
+    InstallApp,
 }
 
 #[derive(Deserialize)]
@@ -98,6 +105,11 @@ enum UserEvent {
     DismissNewTab,
     TitleChanged(String),
     PageLoad(bool, String),
+    CheckUpdates,
+    UpdateAvailable(updater::UpdateManifest),
+    UpdateStatus(String),
+    ApplyUpdate,
+    InstallApp,
 }
 
 fn load_content_url(view: &WebView, state: &BrowserState, url: &str) {
@@ -158,6 +170,49 @@ fn load_app_icon() -> Option<Icon> {
 }
 
 fn main() -> wry::Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--install") {
+        match updater::install_to_system() {
+            Ok(msg) => {
+                println!("{msg}");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("Install failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    if args.iter().any(|a| a == "--uninstall") {
+        match updater::uninstall_from_system() {
+            Ok(msg) => {
+                println!("{msg}");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("Uninstall failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    if args.iter().any(|a| a == "--check-update") {
+        println!("Current version: {}", updater::CURRENT_VERSION);
+        if let Some(update) = updater::check_for_updates() {
+            println!(
+                "Update available: v{} ({})",
+                update.version, update.release_url
+            );
+            if let Some(dl) = update.download_url {
+                println!("Download URL: {dl}");
+            }
+        } else {
+            println!("Felaris is up to date.");
+        }
+        std::process::exit(0);
+    }
+
+    updater::cleanup_old_version();
+
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy: EventLoopProxy<UserEvent> = event_loop.create_proxy();
 
@@ -219,6 +274,9 @@ fn main() -> wry::Result<()> {
                     IpcMessage::CloseActiveTab => UserEvent::CloseActiveTab,
                     IpcMessage::CycleTab { backwards } => UserEvent::CycleTab(backwards),
                     IpcMessage::Stop => UserEvent::Stop,
+                    IpcMessage::CheckUpdates => UserEvent::CheckUpdates,
+                    IpcMessage::ApplyUpdate => UserEvent::ApplyUpdate,
+                    IpcMessage::InstallApp => UserEvent::InstallApp,
                 };
                 let _ = proxy_for_ui.send_event(event);
             }
@@ -318,6 +376,14 @@ fn main() -> wry::Result<()> {
         })
         .build(&window)?;
     let mut new_tab_open = false;
+
+    let proxy_bg_update = proxy.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        if let Some(manifest) = updater::check_for_updates() {
+            let _ = proxy_bg_update.send_event(UserEvent::UpdateAvailable(manifest));
+        }
+    });
 
     let sync_ui = |state: &BrowserState, view: &wry::WebView| {
         if let Ok(json) = serde_json::to_string(state) {
@@ -541,6 +607,69 @@ fn main() -> wry::Result<()> {
                     browser_state.set_loading(loading);
                     if !url.is_empty() && url != "about:blank" && !url.starts_with("data:") {
                         browser_state.update_active_tab(url, None);
+                    }
+                    sync_ui(&browser_state, &sidebar_view);
+                }
+
+                UserEvent::CheckUpdates => {
+                    browser_state.set_update_status(Some("Checking for updates...".to_string()));
+                    sync_ui(&browser_state, &sidebar_view);
+                    let proxy_clone = proxy.clone();
+                    std::thread::spawn(move || {
+                        if let Some(manifest) = updater::check_for_updates() {
+                            let _ = proxy_clone.send_event(UserEvent::UpdateAvailable(manifest));
+                        } else {
+                            let _ = proxy_clone.send_event(UserEvent::UpdateStatus(format!(
+                                "Felaris is up to date (v{}).",
+                                updater::CURRENT_VERSION
+                            )));
+                        }
+                    });
+                }
+
+                UserEvent::UpdateAvailable(manifest) => {
+                    browser_state.set_update_available(Some(manifest));
+                    browser_state.set_update_status(None);
+                    sync_ui(&browser_state, &sidebar_view);
+                }
+
+                UserEvent::UpdateStatus(status) => {
+                    browser_state.set_update_status(Some(status));
+                    sync_ui(&browser_state, &sidebar_view);
+                }
+
+                UserEvent::ApplyUpdate => {
+                    if let Some(update) = &browser_state.update_available {
+                        let download_url = update.download_url.clone().unwrap_or_else(|| {
+                            format!(
+                                "https://github.com/{}/releases/download/v{}/felaris.exe",
+                                updater::GITHUB_REPO,
+                                update.version
+                            )
+                        });
+                        browser_state.set_update_status(Some(
+                            "Downloading and applying update...".to_string(),
+                        ));
+                        sync_ui(&browser_state, &sidebar_view);
+                        let proxy_clone = proxy.clone();
+                        std::thread::spawn(move || {
+                            if let Err(e) = updater::download_and_apply_update(&download_url) {
+                                let _ = proxy_clone.send_event(UserEvent::UpdateStatus(format!(
+                                    "Update error: {e}"
+                                )));
+                            }
+                        });
+                    }
+                }
+
+                UserEvent::InstallApp => {
+                    match updater::install_to_system() {
+                        Ok(msg) => {
+                            browser_state.set_update_status(Some(msg));
+                        }
+                        Err(e) => {
+                            browser_state.set_update_status(Some(format!("Install error: {e}")));
+                        }
                     }
                     sync_ui(&browser_state, &sidebar_view);
                 }

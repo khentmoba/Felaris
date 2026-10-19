@@ -1,0 +1,9 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Orbital Arc -->
+  <path d="M 20 5 C 10 5 4 11 4 19 C 4 25 9 29 16 29 C 22 29 27 25 28 20 C 26.5 21.5 23 24 17 24 C 11 24 8 20 8 16 C 8 10 13 8 20 8 Z" fill="#38bdf8"/>
+  <!-- Aerodynamic F -->
+  <path d="M 12 25 V 9 H 22 V 13 H 16 V 16 H 20 V 20 H 16 V 25 Z" fill="#ffffff"/>
+  <!-- Polaris Star Spark at Top Right -->
+  <polygon points="25,5 26,8 29,9 26,10 25,13 24,10 21,9 24,8" fill="#38bdf8"/>
+  <circle cx="25" cy="9" r="1" fill="#ffffff"/>
+</svg>

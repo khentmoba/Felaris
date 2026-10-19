@@ -1,8 +1,11 @@
-# Felaris
+<p align="center">
+  <img src="assets/logo-wordmark.svg" alt="Felaris Browser" width="320">
+</p>
 
-**Felaris** is a smooth, lightweight, and easy-to-use modern browser built in Rust.
-
-Designed from the ground up to be ultra-fast, gentle on PC hardware, and free of background bloat.
+<p align="center">
+  <strong>A smooth, lightweight, and easy-to-use modern browser built in Rust.</strong><br>
+  Designed from the ground up to be ultra-fast, gentle on PC hardware, and free of background bloat.
+</p>
 
 ---
 

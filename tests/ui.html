@@ -31,6 +31,10 @@ async function load(frame,file,common) {
  const html=await fetch('../src/'+file).then(r=>r.text());
  await new Promise(resolve=>{frame.onload=resolve;frame.srcdoc=html.replace('__COMMON_SCRIPT__',common).replace('__SHORTCUTS__','[]');});
  frame.contentWindow.ipc={postMessage:json=>messages.push(JSON.parse(json))};
+ if(frame.contentWindow.Felaris) {
+  frame.contentWindow.Felaris.send=(action,payload={})=>messages.push({action,...payload});
+  frame.contentWindow.Felaris.navigate=url=>messages.push({action:'navigate',url});
+ }
 }
 window.runChecks=async()=>{
  const w=sidebar.contentWindow,d=w.document,p=page.contentWindow.document;
@@ -38,6 +42,7 @@ window.runChecks=async()=>{
  const check=(name,ok)=>{if(!ok)throw Error(name);passed.push(name);};
  w.updateState(structuredClone(fixtureState));
  check('current workspace tabs only',d.querySelectorAll('.tab').length===4);
+ check('newtab tab uses Felaris logo icon',d.querySelector('.tab-main[data-tab-id="1"] use')?.getAttribute('href')==='#felaris');
  check('sidebar shortcut dock removed',!d.querySelector('.essentials,.essential'));
  const originalRow=d.querySelector('.tab');
  const originalWorkspace=d.querySelector('.space');

@@ -56,11 +56,14 @@ enum IpcMessage {
 }
 
 #[derive(Deserialize)]
-#[serde(tag = "action", rename_all = "snake_case")]
+#[serde(tag = "action")]
 enum NewTabMessage {
-    SubmitNewTab { url: String },
-    DismissNewTab,
-    SwitchTab { id: usize },
+    #[serde(rename = "submit_new_tab")]
+    Submit { url: String },
+    #[serde(rename = "dismiss_new_tab")]
+    Dismiss,
+    #[serde(rename = "switch_tab")]
+    Switch { id: usize },
 }
 
 #[derive(Deserialize)]
@@ -122,10 +125,6 @@ fn resize_viewports(
 ) {
     let physical = window.inner_size();
     let logical = physical.to_logical::<f64>(window.scale_factor());
-    let _ = new_tab_view.set_bounds(Rect {
-        position: Position::Logical(LogicalPosition::new(0.0, 0.0)),
-        size: Size::Logical(logical),
-    });
     let sidebar_width = if collapsed {
         SIDEBAR_WIDTH_COLLAPSED
     } else {
@@ -145,6 +144,11 @@ fn resize_viewports(
     let _ = content_view.set_bounds(Rect {
         position: Position::Logical(LogicalPosition::new(content_x, content_y)),
         size: Size::Logical(LogicalSize::new(content_w, content_h)),
+    });
+
+    let _ = new_tab_view.set_bounds(Rect {
+        position: Position::Logical(LogicalPosition::new(0.0, 0.0)),
+        size: Size::Logical(logical),
     });
 }
 
@@ -305,9 +309,9 @@ fn main() -> wry::Result<()> {
         .with_ipc_handler(move |request| {
             if let Ok(message) = serde_json::from_str::<NewTabMessage>(request.body()) {
                 let event = match message {
-                    NewTabMessage::SubmitNewTab { url } => UserEvent::NewTab(Some(url)),
-                    NewTabMessage::DismissNewTab => UserEvent::DismissNewTab,
-                    NewTabMessage::SwitchTab { id } => UserEvent::SwitchTab(id),
+                    NewTabMessage::Submit { url } => UserEvent::NewTab(Some(url)),
+                    NewTabMessage::Dismiss => UserEvent::DismissNewTab,
+                    NewTabMessage::Switch { id } => UserEvent::SwitchTab(id),
                 };
                 let _ = proxy_new_tab.send_event(event);
             }
@@ -466,12 +470,11 @@ fn main() -> wry::Result<()> {
                 UserEvent::CloseTab(id) => {
                     let was_active = id == browser_state.active_tab_id;
                     browser_state.close_tab(id);
-                    if was_active {
-                        if let Some(url) =
+                    if was_active
+                        && let Some(url) =
                             browser_state.active_tab().map(|active| active.url.clone())
-                        {
-                            load_content_url(&content_view, &browser_state, &url);
-                        }
+                    {
+                        load_content_url(&content_view, &browser_state, &url);
                     }
                     sync_ui(&browser_state, &sidebar_view);
                 }
@@ -525,12 +528,12 @@ fn main() -> wry::Result<()> {
                 }
 
                 UserEvent::TitleChanged(title) => {
-                    if !title.is_empty() {
-                        if let Some(active) = browser_state.active_tab() {
-                            let url = active.url.clone();
-                            browser_state.update_active_tab(url, Some(title));
-                            sync_ui(&browser_state, &sidebar_view);
-                        }
+                    if !title.is_empty()
+                        && let Some(active) = browser_state.active_tab()
+                    {
+                        let url = active.url.clone();
+                        browser_state.update_active_tab(url, Some(title));
+                        sync_ui(&browser_state, &sidebar_view);
                     }
                 }
 

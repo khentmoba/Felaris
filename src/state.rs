@@ -260,10 +260,10 @@ impl BrowserState {
             .unwrap_or(false);
         if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == self.active_tab_id) {
             tab.url = url.clone();
-            if let Some(t) = title {
-                if !t.is_empty() {
-                    tab.title = t;
-                }
+            if let Some(t) = title
+                && !t.is_empty()
+            {
+                tab.title = t;
             }
         }
         if should_count {

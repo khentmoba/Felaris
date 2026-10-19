@@ -1,5 +1,6 @@
 /target
 /.impeccable/review/
+.pi/
 discord_webhook.txt
 scripts/discord_webhook.txt
 .env

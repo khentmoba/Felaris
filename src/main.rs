@@ -9,7 +9,7 @@ use tao::{
     dpi::{LogicalPosition, LogicalSize, Position, Size},
     event::{Event, StartCause, WindowEvent},
     event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy},
-    window::WindowBuilder,
+    window::{Icon, WindowBuilder},
 };
 use ui::{SIDEBAR_WIDTH_COLLAPSED, SIDEBAR_WIDTH_EXPANDED};
 use wry::{PageLoadEvent, Rect, WebView, WebViewBuilder};
@@ -148,16 +148,27 @@ fn resize_viewports(
     });
 }
 
+fn load_app_icon() -> Option<Icon> {
+    const ICON_RGBA: &[u8] = include_bytes!("../assets/icon_64.rgba");
+    Icon::from_rgba(ICON_RGBA.to_vec(), 64, 64).ok()
+}
+
 fn main() -> wry::Result<()> {
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy: EventLoopProxy<UserEvent> = event_loop.create_proxy();
 
-    let window = WindowBuilder::new()
+    let mut window_builder = WindowBuilder::new()
         .with_title("Felaris")
         .with_theme(Some(tao::window::Theme::Dark))
         .with_background_color((16, 16, 17, 255))
         .with_inner_size(LogicalSize::new(1380.0, 860.0))
-        .with_min_inner_size(LogicalSize::new(640.0, 480.0))
+        .with_min_inner_size(LogicalSize::new(640.0, 480.0));
+
+    if let Some(icon) = load_app_icon() {
+        window_builder = window_builder.with_window_icon(Some(icon));
+    }
+
+    let window = window_builder
         .build(&event_loop)
         .expect("Failed to create main window");
 

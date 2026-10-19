@@ -1,0 +1,36 @@
+<svg width="280" height="64" viewBox="0 0 280 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="wm-orbit" x1="10" y1="10" x2="54" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="40%" stop-color="#ffffff"/>
+      <stop offset="75%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#0ea5e9"/>
+    </linearGradient>
+    <linearGradient id="wm-f" x1="18" y1="12" x2="44" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="60%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <radialGradient id="wm-glow" cx="49" cy="30" r="14" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.9"/>
+      <stop offset="45%" stop-color="#38bdf8" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Grouped Logo Mark (scaled to 52x52 at x=6, y=6) -->
+  <g transform="translate(6, 6) scale(0.52)">
+    <circle cx="78" cy="46" r="16" fill="url(#wm-glow)"/>
+    <path d="M 64 16 C 36 14 14 32 14 54 C 14 74 30 87 50 87 C 68 87 81 77 86 64 C 81 68 70 76 52 76 C 36 76 25 64 25 52 C 25 36 38 23 64 23 Z" fill="url(#wm-orbit)"/>
+    <path d="M 32 74 C 37 72 41 68 43 60 L 43 31 C 43 27 46 24 50 24 L 72 24 C 74 24 75 26 74 28 L 71 33 C 70 34.5 68.5 35 67 35 L 52 35 L 52 46 L 64 46 C 66 46 67 48 66 50 L 64 54 C 63 55.5 61.5 56 60 56 L 52 56 L 52 62 C 52 72 42 77 34 77 C 32 77 30 76.5 30 76.5 C 31 75.5 31.8 74.8 32 74 Z" fill="url(#wm-f)"/>
+    <path d="M 78 30 Q 78 42 74 46 Q 78 50 78 62 Q 78 50 82 46 Q 78 42 78 30 Z" fill="#38bdf8"/>
+    <path d="M 62 46 Q 74 46 78 42 Q 82 46 94 46 Q 82 46 78 50 Q 74 46 62 46 Z" fill="#38bdf8"/>
+    <path d="M 70 38 L 86 54 M 86 38 L 70 54" stroke="#e0f2fe" stroke-width="1.2" opacity="0.8" stroke-linecap="round"/>
+    <circle cx="78" cy="46" r="2.8" fill="#ffffff"/>
+  </g>
+
+  <!-- Typography: Felaris -->
+  <text x="70" y="36" fill="#f5f5f7" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="24" font-weight="600" letter-spacing="-0.03em">Felaris</text>
+  <!-- Typography: BROWSER -->
+  <text x="71" y="49" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="10" font-weight="600" letter-spacing="0.22em">BROWSER</text>
+</svg>

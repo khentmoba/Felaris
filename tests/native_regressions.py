@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -129,10 +130,23 @@ def main():
         print(f'Headless regression tests passed. Evidence: {artifacts}')
     finally:
         Fixture.release_download.set()
-        if process is not None and process.poll() is None:
-            process.kill()
-            process.wait(timeout=10)
-        server.shutdown()
+        try:
+            if sys.exc_info()[0] is not None and process is not None:
+                print(f'Failed app PID {process.pid}, exit code {process.poll()}', flush=True)
+                print(json.dumps((artifacts / 'app.log').read_text(encoding='utf-8', errors='replace')), flush=True)
+                print(f'Saved fixture session: {json.dumps(state())}', flush=True)
+                subprocess.run(['powershell', '-NoProfile', '-Command',
+                                f'$parents = @({process.pid}); $all = @(Get-CimInstance Win32_Process); '
+                                'do { $children = @($all | Where-Object { $_.ParentProcessId -in $parents -and $_.ProcessId -notin $parents }); '
+                                '$parents += @($children.ProcessId) } while ($children.Count); '
+                                '$all | Where-Object { $_.ProcessId -in $parents -and $_.CommandLine -notmatch " --type=" } | Select-Object ProcessId,ParentProcessId,Name,CommandLine | Format-List'],
+                               timeout=15)
+        finally:
+            if process is not None and process.poll() is None:
+                process.kill()
+                process.wait(timeout=10)
+            server.shutdown()
+
 
 
 if __name__ == '__main__':

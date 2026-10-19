@@ -55,7 +55,9 @@ def main():
 
     def sidebar(expression):
         result = subprocess.run(['node', str(Path(__file__).with_name('native_command.mjs')), str(port), expression],
-                                check=True, timeout=20, capture_output=True, text=True)
+                                timeout=20, capture_output=True, text=True)
+        if result.returncode:
+            raise AssertionError(f'Native sidebar command failed:\n{result.stderr}')
         return json.loads(result.stdout)
 
     def command(action, **payload):
@@ -68,7 +70,6 @@ def main():
     try:
         with (artifacts / 'app.log').open('w', encoding='utf-8') as log:
             process = subprocess.Popen([str(Path(args.exe).resolve()), origin + '/'], env=environment, stdout=log, stderr=log)
-            loaded(origin + '/')
             command('navigate', url=origin + '/second')
             loaded(origin + '/second')
             command('navigate', url=origin)

@@ -257,7 +257,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     let mut chrome_context = WebContext::new(Some(directory.join("Chrome")));
     let ui_proxy = proxy.clone();
     let ready = proxy.clone();
-    let sidebar = WebViewBuilder::new_with_web_context(&mut chrome_context)
+    let mut sidebar_builder = WebViewBuilder::new_with_web_context(&mut chrome_context)
         .with_bounds(bounds(&window, state.sidebar_collapsed).0)
         .with_html(ui::get_ui_html())
         .with_focused(false)
@@ -272,11 +272,16 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             if let Ok(command) = serde_json::from_str::<Command>(request.body()) {
                 let _ = ui_proxy.send_event(UserEvent::Command(command));
             }
-        })
-        .build(&window)?;
+        });
+    #[cfg(windows)]
+    if headless && let Ok(arguments) = std::env::var("FELARIS_SMOKE_BROWSER_ARGUMENTS") {
+        use wry::WebViewBuilderExtWindows;
+        sidebar_builder = sidebar_builder.with_additional_browser_args(arguments);
+    }
+    let sidebar = sidebar_builder.build(&window)?;
     let palette_proxy = proxy.clone();
     let palette_ready = proxy.clone();
-    let palette = WebViewBuilder::new_with_web_context(&mut chrome_context)
+    let mut palette_builder = WebViewBuilder::new_with_web_context(&mut chrome_context)
         .with_bounds(bounds(&window, state.sidebar_collapsed).2)
         .with_visible(false)
         .with_focused(false)
@@ -298,8 +303,13 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             {
                 let _ = palette_proxy.send_event(UserEvent::Command(command));
             }
-        })
-        .build(&window)?;
+        });
+    #[cfg(windows)]
+    if headless && let Ok(arguments) = std::env::var("FELARIS_SMOKE_BROWSER_ARGUMENTS") {
+        use wry::WebViewBuilderExtWindows;
+        palette_builder = palette_builder.with_additional_browser_args(arguments);
+    }
+    let palette = palette_builder.build(&window)?;
     let mut views = HashMap::new();
     let initial_id = state.active_tab_id;
     views.insert(

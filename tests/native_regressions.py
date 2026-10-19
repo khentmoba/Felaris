@@ -29,7 +29,7 @@ def main():
     origin = f'http://127.0.0.1:{server.server_port}'
     environment = {**os.environ, 'FELARIS_PROFILE_DIR': str(profile),
                    'FELARIS_SMOKE_TEST': str(artifacts / 'disabled.json'),
-                   'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS': f'--remote-debugging-port={port} --remote-debugging-address=127.0.0.1'}
+                   'FELARIS_SMOKE_BROWSER_ARGUMENTS': f'--remote-debugging-port={port} --remote-debugging-address=127.0.0.1'}
     environment.pop('FELARIS_SMOKE_ORIGIN', None)
     checks = []
     process = None

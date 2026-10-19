@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::updater::UpdateManifest;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workspace {
     pub id: usize,
@@ -41,6 +43,10 @@ pub struct BrowserState {
     pub homepage: String,
     #[serde(skip)]
     pub closed_tabs: Vec<Tab>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_available: Option<UpdateManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_status: Option<String>,
 }
 
 impl BrowserState {
@@ -87,6 +93,8 @@ impl BrowserState {
             next_tab_id: 2,
             homepage: "felaris://newtab".to_string(),
             closed_tabs: Vec::new(),
+            update_available: None,
+            update_status: None,
         }
     }
 
@@ -284,6 +292,14 @@ impl BrowserState {
         }
         items.truncate(8);
         items
+    }
+
+    pub fn set_update_available(&mut self, manifest: Option<UpdateManifest>) {
+        self.update_available = manifest;
+    }
+
+    pub fn set_update_status(&mut self, status: Option<String>) {
+        self.update_status = status;
     }
 
     fn record_visit(&mut self, url: &str) {

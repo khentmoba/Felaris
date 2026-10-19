@@ -30,8 +30,13 @@ svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7;
 .footer { border-top:1px solid var(--line); padding-top:10px; display:flex; flex-direction:column; gap:10px; } .workspace-switcher { display:flex; align-items:center; gap:6px; } #spaces { display:flex; gap:6px; flex:1; } .space { width:34px; height:32px; display:grid; place-items:center; color:var(--muted); } .space[aria-pressed="true"] { background:var(--active); color:var(--accent); } .space svg { width:17px; }
 .sleep-control { display:flex; align-items:center; gap:8px; padding:8px; color:var(--muted); font-size:11px; text-align:left; } .sleep-control svg { width:14px; height:14px; } .sleep-control span { flex:1; }
 details { position:relative; } summary { list-style:none; cursor:pointer; } summary::-webkit-details-marker { display:none; } .menu { position:absolute; bottom:42px; right:0; width:244px; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:6px; box-shadow:0 12px 30px #0005; z-index:10; } .menu button { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; padding:10px; text-align:left; font-size:12px; } .menu hr { border:0; border-top:1px solid var(--line); margin:5px; } .menu p { margin:8px 10px; font-size:11px; color:var(--muted); line-height:1.5; }
+.update-banner { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:8px; }
+.update-header { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:600; color:var(--text); }
+.update-header svg { width:15px; height:15px; color:var(--accent); }
+.update-btn { background:var(--active); color:var(--text); border:1px solid var(--line); padding:6px 10px; border-radius:6px; font-size:11px; font-weight:600; text-align:center; }
+.update-btn:hover { background:var(--accent); color:#101011; }
 .toast { position:absolute; bottom:110px; left:12px; right:12px; border:1px solid var(--line); padding:12px; background:var(--surface); border-radius:10px; font-size:12px; box-shadow:0 8px 24px #0004; z-index:20; } .toast button { color:var(--accent); padding:4px 0; display:block; margin-top:4px; }
-body.collapsed { padding:12px 8px; gap:12px; } .collapsed .nav { flex-direction:column; } .collapsed .nav .toggle { margin:0; order:-1; } .collapsed .nav .secondary,.collapsed .address,.collapsed .workspace-heading,.collapsed .new-tab span,.collapsed .new-tab kbd,.collapsed #btn-search-tabs,.collapsed #tab-search,.collapsed .tab-title,.collapsed .close-tab,.collapsed .sleep-icon,.collapsed .sleep-control,.collapsed .space:not([aria-pressed="true"]) { display:none; }
+body.collapsed { padding:12px 8px; gap:12px; } .collapsed .nav { flex-direction:column; } .collapsed .nav .toggle { margin:0; order:-1; } .collapsed .nav .secondary,.collapsed .address,.collapsed .workspace-heading,.collapsed .new-tab span,.collapsed .new-tab kbd,.collapsed #btn-search-tabs,.collapsed #tab-search,.collapsed .tab-title,.collapsed .close-tab,.collapsed .sleep-icon,.collapsed .sleep-control,.collapsed .update-banner,.collapsed .space:not([aria-pressed="true"]) { display:none; }
 .collapsed .new-tab { justify-content:center; padding:0; } .collapsed .tab-main { padding:0; justify-content:center; } .collapsed .tab { min-height:40px; } .collapsed .workspace-switcher { flex-direction:column; } .collapsed #spaces { flex:none; } .collapsed .toast { left:3px; right:3px; padding:6px; font-size:10px; overflow-wrap:anywhere; }
 @media (max-height:620px) { body.collapsed { gap:8px; } .collapsed .nav .icon:not(.toggle) { display:none; } }
 button,summary { transition:background-color 140ms ease,color 140ms ease,transform 100ms ease; }
@@ -63,9 +68,13 @@ button:active:not(:disabled),summary:active { transform:scale(.96); }
 <div class="tab-tools"><button class="new-tab" id="btn-add-tab" title="New tab (Ctrl+T)" aria-label="New tab"><svg><use href="#plus"/></svg><span>New tab</span><kbd>Ctrl T</kbd></button><button class="icon" id="btn-search-tabs" title="Search tabs" aria-label="Search tabs" aria-expanded="false"><svg><use href="#search"/></svg></button></div>
 <input id="tab-search" type="search" aria-label="Filter tabs in this workspace" placeholder="Find a tab…" hidden>
 <section class="tabs" aria-label="Tabs in this workspace"><div id="pinned-tabs" class="tab-group" aria-label="Pinned tabs"></div><div id="tabs-container" class="tab-group" aria-label="Open tabs"></div><p class="empty" id="empty-tabs" hidden>No matching tabs.<br>Try a different title or address.</p></section>
+<div class="update-banner" id="update-banner" hidden>
+<div class="update-header"><svg aria-hidden="true"><use href="#felaris"/></svg><span id="update-text">Update available</span></div>
+<button id="btn-apply-update" class="update-btn">Update now</button>
+</div>
 <footer class="footer">
 <button class="sleep-control" id="btn-ram-saver" title="Mark background tabs as sleeping (Ctrl+Shift+S)"><svg><use href="#moon"/></svg><span id="sleep-label">Sleep background tabs</span><svg><use href="#forward"/></svg></button>
-<div class="workspace-switcher"><div id="spaces" aria-label="Workspaces"></div><details id="browser-menu"><summary class="icon" title="Tab actions" aria-label="Tab actions"><svg><use href="#more"/></svg></summary><div class="menu"><button id="btn-pin-tab">Pin current tab</button><button id="btn-reopen-tab">Reopen closed tab <kbd>Ctrl Shift T</kbd></button><button id="btn-clear-tabs">Close other unpinned tabs</button><hr><p>Workspaces: Alt + 1 / 2 / 3<br>Address bar: Ctrl + L<br>Toggle sidebar: Ctrl + S</p></div></details></div>
+<div class="workspace-switcher"><div id="spaces" aria-label="Workspaces"></div><details id="browser-menu"><summary class="icon" title="Tab actions" aria-label="Tab actions"><svg><use href="#more"/></svg></summary><div class="menu"><button id="btn-pin-tab">Pin current tab</button><button id="btn-reopen-tab">Reopen closed tab <kbd>Ctrl Shift T</kbd></button><button id="btn-clear-tabs">Close other unpinned tabs</button><hr><button id="btn-check-update">Check for updates</button><button id="btn-install-app">Install to Start Menu</button><hr><p>Workspaces: Alt + 1 / 2 / 3<br>Address bar: Ctrl + L<br>Toggle sidebar: Ctrl + S</p></div></details></div>
 </footer>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-message"></span><button id="toast-undo" hidden>Reopen tab</button></div>
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -183,6 +192,15 @@ window.updateState = state => {
  $('btn-ram-saver').disabled=!state.tabs.some(t=>t.id!==state.active_tab_id&&!t.is_sleeping);
  $('btn-pin-tab').textContent=active?.is_pinned?'Unpin current tab':'Pin current tab';
  $('btn-reopen-tab').disabled=!state.can_restore_closed_tab;
+ if(state.update_available) {
+  $('update-banner').hidden=false;
+  $('update-text').textContent=`Felaris v${state.update_available.version} available`;
+ } else {
+  $('update-banner').hidden=true;
+ }
+ if(state.update_status && previous.update_status!==state.update_status) {
+  showToast(state.update_status);
+ }
 };
 window.focusAddress=()=>{ $('url-input').focus(); $('url-input').select(); };
 for(const [id,action] of Object.entries({'btn-back':'back','btn-forward':'forward','btn-reload':'reload','btn-add-tab':'new_tab','btn-toggle-sidebar':'toggle_sidebar','btn-reopen-tab':'restore_closed_tab'})) $(id).onclick=()=>Felaris.send(action);
@@ -200,6 +218,9 @@ $('btn-pin-tab').onclick=()=>Felaris.send('toggle_pin',{id:currentState.active_t
 $('btn-clear-tabs').onclick=()=>{ Felaris.send('clear_unpinned_tabs'); showToast('Other unpinned tabs closed',true); };
 $('btn-ram-saver').onclick=()=>Felaris.send('sleep_inactive_tabs');
 $('toast-undo').onclick=()=>{ Felaris.send('restore_closed_tab'); $('toast').hidden=true; };
+$('btn-check-update').onclick=()=>Felaris.send('check_updates');
+$('btn-install-app').onclick=()=>Felaris.send('install_app');
+$('btn-apply-update').onclick=()=>{ Felaris.send('apply_update'); $('btn-apply-update').disabled=true; $('btn-apply-update').textContent='Updating…'; };
 $('browser-menu').querySelector('summary').onclick=e=>{ if(currentState.sidebar_collapsed) { e.preventDefault(); openMenuAfterExpand=true; Felaris.send('toggle_sidebar'); } };
 $('browser-menu').addEventListener('click',e=>{ if(e.target.closest('button')) $('browser-menu').open=false; });
 document.addEventListener('click',e=>{ if(!$('browser-menu').contains(e.target)) $('browser-menu').open=false; });

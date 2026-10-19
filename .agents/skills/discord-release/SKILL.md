@@ -3,16 +3,17 @@ name: discord-release
 description: Build release, binary upload to Discord, and human-readable changelog publication for Felaris. Use when publishing releases, uploading compiled felaris.exe binaries, or notifying the Discord #felaris-releases channel.
 ---
 
-# Discord Release & Update Pipeline for Felaris
+# Discord & GitHub Release Pipeline for Felaris
 
-Automates building Felaris in release mode, uploading the compiled `felaris.exe` binary with human-readable changelogs to Discord `#felaris-releases`, and notifying the community via webhook.
+Automates building Felaris in release mode, creating GitHub Releases with `felaris.exe` assets (enabling the built-in auto-updater), uploading to Discord `#felaris-releases`, and notifying the community via webhook.
 
 ## Quick Commands
 
 | Action | Command |
 |---|---|
-| **Build & Publish Release to Discord** | `python scripts/build.py` (or `.\scripts\build.ps1`) |
+| **Build & Publish Release (GitHub + Discord)** | `python scripts/build.py` (or `.\scripts\build.ps1`) |
 | **Build & Publish with Custom Changelog** | `python scripts/build.py -s "Overhauled UI with Zen Browser sidebar layout"` |
+| **Build & Publish Discord only (skip GitHub)** | `python scripts/build.py --skip-github` |
 | **Build without Discord notification** | `python scripts/build.py --skip-discord` |
 | **Notify/Upload existing build manually** | `python scripts/notify_discord.py -s "Changelog summary"` |
 | **Test webhook connection** | `python scripts/notify_discord.py --test` |

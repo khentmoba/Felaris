@@ -24,10 +24,10 @@ Designed from the ground up to be ultra-fast, gentle on PC hardware, and free of
 ┌────────────────────────────────────────────────────────┐
 │  FELARIS (Rust Application Core)                       │
 │                                                        │
-│  ┌─ Modern Top Bar (78px) ──────────────────────────┐  │
-│  │ [◀] [▶] [🔄] [⌂]  https://duckduckgo.com     [⚑] │  │
-│  │ [Tab 1] [Tab 2 💤] [Tab 3] [+]                   │  │
-│  └──────────────────────────────────────────────────┘  │
+│  Zen-inspired sidebar (260px / 56px compact rail)       │
+│  • Navigation and address / search                     │
+│  • Pinned tabs and searchable workspace tabs           │
+│  • Workspace dock and tab actions                      │
 │                                                        │
 │  ┌─ Content Viewport (Hardware-Accelerated) ────────┐  │
 │  │                                                  │  │
@@ -48,13 +48,30 @@ Designed from the ground up to be ultra-fast, gentle on PC hardware, and free of
 
 | Shortcut | Action |
 | :--- | :--- |
-| `Ctrl + T` | Open new tab |
+| `Ctrl + T` | Open floating new-tab search |
 | `Ctrl + W` | Close active tab |
 | `Ctrl + L` | Focus and highlight address / search bar |
 | `Ctrl + R` / `F5` | Reload current page |
 | `Alt + Left` | Navigate back |
 | `Alt + Right` | Navigate forward |
+| `Ctrl + Shift + T` | Reopen last closed tab |
+| `Ctrl + Tab` / `Ctrl + Shift + Tab` | Cycle tabs within the workspace |
+| `Alt + 1` / `2` / `3` | Switch workspace |
+| `Ctrl + S` | Expand / collapse sidebar |
+| `Ctrl + Shift + S` | Mark background tabs as sleeping |
 | `Enter` (in URL bar) | Smart navigate (detects URLs vs. web search) |
+
+**New tabs work like Zen:** press `Ctrl+T` or click **New tab** to open a floating search/address bar over the current page. Enter opens the destination in a new tab; matching open tabs can be selected with the arrow keys. Escape, the close button, or clicking outside cancels without creating an empty tab or reloading the page. The startup/Home page remains available separately. The sidebar, Home page, native title bar, and palette share a black/charcoal theme.
+
+The sidebar has no fixed shortcut-tile dock. Search opens/closes with short, interruptible motion, and tab/workspace changes retain visual continuity. Reduced-motion preferences skip spatial effects. Home-page shortcuts rank your most-visited sites (such as YouTube or X) first and fill any remaining slots from the default 8 shortcuts.
+
+Web searches use **Brave Search** throughout the sidebar, Home page, and floating search bar. Suggestions are local open tabs; no remote autocomplete requests are sent while typing.
+
+Shortcuts work while browser chrome or page content has focus. The bottom sidebar menu contains pin/unpin, reopen, and close-other-tabs actions. Close Others keeps pinned tabs, affects only the current workspace, and can be undone one tab at a time with Reopen.
+
+**Current engine limits:** tab and workspace state is session-only. Felaris uses one content WebView, so switching tabs reloads their URLs rather than preserving independent live page sessions. Sleep labels represent tab state, not measured RAM savings. The compact rail is not Zen's floating edge-hover mode.
+
+See [DESIGN.md](DESIGN.md) for the interface decisions and research references.
 
 ---
 
@@ -81,6 +98,27 @@ target/release/felaris.exe
 ```
 
 ---
+
+## UI Verification
+
+```bash
+cargo test
+node tests/browser.test.cjs
+```
+
+For the 43 DOM interaction checks, serve the repository with `python -m http.server 5173`, then open `http://localhost:5173/tests/ui.html`. This is a fixture with sample tabs; its IPC messages are recorded rather than sent to Rust. Test both 1380×860 and the minimum 640×480 desktop window; the compact rail can be inspected by setting `fixtureState.sidebar_collapsed = true`, `sidebar.style.width = '56px'`, and calling `sidebar.contentWindow.updateState(fixtureState)` in the test page console.
+
+To exercise actual WebView2 keyboard input and Rust IPC on Windows, build with `cargo build`, launch a fresh test instance from PowerShell, then run the native smoke test with Node 22+:
+
+```powershell
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9223'
+$p = Start-Process .\target\debug\felaris.exe -PassThru
+node tests/native-smoke.cjs
+Stop-Process -Id $p.Id
+Remove-Item Env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
+```
+
+Use this only with a test instance: it opens/closes tabs and changes workspaces. Do not leave remote debugging enabled for normal browsing. Native captures are saved under the ignored `.impeccable/review/` directory.
 
 ## Upstream Synchronization & Conflict Detection
 

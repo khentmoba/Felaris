@@ -1,1 +1,6 @@
 /target
+/.impeccable/review/
+discord_webhook.txt
+scripts/discord_webhook.txt
+.env
+.env.*

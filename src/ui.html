@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Felaris</title>
+<style>
+:root { color-scheme: dark; --bg:#101011; --surface:#1b1b1e; --hover:#252528; --active:#2e2e33; --line:#333338; --text:#f5f5f7; --muted:#b2b2b8; --accent:#dedee3; font-family:"Segoe UI",system-ui,sans-serif; font-size:13px; }
+* { box-sizing:border-box; }
+body { margin:0; height:100vh; overflow:hidden; background:var(--bg); color:var(--text); display:flex; flex-direction:column; padding:12px; gap:14px; user-select:none; }
+button,input { font:inherit; } button { color:inherit; cursor:pointer; } button,a,input { -webkit-tap-highlight-color:transparent; }
+button { border:0; background:none; border-radius:8px; } button:hover { background:var(--hover); } button:disabled { opacity:.45; cursor:default; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+input { color:var(--text); caret-color:var(--accent); min-width:0; } input::placeholder { color:var(--muted); opacity:1; } ::selection { background:#45454b; color:#fff; }
+svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; } svg[aria-hidden] { pointer-events:none; }
+.nav { display:flex; gap:4px; align-items:center; } .icon { width:32px; height:32px; display:grid; place-items:center; flex-shrink:0; color:var(--muted); } .icon:hover { color:var(--text); } .nav .toggle { margin-left:auto; }
+.address { position:relative; display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:10px; min-height:42px; padding:0 10px; }
+.address:focus-within { border-color:var(--accent); } .address>svg { color:var(--muted); width:16px; } #url-input:focus-visible { outline:none; } #url-input { width:100%; height:40px; outline:0; border:0; background:transparent; font-size:12px; user-select:text; } .address .icon { width:26px; height:28px; } .address .icon svg { width:14px; }
+.progress { height:2px; background:var(--accent); position:absolute; left:8px; right:8px; bottom:0; visibility:hidden; } .loading .progress { visibility:visible; animation:loading 1.6s ease-in-out infinite; transform-origin:left; } @keyframes loading { 0%,100% { transform:scaleX(.15); } 50% { transform:scaleX(.85); } }
+.workspace-heading { display:flex; align-items:center; gap:9px; padding:8px 4px 0; } .workspace-heading svg { width:16px; color:var(--accent); } #workspace-name { font-weight:600; flex:1; } .count { color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+.tab-tools { display:flex; gap:4px; align-items:center; } .new-tab { flex:1; display:flex; gap:10px; align-items:center; height:36px; color:var(--muted); text-align:left; padding:0 10px; } .new-tab svg { width:16px; } kbd { font:11px "Segoe UI",sans-serif; color:var(--muted); } .new-tab kbd { margin-left:auto; }
+#tab-search { width:100%; background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:9px 10px; outline-offset:0; }
+[hidden] { display:none!important; }
+.tabs { flex:1; min-height:0; overflow:auto; scrollbar-width:thin; scrollbar-color:var(--line) transparent; margin:0 -4px; padding:0 4px; }
+.tab-group { display:flex; flex-direction:column; gap:4px; } .tab-group:not(:empty)+.tab-group:not(:empty) { border-top:1px solid var(--line); margin-top:12px; padding-top:12px; }
+.tab { display:flex; align-items:center; gap:4px; min-height:40px; border-radius:9px; position:relative; } .tab:hover { background:var(--surface); } .tab.active { background:var(--active); } .tab.active .tab-main { font-weight:600; }
+.tab-main { min-width:0; display:flex; gap:10px; align-items:center; flex:1; text-align:left; height:40px; padding:0 9px; border-radius:9px; } .tab-main:hover { background:transparent; } .favicon { width:21px; height:21px; flex-shrink:0; display:grid; place-items:center; background:var(--surface); border-radius:6px; color:var(--accent); font-size:11px; font-weight:600; } .favicon svg { width:14px; height:14px; } .tab-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .tab.sleeping:not(.active) .tab-title { color:var(--muted); } .sleep-icon { color:var(--muted); width:13px; height:13px; }
+.close-tab { width:28px; height:28px; display:grid; place-items:center; opacity:0; margin-right:5px; flex-shrink:0; } .close-tab svg { width:14px; } .tab:hover .close-tab,.tab:focus-within .close-tab,.tab.active .close-tab { opacity:1; } .close-tab:hover { background:#4d3b38; color:#ffd3c8; }
+.empty { text-align:center; color:var(--muted); line-height:1.6; padding:24px 10px; }
+.footer { border-top:1px solid var(--line); padding-top:10px; display:flex; flex-direction:column; gap:10px; } .workspace-switcher { display:flex; align-items:center; gap:6px; } #spaces { display:flex; gap:6px; flex:1; } .space { width:34px; height:32px; display:grid; place-items:center; color:var(--muted); } .space[aria-pressed="true"] { background:var(--active); color:var(--accent); } .space svg { width:17px; }
+.sleep-control { display:flex; align-items:center; gap:8px; padding:8px; color:var(--muted); font-size:11px; text-align:left; } .sleep-control svg { width:14px; height:14px; } .sleep-control span { flex:1; }
+details { position:relative; } summary { list-style:none; cursor:pointer; } summary::-webkit-details-marker { display:none; } .menu { position:absolute; bottom:42px; right:0; width:244px; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:6px; box-shadow:0 12px 30px #0005; z-index:10; } .menu button { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; padding:10px; text-align:left; font-size:12px; } .menu hr { border:0; border-top:1px solid var(--line); margin:5px; } .menu p { margin:8px 10px; font-size:11px; color:var(--muted); line-height:1.5; }
+.toast { position:absolute; bottom:110px; left:12px; right:12px; border:1px solid var(--line); padding:12px; background:var(--surface); border-radius:10px; font-size:12px; box-shadow:0 8px 24px #0004; z-index:20; } .toast button { color:var(--accent); padding:4px 0; display:block; margin-top:4px; }
+body.collapsed { padding:12px 8px; gap:12px; } .collapsed .nav { flex-direction:column; } .collapsed .nav .toggle { margin:0; order:-1; } .collapsed .nav .secondary,.collapsed .address,.collapsed .workspace-heading,.collapsed .new-tab span,.collapsed .new-tab kbd,.collapsed #btn-search-tabs,.collapsed #tab-search,.collapsed .tab-title,.collapsed .close-tab,.collapsed .sleep-icon,.collapsed .sleep-control,.collapsed .space:not([aria-pressed="true"]) { display:none; }
+.collapsed .new-tab { justify-content:center; padding:0; } .collapsed .tab-main { padding:0; justify-content:center; } .collapsed .tab { min-height:40px; } .collapsed .workspace-switcher { flex-direction:column; } .collapsed #spaces { flex:none; } .collapsed .toast { left:3px; right:3px; padding:6px; font-size:10px; overflow-wrap:anywhere; }
+@media (max-height:620px) { body.collapsed { gap:8px; } .collapsed .nav .icon:not(.toggle) { display:none; } }
+button,summary { transition:background-color 140ms ease,color 140ms ease,transform 100ms ease; }
+button:active:not(:disabled),summary:active { transform:scale(.96); }
+.address { transition:border-color 160ms ease,background-color 160ms ease; }
+.tab { transition:background-color 160ms ease; }
+.tab-main:active { transform:none; }
+.close-tab { transition:opacity 120ms ease,background-color 120ms ease,color 120ms ease; }
+.menu,.toast { animation:surface-in 150ms cubic-bezier(.16,1,.3,1); }
+@keyframes surface-in { from { opacity:.6; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition-duration:80ms!important; } button:active,summary:active { transform:none!important; } }
+</style>
+</head>
+<body>
+<nav class="nav" aria-label="Browser navigation">
+<button class="icon" id="btn-back" title="Back (Alt+Left)" aria-label="Back"><svg><use href="#back"/></svg></button>
+<button class="icon secondary" id="btn-forward" title="Forward (Alt+Right)" aria-label="Forward"><svg><use href="#forward"/></svg></button>
+<button class="icon" id="btn-reload" title="Reload (Ctrl+R)" aria-label="Reload"><svg><use href="#reload"/></svg></button>
+<button class="icon secondary" id="btn-home" title="New tab page" aria-label="Home"><svg><use href="#home"/></svg></button>
+<button class="icon toggle" id="btn-toggle-sidebar" title="Collapse sidebar (Ctrl+S)" aria-label="Collapse sidebar" aria-expanded="true"><svg><use href="#sidebar"/></svg></button>
+</nav>
+<form class="address" id="address-form" aria-label="Address bar">
+<svg aria-hidden="true"><use href="#search"/></svg>
+<input id="url-input" aria-label="Search or enter address" placeholder="Search or enter address" autocomplete="off" spellcheck="false">
+<button type="button" class="icon" id="btn-copy-url" title="Copy address" aria-label="Copy address"><svg><use href="#copy"/></svg></button>
+<div class="progress" role="progressbar" aria-label="Loading page" hidden></div>
+</form>
+<div class="workspace-heading"><svg aria-hidden="true"><use id="workspace-icon" href="#home"/></svg><span id="workspace-name">General</span><span class="count" id="tab-count">1 tab</span></div>
+<div class="tab-tools"><button class="new-tab" id="btn-add-tab" title="New tab (Ctrl+T)" aria-label="New tab"><svg><use href="#plus"/></svg><span>New tab</span><kbd>Ctrl T</kbd></button><button class="icon" id="btn-search-tabs" title="Search tabs" aria-label="Search tabs" aria-expanded="false"><svg><use href="#search"/></svg></button></div>
+<input id="tab-search" type="search" aria-label="Filter tabs in this workspace" placeholder="Find a tab…" hidden>
+<section class="tabs" aria-label="Tabs in this workspace"><div id="pinned-tabs" class="tab-group" aria-label="Pinned tabs"></div><div id="tabs-container" class="tab-group" aria-label="Open tabs"></div><p class="empty" id="empty-tabs" hidden>No matching tabs.<br>Try a different title or address.</p></section>
+<footer class="footer">
+<button class="sleep-control" id="btn-ram-saver" title="Mark background tabs as sleeping (Ctrl+Shift+S)"><svg><use href="#moon"/></svg><span id="sleep-label">Sleep background tabs</span><svg><use href="#forward"/></svg></button>
+<div class="workspace-switcher"><div id="spaces" aria-label="Workspaces"></div><details id="browser-menu"><summary class="icon" title="Tab actions" aria-label="Tab actions"><svg><use href="#more"/></svg></summary><div class="menu"><button id="btn-pin-tab">Pin current tab</button><button id="btn-reopen-tab">Reopen closed tab <kbd>Ctrl Shift T</kbd></button><button id="btn-clear-tabs">Close other unpinned tabs</button><hr><p>Workspaces: Alt + 1 / 2 / 3<br>Address bar: Ctrl + L<br>Toggle sidebar: Ctrl + S</p></div></details></div>
+</footer>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-message"></span><button id="toast-undo" hidden>Reopen tab</button></div>
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg"><defs>
+<symbol id="back" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6M8 12h12"/></symbol><symbol id="forward" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6M4 12h12"/></symbol>
+<symbol id="reload" viewBox="0 0 24 24"><path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5M20 12a8 8 0 0 0-2-6"/></symbol><symbol id="home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7M5 9v11h5v-6h4v6h5V9"/></symbol>
+<symbol id="sidebar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></symbol><symbol id="search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 5 5"/></symbol>
+<symbol id="copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M15 8V3H3v13h5"/></symbol><symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol><symbol id="close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+<symbol id="book" viewBox="0 0 24 24"><path d="M12 5v15M12 5C8 3 5 3 2 4v14c4-1 7-1 10 2 3-3 6-3 10-2V4c-3-1-6-1-10 1Z"/></symbol>
+<symbol id="moon" viewBox="0 0 24 24"><path d="M20 14a8 8 0 0 1-10-10 8.5 8.5 0 1 0 10 10Z"/></symbol><symbol id="more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol><symbol id="code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18"/></symbol><symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></symbol>
+</defs></svg>
+<script>__COMMON_SCRIPT__</script>
+<script>
+let currentState = {tabs:[],workspaces:[],active_tab_id:1,active_workspace_id:1,sidebar_collapsed:false,is_loading:false};
+const $ = id => document.getElementById(id);
+const icon = name => { const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'); const use=document.createElementNS(svg.namespaceURI,'use'); use.setAttribute('href','#'+name); svg.setAttribute('aria-hidden','true'); svg.append(use); return svg; };
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+let tabSignature='';
+reducedMotion.addEventListener('change',()=>{if(reducedMotion.matches)document.getAnimations().filter(animation=>animation.id==='tab-layout').forEach(animation=>animation.finish());});
+let toastTimer;
+let openMenuAfterExpand=false;
+function showToast(message,undo=false) { clearTimeout(toastTimer); $('toast-message').textContent=message; $('toast-undo').hidden=!undo; $('toast').hidden=false; toastTimer=setTimeout(()=> $('toast').hidden=true,6000); }
+function activeTab() { return currentState.tabs.find(t=>t.id===currentState.active_tab_id); }
+function displayAddress(url) { if(!url || url==='felaris://newtab') return ''; try { const parsed=new URL(url); return parsed.protocol==='https:'?parsed.hostname:url; } catch { return url; } }
+function renderTabs() {
+ const tabs=currentState.tabs.filter(t=>t.workspace_id===currentState.active_workspace_id);
+ const query=$('tab-search').value.trim().toLowerCase();
+ const signature=JSON.stringify([tabs,query,currentState.active_workspace_id]);
+ if(signature===tabSignature) {
+  document.querySelectorAll('.tab').forEach(row=>{
+   const active=Number(row.dataset.tabId)===currentState.active_tab_id;
+   row.classList.toggle('active',active);
+   if(active) row.querySelector('.tab-main').setAttribute('aria-current','page');
+   else row.querySelector('.tab-main').removeAttribute('aria-current');
+  });
+  return;
+ }
+ tabSignature=signature;
+ const oldRows=new Map([...document.querySelectorAll('.tab')].map(row=>[Number(row.dataset.tabId),row]));
+ const oldTops=new Map([...oldRows].map(([id,row])=>[id,row.getBoundingClientRect().top]));
+ oldRows.forEach(row=>row.getAnimations().filter(animation=>animation.id==='tab-layout').forEach(animation=>animation.cancel()));
+ const focused=document.activeElement;
+ const focusId=focused?.dataset.tabId;
+ const focusClose=focused?.classList.contains('close-tab');
+ $('tab-count').textContent=`${tabs.length} ${tabs.length===1?'tab':'tabs'}`;
+ const pinned=[];
+ const normal=[];
+ let visible=0;
+ for(const tab of tabs) {
+  if(query && !(tab.title+' '+tab.url).toLowerCase().includes(query)) continue;
+  visible++;
+  const row=oldRows.get(tab.id)||document.createElement('div');
+  row.dataset.tabId=tab.id;
+  row.replaceChildren();
+  row.className='tab'+(tab.id===currentState.active_tab_id?' active':'')+(tab.is_sleeping?' sleeping':'');
+  const select=document.createElement('button'); select.className='tab-main'; select.title=tab.title+'\n'+tab.url+(tab.is_pinned?'\nPinned':'')+(tab.is_sleeping?'\nSleeping — select to wake':'');
+  if(tab.id===currentState.active_tab_id) select.setAttribute('aria-current','page');
+  const favicon=document.createElement('span'); favicon.className='favicon'; favicon.setAttribute('aria-hidden','true');
+  try { favicon.textContent=new URL(tab.url).hostname.replace(/^www\./,'').charAt(0).toUpperCase(); } catch { favicon.append(icon('globe')); }
+  if(tab.url==='felaris://newtab') { favicon.replaceChildren(icon('globe')); }
+  const label=document.createElement('span'); label.className='tab-title'; label.textContent=tab.title||tab.url;
+  select.dataset.tabId=tab.id;
+  select.append(favicon,label); select.onclick=()=>Felaris.send('switch_tab',{id:tab.id});
+  row.append(select);
+  if(tab.is_sleeping) { const moon=icon('moon'); moon.classList.add('sleep-icon'); row.append(moon); }
+  const close=document.createElement('button'); close.className='close-tab'; close.dataset.tabId=tab.id; close.title='Close tab'; close.setAttribute('aria-label','Close '+(tab.title||'tab')); close.append(icon('close')); close.onclick=()=>{ Felaris.send('close_tab',{id:tab.id}); showToast('Tab closed',true); }; row.append(close);
+  row.onauxclick=e=>{ if(e.button===1) { e.preventDefault(); close.click(); } };
+  (tab.is_pinned?pinned:normal).push(row);
+ }
+ const rows=[...pinned,...normal];
+ const visibleIds=new Set(rows.map(row=>Number(row.dataset.tabId)));
+ oldRows.forEach((row,id)=>{if(!visibleIds.has(id))row.remove();});
+ for(const [parent,children] of [[$('pinned-tabs'),pinned],[$('tabs-container'),normal]]) {
+  children.forEach((row,index)=>{if(parent.children[index]!==row)parent.insertBefore(row,parent.children[index]||null);});
+ }
+ const positions=rows.map(row=>({row,id:Number(row.dataset.tabId),top:row.getBoundingClientRect().top}));
+ if(!reducedMotion.matches) positions.forEach(({row,id,top},index)=>{
+  if(oldTops.has(id)) {
+   const delta=oldTops.get(id)-top;
+   if(Math.abs(delta)>1) row.animate([{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],{duration:200,easing:'cubic-bezier(.16,1,.3,1)',id:'tab-layout'});
+  } else row.animate([{opacity:.35,transform:'translateX(-8px)'},{opacity:1,transform:'translateX(0)'}],{duration:200,delay:Math.min(index*16,64),easing:'cubic-bezier(.16,1,.3,1)',id:'tab-layout'});
+ });
+ $('empty-tabs').hidden=visible>0;
+ if(focusId) document.querySelector(`.${focusClose?'close-tab':'tab-main'}[data-tab-id="${focusId}"]`)?.focus({preventScroll:true});
+}
+window.updateState = state => {
+ const previous=currentState;
+ currentState=state;
+ document.body.classList.toggle('collapsed',state.sidebar_collapsed);
+ $('btn-toggle-sidebar').setAttribute('aria-expanded',String(!state.sidebar_collapsed));
+ $('btn-toggle-sidebar').setAttribute('aria-label',state.sidebar_collapsed?'Expand sidebar':'Collapse sidebar');
+ $('btn-toggle-sidebar').title=(state.sidebar_collapsed?'Expand':'Collapse')+' sidebar (Ctrl+S)';
+ if(state.sidebar_collapsed) { $('tab-search').hidden=true; $('tab-search').value=''; $('btn-search-tabs').setAttribute('aria-expanded','false'); }
+ const workspace=state.workspaces.find(w=>w.id===state.active_workspace_id);
+ $('workspace-name').textContent=workspace?.name||'General';
+ $('workspace-icon').setAttribute('href','#'+({1:'home',2:'code',3:'book'}[state.active_workspace_id]||'globe'));
+ if(previous.active_workspace_id!==state.active_workspace_id) $('tab-search').value='';
+ const spacesSignature=JSON.stringify(state.workspaces);
+ if($('spaces').dataset.signature!==spacesSignature) {
+  $('spaces').dataset.signature=spacesSignature;
+  $('spaces').replaceChildren();
+  for(const space of state.workspaces) { const button=document.createElement('button'); button.className='space'; button.dataset.spaceId=space.id; button.title=`${space.name} (Alt+${space.id})`; button.setAttribute('aria-label',space.name); button.append(icon({1:'home',2:'code',3:'book'}[space.id]||'globe')); button.onclick=()=>Felaris.send('switch_workspace',{id:space.id}); $('spaces').append(button); }
+ }
+ for(const button of $('spaces').children) button.setAttribute('aria-pressed',String(Number(button.dataset.spaceId)===state.active_workspace_id));
+ renderTabs();
+ if(openMenuAfterExpand&&!state.sidebar_collapsed) { $('browser-menu').open=true; openMenuAfterExpand=false; $('btn-pin-tab').focus(); }
+ const active=activeTab();
+ if(document.activeElement!==$('url-input') || previous.active_tab_id!==state.active_tab_id) $('url-input').value=displayAddress(active?.url);
+ $('address-form').classList.toggle('loading',state.is_loading); document.querySelector('.progress').hidden=!state.is_loading;
+ $('btn-reload').replaceChildren(icon(state.is_loading?'close':'reload'));
+ $('btn-reload').setAttribute('aria-label',state.is_loading?'Stop loading':'Reload');
+ $('btn-reload').title=state.is_loading?'Stop loading':'Reload (Ctrl+R)';
+ const sleeping=state.tabs.filter(t=>t.is_sleeping).length;
+ $('sleep-label').textContent=sleeping?`${sleeping} ${sleeping===1?'tab':'tabs'} sleeping`:'Sleep background tabs';
+ $('btn-ram-saver').disabled=!state.tabs.some(t=>t.id!==state.active_tab_id&&!t.is_sleeping);
+ $('btn-pin-tab').textContent=active?.is_pinned?'Unpin current tab':'Pin current tab';
+ $('btn-reopen-tab').disabled=!state.can_restore_closed_tab;
+};
+window.focusAddress=()=>{ $('url-input').focus(); $('url-input').select(); };
+for(const [id,action] of Object.entries({'btn-back':'back','btn-forward':'forward','btn-reload':'reload','btn-add-tab':'new_tab','btn-toggle-sidebar':'toggle_sidebar','btn-reopen-tab':'restore_closed_tab'})) $(id).onclick=()=>Felaris.send(action);
+$('btn-reload').onclick=()=>Felaris.send(currentState.is_loading?'stop':'reload');
+$('btn-home').onclick=()=>Felaris.navigate('felaris://newtab');
+$('address-form').onsubmit=e=>{ e.preventDefault(); const url=Felaris.resolveAddress($('url-input').value); if(url) { Felaris.navigate(url); $('url-input').blur(); } };
+$('url-input').onfocus=()=>{ const active=activeTab(); if(!$('url-input').value || $('url-input').value===displayAddress(active?.url)) $('url-input').value=active?.url==='felaris://newtab'?'':active?.url||''; $('url-input').select(); };
+$('url-input').onblur=()=>{ $('url-input').value=displayAddress(activeTab()?.url); };
+$('url-input').onkeydown=e=>{ if(e.key==='Escape') { const active=activeTab(); $('url-input').value=active?.url==='felaris://newtab'?'':active?.url||''; $('url-input').blur(); } };
+$('btn-copy-url').onclick=async()=>{ try { await navigator.clipboard.writeText(activeTab()?.url||''); showToast('Address copied'); } catch { window.focusAddress(); showToast('Could not copy. Select the address and press Ctrl+C.'); } };
+$('btn-search-tabs').onclick=()=>{ const show=$('tab-search').hidden; $('tab-search').hidden=!show; $('btn-search-tabs').setAttribute('aria-expanded',String(show)); if(show) $('tab-search').focus(); else { $('tab-search').value=''; renderTabs(); } };
+$('tab-search').oninput=renderTabs;
+$('tab-search').onkeydown=e=>{ if(e.key==='Escape') { $('tab-search').value=''; $('tab-search').hidden=true; $('btn-search-tabs').setAttribute('aria-expanded','false'); $('btn-search-tabs').focus(); renderTabs(); } };
+$('btn-pin-tab').onclick=()=>Felaris.send('toggle_pin',{id:currentState.active_tab_id});
+$('btn-clear-tabs').onclick=()=>{ Felaris.send('clear_unpinned_tabs'); showToast('Other unpinned tabs closed',true); };
+$('btn-ram-saver').onclick=()=>Felaris.send('sleep_inactive_tabs');
+$('toast-undo').onclick=()=>{ Felaris.send('restore_closed_tab'); $('toast').hidden=true; };
+$('browser-menu').querySelector('summary').onclick=e=>{ if(currentState.sidebar_collapsed) { e.preventDefault(); openMenuAfterExpand=true; Felaris.send('toggle_sidebar'); } };
+$('browser-menu').addEventListener('click',e=>{ if(e.target.closest('button')) $('browser-menu').open=false; });
+document.addEventListener('click',e=>{ if(!$('browser-menu').contains(e.target)) $('browser-menu').open=false; });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') $('browser-menu').open=false; });
+</script>
+</body>
+</html>

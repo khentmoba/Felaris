@@ -16,7 +16,7 @@ Everyday desktop navigation, web search, vertical tabs, and switching between Ge
 
 ## Capabilities and Constraints
 
-Preserve the existing Rust/wry/tao stack, sidebar, workspaces, new-tab shortcuts, tab restoration, and background-tab sleep controls. No new UI framework or external font/network dependency. The current engine uses one content WebView: switching tabs reloads their URLs rather than preserving independent live page sessions. State is currently session-only. Brave Search is the single search provider, explicitly chosen by the user. Search queries use `https://search.brave.com/search?q=` with URL encoding; suggestions remain local open tabs, with no remote autocomplete.
+Preserve the existing Rust/wry/tao stack, sidebar, workspaces, new-tab shortcuts, tab restoration, and background-tab sleep controls. No new UI framework or external font/network dependency. Live tabs use independent WebViews and a shared persistent WebView2 profile. Tabs, workspaces, pins, and recent closed tabs are saved with backup recovery. Sleeping drops a page; waking or restarting reloads its saved URL. Native downloads, error recovery, site permission prompts, single-instance link handoff, and Windows default-browser registration are supported. Brave Search is the single search provider, explicitly chosen by the user. Search queries use `https://search.brave.com/search?q=` with URL encoding; suggestions remain local open tabs, with no remote autocomplete.
 
 ## Brand Commitments
 
@@ -30,4 +30,4 @@ Keep the Felaris name. The user explicitly requested Zen Browser's sidebar and f
 
 ## Open Decisions
 
-Primary audience beyond desktop browser users, persistence, bookmarks, downloads management, and private browsing are not established requirements for this redesign.
+Primary audience beyond desktop browser users, bookmarks, and private browsing remain open decisions.

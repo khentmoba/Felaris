@@ -28,6 +28,7 @@ assert.deepEqual(press('T', { ctrlKey: true, shiftKey: true }), { action: 'resto
 assert.deepEqual(press('S', { ctrlKey: true, shiftKey: true }), { action: 'sleep_inactive_tabs' });
 assert.deepEqual(press('t', { ctrlKey: true }), { action: 'new_tab' });
 assert.deepEqual(press('l', { ctrlKey: true }), { action: 'focus_address' });
+assert.deepEqual(press('j', { ctrlKey: true }), { action: 'open_downloads' });
 assert.deepEqual(press('w', { ctrlKey: true }), { action: 'close_active_tab' });
 assert.deepEqual(press('Tab', { ctrlKey: true, shiftKey: true }), { action: 'cycle_tab', backwards: true });
 assert.deepEqual(press('2', { altKey: true }), { action: 'switch_workspace', id: 2 });

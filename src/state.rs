@@ -18,6 +18,18 @@ pub struct Tab {
     pub url: String,
     pub is_pinned: bool,
     pub is_sleeping: bool,
+    #[serde(default)]
+    pub is_loading: bool,
+    #[serde(default)]
+    pub can_go_back: bool,
+    #[serde(default)]
+    pub can_go_forward: bool,
+    #[serde(default)]
+    pub error: Option<String>,
+    #[serde(skip)]
+    pub generation: u64,
+    #[serde(skip)]
+    pub pending_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,12 +53,16 @@ pub struct BrowserState {
     #[serde(skip)]
     next_tab_id: usize,
     pub homepage: String,
-    #[serde(skip)]
+    #[serde(default)]
     pub closed_tabs: Vec<Tab>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub update_available: Option<UpdateManifest>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub update_status: Option<String>,
+    #[serde(default)]
+    pub active_downloads: usize,
+    #[serde(default)]
+    pub update_busy: bool,
 }
 
 impl BrowserState {
@@ -79,6 +95,12 @@ impl BrowserState {
             url: "felaris://newtab".to_string(),
             is_pinned: false,
             is_sleeping: false,
+            is_loading: false,
+            can_go_back: false,
+            can_go_forward: false,
+            error: None,
+            generation: 0,
+            pending_url: None,
         };
 
         Self {
@@ -95,7 +117,90 @@ impl BrowserState {
             closed_tabs: Vec::new(),
             update_available: None,
             update_status: None,
+            active_downloads: 0,
+            update_busy: false,
         }
+    }
+
+    pub fn restore() -> Self {
+        let path = crate::profile::directory().join("session.json");
+        for candidate in [path.clone(), path.with_extension("json.bak")] {
+            if let Ok(json) = std::fs::read_to_string(&candidate)
+                && let Some(mut state) = Self::from_session(&json)
+            {
+                if candidate != path {
+                    state.update_status =
+                        Some("Recovered your previous session from a backup.".into());
+                }
+                return state;
+            }
+        }
+        let mut state = Self::new();
+        if path.exists() {
+            state.update_status =
+                Some("Your saved session could not be read. A new session was opened.".into());
+        }
+        state
+    }
+
+    fn from_session(json: &str) -> Option<Self> {
+        let mut state: Self = serde_json::from_str(json).ok()?;
+        state.workspaces = Self::new().workspaces;
+        let mut ids = std::collections::HashSet::new();
+        state.tabs.retain(|tab| {
+            tab.id > 0
+                && tab.id < usize::MAX - 1
+                && (1..=3).contains(&tab.workspace_id)
+                && crate::profile::allowed_url(&tab.url)
+                && ids.insert(tab.id)
+        });
+        if state.tabs.is_empty() {
+            return None;
+        }
+        for tab in &mut state.tabs {
+            tab.is_loading = false;
+            tab.can_go_back = false;
+            tab.can_go_forward = false;
+            tab.error = None;
+            tab.is_sleeping = tab.id != state.active_tab_id;
+        }
+        if !state.tabs.iter().any(|tab| tab.id == state.active_tab_id) {
+            state.active_tab_id = state.tabs[0].id;
+        }
+        state.active_workspace_id = state.active_tab()?.workspace_id;
+        state
+            .tabs
+            .iter_mut()
+            .find(|tab| tab.id == state.active_tab_id)?
+            .is_sleeping = false;
+        state.next_tab_id = state.tabs.iter().map(|tab| tab.id).max()?.checked_add(1)?;
+        state.closed_tabs.retain(|tab| {
+            crate::profile::allowed_url(&tab.url) && (1..=3).contains(&tab.workspace_id)
+        });
+        state.closed_tabs.truncate(30);
+        state.can_restore_closed_tab = !state.closed_tabs.is_empty();
+        state.is_loading = false;
+        state.active_downloads = 0;
+        state.update_busy = false;
+        state.update_status = None;
+        state.update_available = None;
+        state.homepage = "felaris://newtab".into();
+        Some(state)
+    }
+
+    pub fn save_session(&self) -> Result<(), String> {
+        let path = crate::profile::directory().join("session.json");
+        if let Ok(previous) = std::fs::read(&path)
+            && std::str::from_utf8(&previous)
+                .ok()
+                .and_then(Self::from_session)
+                .is_some()
+        {
+            crate::profile::write_atomic(&path.with_extension("json.bak"), &previous)
+                .map_err(|error| error.to_string())?;
+        }
+        let bytes = serde_json::to_vec(self).map_err(|error| error.to_string())?;
+        crate::profile::write_atomic(&path, &bytes).map_err(|error| error.to_string())
     }
 
     pub fn add_tab(&mut self, url: Option<String>, is_pinned: bool) -> usize {
@@ -113,6 +218,12 @@ impl BrowserState {
             url: target_url.clone(),
             is_pinned,
             is_sleeping: false,
+            is_loading: false,
+            can_go_back: false,
+            can_go_forward: false,
+            error: None,
+            generation: 0,
+            pending_url: None,
         };
         self.tabs.push(new_tab);
         self.active_tab_id = id;
@@ -124,6 +235,9 @@ impl BrowserState {
         let idx = self.tabs.iter().position(|t| t.id == tab_id)?;
         let removed = self.tabs.remove(idx);
         self.closed_tabs.push(removed);
+        if self.closed_tabs.len() > 30 {
+            self.closed_tabs.remove(0);
+        }
         self.can_restore_closed_tab = true;
 
         if self.tabs.is_empty() {
@@ -155,6 +269,11 @@ impl BrowserState {
             tab.id = self.next_tab_id;
             self.next_tab_id += 1;
             tab.is_sleeping = false;
+            tab.is_loading = false;
+            tab.can_go_back = false;
+            tab.can_go_forward = false;
+            tab.error = None;
+            tab.pending_url = None;
             let id = tab.id;
             self.active_workspace_id = tab.workspace_id;
             self.tabs.push(tab);
@@ -176,6 +295,13 @@ impl BrowserState {
     }
 
     pub fn switch_workspace(&mut self, workspace_id: usize) -> Option<&Tab> {
+        if !self
+            .workspaces
+            .iter()
+            .any(|workspace| workspace.id == workspace_id)
+        {
+            return self.active_tab();
+        }
         self.active_workspace_id = workspace_id;
         let is_current_in_workspace = self
             .active_tab()
@@ -206,6 +332,9 @@ impl BrowserState {
     }
 
     pub fn toggle_sleep(&mut self, tab_id: usize) {
+        if tab_id == self.active_tab_id {
+            return;
+        }
         if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == tab_id) {
             tab.is_sleeping = !tab.is_sleeping;
         }
@@ -241,6 +370,7 @@ impl BrowserState {
         self.switch_tab(ids[next])
     }
 
+    #[cfg(test)]
     pub fn clear_unpinned_tabs(&mut self) {
         let to_close: Vec<usize> = self
             .tabs
@@ -292,14 +422,6 @@ impl BrowserState {
         }
         items.truncate(8);
         items
-    }
-
-    pub fn set_update_available(&mut self, manifest: Option<UpdateManifest>) {
-        self.update_available = manifest;
-    }
-
-    pub fn set_update_status(&mut self, status: Option<String>) {
-        self.update_status = status;
     }
 
     fn record_visit(&mut self, url: &str) {
@@ -414,13 +536,7 @@ impl BrowserState {
         if cfg!(test) {
             return None;
         }
-        std::env::var_os("LOCALAPPDATA")
-            .or_else(|| std::env::var_os("APPDATA"))
-            .map(|dir| {
-                std::path::PathBuf::from(dir)
-                    .join("Felaris")
-                    .join("shortcuts.json")
-            })
+        Some(crate::profile::directory().join("shortcuts.json"))
     }
 
     fn load_shortcuts() -> Vec<Shortcut> {
@@ -441,18 +557,58 @@ impl BrowserState {
             let _ = std::fs::create_dir_all(parent);
         }
         if let Ok(json) = serde_json::to_string(&self.shortcuts) {
-            let _ = std::fs::write(path, json);
+            let _ = crate::profile::write_atomic(&path, json.as_bytes());
         }
-    }
-
-    pub fn set_loading(&mut self, loading: bool) {
-        self.is_loading = loading;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn saved_session_restores_pins_workspaces_and_unique_ids() {
+        let mut state = BrowserState::new();
+        state.toggle_pin(1);
+        state.switch_workspace(2);
+        let active = state.add_tab(Some("https://example.com/draft".into()), false);
+        state.is_loading = true;
+        state.active_downloads = 2;
+        state.update_busy = true;
+        let mut restored =
+            BrowserState::from_session(&serde_json::to_string(&state).unwrap()).unwrap();
+        assert_eq!(restored.active_tab_id, active);
+        assert_eq!(restored.active_workspace_id, 2);
+        assert!(restored.tabs[0].is_pinned);
+        assert!(restored.tabs[0].is_sleeping);
+        assert!(!restored.active_tab().unwrap().is_sleeping);
+        assert!(!restored.is_loading);
+        assert_eq!(restored.active_downloads, 0);
+        assert!(!restored.update_busy);
+        assert!(restored.add_tab(None, false) > active);
+    }
+
+    #[test]
+    fn session_rejects_invalid_tabs_and_repairs_active_selection() {
+        let mut state = BrowserState::new();
+        state.add_tab(Some("javascript:alert(1)".into()), false);
+        state.tabs.push(state.tabs[0].clone());
+        state.active_tab_id = 999;
+        let restored = BrowserState::from_session(&serde_json::to_string(&state).unwrap()).unwrap();
+        assert_eq!(restored.tabs.len(), 1);
+        assert_eq!(restored.active_tab_id, 1);
+        assert_eq!(restored.active_workspace_id, 1);
+        assert!(BrowserState::from_session("{truncated").is_none());
+    }
+
+    #[test]
+    fn active_tab_cannot_be_put_to_sleep() {
+        let mut state = BrowserState::new();
+        state.toggle_sleep(1);
+        assert!(!state.active_tab().unwrap().is_sleeping);
+        state.switch_workspace(999);
+        assert_eq!(state.active_workspace_id, 1);
+    }
 
     #[test]
     fn pinning_and_closing_others_preserves_other_workspaces_and_undo() {

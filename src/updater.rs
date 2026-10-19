@@ -53,7 +53,10 @@ struct GhRelease {
     assets: Option<Vec<GhAsset>>,
 }
 
+const SETUP_TEMP: &str = "felaris-update-setup.exe";
+
 pub fn cleanup_old_version() {
+    let _ = std::fs::remove_file(std::env::temp_dir().join(SETUP_TEMP));
     if let Ok(current) = std::env::current_exe() {
         let old = current.with_extension("exe.old");
         if old.exists() {
@@ -133,9 +136,45 @@ pub fn download_and_apply_update(download_url: &str) -> Result<(), String> {
     let target_dir = current_exe
         .parent()
         .ok_or_else(|| "Invalid executable parent directory".to_string())?;
-
-    let new_exe_temp = target_dir.join("felaris.exe.new");
     validate_download_url(download_url)?;
+
+    // Copies made by felaris-setup.exe update through it so Windows keeps the right version.
+    let installed = target_dir.join("unins000.exe").is_file();
+    let (asset, file) = if installed {
+        ("felaris-setup.exe", std::env::temp_dir().join(SETUP_TEMP))
+    } else {
+        ("felaris.exe", target_dir.join("felaris.exe.new"))
+    };
+    let release = download_url.rsplit_once('/').map_or("", |(base, _)| base);
+    download(&format!("{release}/{asset}"), &file)?;
+    if let Err(error) = verify_download(&format!("{release}/SHA256SUMS"), asset, &file) {
+        let _ = std::fs::remove_file(&file);
+        return Err(error);
+    }
+
+    if installed {
+        let mut command = Command::new(&file);
+        command.args([
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/CLOSEAPPLICATIONS",
+        ]);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x0000_0008 | 0x0000_0200);
+        }
+        command
+            .spawn()
+            .map_err(|e| format!("Could not start the update installer: {e}"))?;
+    } else {
+        replace_and_launch(&current_exe, &file)?;
+    }
+    std::process::exit(0);
+}
+
+fn download(url: &str, file: &std::path::Path) -> Result<(), String> {
     let status = hidden_command("curl.exe")
         .args([
             "-s",
@@ -150,37 +189,75 @@ pub fn download_and_apply_update(download_url: &str) -> Result<(), String> {
             "--connect-timeout",
             "10",
             "-o",
-            new_exe_temp.to_str().ok_or("Invalid temp path")?,
-            download_url,
+            file.to_str().ok_or("Invalid temp path")?,
+            url,
         ])
         .status()
         .map_err(|e| format!("Failed to spawn curl: {e}"))?;
-
     if !status.success() {
-        let _ = std::fs::remove_file(&new_exe_temp);
+        let _ = std::fs::remove_file(file);
         return Err(format!("Download failed with status: {status}"));
     }
+    Ok(())
+}
 
-    let meta = std::fs::metadata(&new_exe_temp)
-        .map_err(|e| format!("Cannot read downloaded file metadata: {e}"))?;
-    if meta.len() < 500_000 {
-        let _ = std::fs::remove_file(&new_exe_temp);
+fn verify_download(sums_url: &str, asset: &str, file: &std::path::Path) -> Result<(), String> {
+    let bytes = std::fs::read(file).map_err(|error| error.to_string())?;
+    if bytes.len() < 500_000 {
         return Err(format!(
             "Downloaded file too small ({} bytes); update aborted",
-            meta.len()
+            bytes.len()
         ));
     }
-
-    if !valid_executable(&std::fs::read(&new_exe_temp).map_err(|error| error.to_string())?) {
-        let _ = std::fs::remove_file(&new_exe_temp);
+    if asset == "felaris.exe" && !valid_executable(&bytes) {
         return Err(
             "The downloaded file is not a compatible Windows app. Your current version was kept."
                 .into(),
         );
     }
+    let sums = run_curl(&[
+        "-s",
+        "-f",
+        "-L",
+        "--max-time",
+        "15",
+        "--proto",
+        "=https",
+        "--proto-redir",
+        "=https",
+        sums_url,
+    ])
+    .ok_or("Could not fetch the release checksums. Your current version was kept.")?;
+    let expected = checksum_for(&sums, asset)
+        .ok_or("This release has no checksum for the update. Your current version was kept.")?;
+    let output = hidden_command("certutil.exe")
+        .args([
+            "-hashfile",
+            file.to_str().ok_or("Invalid temp path")?,
+            "SHA256",
+        ])
+        .output()
+        .map_err(|e| format!("Could not verify the download: {e}"))?;
+    let actual: String = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .nth(1)
+        .unwrap_or("")
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    if !actual.eq_ignore_ascii_case(&expected) {
+        return Err(
+            "The download did not match its checksum. Your current version was kept.".into(),
+        );
+    }
+    Ok(())
+}
 
-    replace_and_launch(&current_exe, &new_exe_temp)?;
-    std::process::exit(0);
+fn checksum_for(sums: &str, asset: &str) -> Option<String> {
+    sums.lines().find_map(|line| {
+        let (hash, name) = line.split_once("  ")?;
+        (name.trim() == asset).then(|| hash.trim().to_string())
+    })
 }
 
 fn replace_and_launch(
@@ -261,53 +338,6 @@ fn valid_executable(bytes: &[u8]) -> bool {
         && u16::from_le_bytes([header[92], header[93]]) == 2
 }
 
-fn installer_command(action: &str) -> Result<Command, String> {
-    let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let mut command = Command::new("powershell.exe");
-    command
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            include_str!("install.ps1"),
-        ])
-        .env("FELARIS_INSTALL_ACTION", action)
-        .env("FELARIS_SOURCE_EXE", current_exe)
-        .env("FELARIS_VERSION", CURRENT_VERSION)
-        .env("FELARIS_PARENT_PID", std::process::id().to_string());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
-    Ok(command)
-}
-
-pub fn install_to_system() -> Result<String, String> {
-    run_installer("install")
-}
-
-fn run_installer(action: &str) -> Result<String, String> {
-    let output = installer_command(action)?
-        .output()
-        .map_err(|e| e.to_string())?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-}
-
-pub fn uninstall_from_system() -> Result<String, String> {
-    run_installer("uninstall")?;
-    installer_command("cleanup")?
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map_err(|e| format!("Failed to start uninstaller: {e}"))?;
-    Ok("Felaris uninstall started. Browser data is preserved.".to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -367,6 +397,19 @@ mod tests {
         assert!(valid_executable(&bytes));
         bytes[60..64].copy_from_slice(&u32::MAX.to_le_bytes());
         assert!(!valid_executable(&bytes));
+    }
+
+    #[test]
+    fn checksum_is_matched_by_exact_asset_name() {
+        let sums = "aaa111  felaris.exe
+bbb222  felaris-setup.exe
+";
+        assert_eq!(
+            checksum_for(sums, "felaris-setup.exe").as_deref(),
+            Some("bbb222")
+        );
+        assert_eq!(checksum_for(sums, "felaris.exe").as_deref(), Some("aaa111"));
+        assert_eq!(checksum_for(sums, "other.exe"), None);
     }
 
     #[test]

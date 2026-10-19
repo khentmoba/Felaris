@@ -32,7 +32,6 @@ pub enum Command {
     CycleTab { backwards: bool },
     CheckUpdates,
     ApplyUpdate,
-    InstallApp,
     OpenDownloads,
     DefaultBrowser,
     DismissNewTab,
@@ -344,6 +343,16 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_secs(3));
             let _ = background.send_event(UserEvent::UpdateChecked(updater::check_for_updates()));
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(6 * 60 * 60));
+                if let Ok(Some(update)) = updater::check_for_updates()
+                    && background
+                        .send_event(UserEvent::UpdateChecked(Ok(Some(update))))
+                        .is_err()
+                {
+                    break;
+                }
+            }
         });
     }
 
@@ -427,7 +436,6 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                     let proxy = proxy.clone(); std::thread::spawn(move || { if let Err(error) = updater::download_and_apply_update(&url) { let _ = proxy.send_event(UserEvent::UpdateFailed(format!("Update failed: {error}. You can try again."))); } });
                                 } else { state.update_status = Some("Save your session successfully before updating. Check available disk space.".into()); }
                             },
-                            Command::InstallApp => { let proxy = proxy.clone(); std::thread::spawn(move || { let result = updater::install_to_system().unwrap_or_else(|error| format!("Install failed: {error}")); let _ = proxy.send_event(UserEvent::Status(result)); }); },
                         }
                     }
                     UserEvent::Title(id, generation, title) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) && tab.error.is_none() && !title.is_empty() { tab.title = title; },

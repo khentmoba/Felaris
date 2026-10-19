@@ -24,13 +24,20 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 }
 
 pub fn allowed_url(value: &str) -> bool {
-    value == "felaris://newtab"
-        || url::Url::parse(value).is_ok_and(|url| matches!(url.scheme(), "http" | "https" | "file"))
+    normalize_url(value).is_some()
+}
+
+pub fn normalize_url(value: &str) -> Option<String> {
+    if value == "felaris://newtab" {
+        return Some(value.into());
+    }
+    let url = url::Url::parse(value).ok()?;
+    matches!(url.scheme(), "http" | "https" | "file").then(|| url.into())
 }
 
 pub fn startup_url(value: &str) -> Option<String> {
-    if allowed_url(value) {
-        return Some(value.into());
+    if let Some(url) = normalize_url(value) {
+        return Some(url);
     }
     let path = Path::new(value);
     if path.is_absolute() {
@@ -64,6 +71,22 @@ mod tests {
         assert_eq!(
             startup_url(r"C:\Browser tests\hello.html").as_deref(),
             Some("file:///C:/Browser%20tests/hello.html")
+        );
+    }
+
+    #[test]
+    fn navigation_urls_match_browser_normalization() {
+        assert_eq!(
+            normalize_url("HTTPS://Example.COM").as_deref(),
+            Some("https://example.com/")
+        );
+        assert_eq!(
+            normalize_url("https://example.com/café").as_deref(),
+            Some("https://example.com/caf%C3%A9")
+        );
+        assert_eq!(
+            normalize_url("felaris://newtab").as_deref(),
+            Some("felaris://newtab")
         );
     }
 }

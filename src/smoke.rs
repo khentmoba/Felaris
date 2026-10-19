@@ -85,10 +85,6 @@ impl Smoke {
                     },
                 );
             }
-            11 => {
-                self.phase = 12;
-                Self::command(proxy, Command::Retry);
-            }
             15 => {
                 return self.finish(
                     true,
@@ -209,12 +205,8 @@ impl Smoke {
                 );
             }
             10 if tab.error.is_some() && !tab.is_loading => {
-                self.phase = 11;
-                self.probe(
-                    view,
-                    "document.querySelector('button')?.textContent === 'Retry page'",
-                    proxy,
-                );
+                self.phase = 12;
+                Self::command(proxy, Command::Retry);
             }
             12 if tab.error.is_some() && !tab.is_loading => {
                 self.phase = 13;

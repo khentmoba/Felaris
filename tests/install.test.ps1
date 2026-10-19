@@ -23,8 +23,18 @@ try {
     }
     Set-Content -LiteralPath $env:FELARIS_SOURCE_EXE -Value 'test binary'
     $env:FELARIS_INSTALL_ACTION = 'install'
+    $registeredApplications = "$testRegistryRoot\RegisteredApplications"
+    New-Item -Path $registeredApplications -Force | Out-Null
+    New-ItemProperty -Path $registeredApplications -Name 'OtherBrowser' -Value 'Software\OtherBrowser\Capabilities' | Out-Null
     & $script @installArguments
     & $script @installArguments
+    Assert ((Get-ItemProperty -LiteralPath $registeredApplications).OtherBrowser -eq 'Software\OtherBrowser\Capabilities') 'Installer removed another application registration'
+    $capabilities = "$testRegistryRoot\Clients\StartMenuInternet\Felaris\Capabilities"
+    Assert ((Get-ItemProperty -LiteralPath $capabilities).ApplicationName -eq 'Felaris') 'Missing application name'
+    Assert ((Get-ItemProperty -LiteralPath $capabilities).ApplicationDescription -eq 'Browse the web with Felaris.') 'Missing application description'
+    Assert ((Get-ItemProperty -LiteralPath "$capabilities\URLAssociations").http -eq 'FelarisHTML') 'Missing HTTP registration'
+    Assert ((Get-ItemProperty -LiteralPath "$capabilities\FileAssociations").'.htm' -eq 'FelarisHTML') 'Missing HTM registration'
+    Assert ((Get-ItemProperty -LiteralPath "$capabilities\FileAssociations").'.html' -eq 'FelarisHTML') 'Missing HTML registration'
     $target = Join-Path $env:LOCALAPPDATA 'Programs\Felaris\felaris.exe'
     Assert (Test-Path -LiteralPath $target) 'App was not copied'
     $registration = Get-ItemProperty -LiteralPath $registryPath
@@ -46,6 +56,7 @@ try {
     $env:FELARIS_INSTALL_ACTION = 'uninstall'
     & $script @installArguments
     Assert (-not (Test-Path -LiteralPath $registryPath)) 'Registry entry remains'
+    Assert ((Get-ItemProperty -LiteralPath $registeredApplications).OtherBrowser -eq 'Software\OtherBrowser\Capabilities') 'Uninstaller removed another application registration'
     foreach ($path in $shortcuts) { Assert (-not (Test-Path -LiteralPath $path)) 'Shortcut remains' }
     $env:FELARIS_INSTALL_ACTION = 'cleanup'
     & $script @installArguments

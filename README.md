@@ -189,7 +189,8 @@ Browser data is stored in `%LOCALAPPDATA%\Felaris`. `session.json` and
 `WebView2` contains persistent site storage. Restarting restores URLs, rather
 than unsaved forms or per-tab navigation history. Uninstall preserves this data.
 
-Page failures offer Retry; renderer failures preserve tab URLs for reload.
+Page failures retain WebView2's native error page and navigation history; Reload
+retries the address. Renderer failures preserve tab URLs for reload.
 Camera, microphone, location, notifications, and clipboard-read requests show
 an origin-labelled native prompt. Unknown permission types are denied. Standard
 file pickers and downloads use WebView2's native interfaces.
@@ -198,7 +199,13 @@ For an isolated headless development check after `cargo build --locked`:
 
 ```powershell
 python tests/native_smoke.py
+python tests/native_regressions.py
 ```
+
+The regression suite requires Node 22+ and checks normalized addresses, SPA
+routes, Back after page failures, sleeping-tab replacement, and the production
+Close Other Tabs command while a download is running. Both suites use isolated
+profiles and hidden windows.
 
 ### One-Line Install (PowerShell)
 

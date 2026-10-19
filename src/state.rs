@@ -206,7 +206,9 @@ impl BrowserState {
     pub fn add_tab(&mut self, url: Option<String>, is_pinned: bool) -> usize {
         let id = self.next_tab_id;
         self.next_tab_id += 1;
-        let target_url = url.unwrap_or_else(|| self.homepage.clone());
+        let target_url = url
+            .map(|value| crate::profile::normalize_url(&value).unwrap_or(value))
+            .unwrap_or_else(|| self.homepage.clone());
         let new_tab = Tab {
             id,
             workspace_id: self.active_workspace_id,
@@ -261,6 +263,7 @@ impl BrowserState {
             }
         }
 
+        self.switch_tab(self.active_tab_id);
         Some(self.active_tab_id)
     }
 
@@ -368,23 +371,6 @@ impl BrowserState {
             (index + 1) % ids.len()
         };
         self.switch_tab(ids[next])
-    }
-
-    #[cfg(test)]
-    pub fn clear_unpinned_tabs(&mut self) {
-        let to_close: Vec<usize> = self
-            .tabs
-            .iter()
-            .filter(|tab| {
-                tab.workspace_id == self.active_workspace_id
-                    && !tab.is_pinned
-                    && tab.id != self.active_tab_id
-            })
-            .map(|tab| tab.id)
-            .collect();
-        for id in to_close {
-            self.close_tab(id);
-        }
     }
 
     pub fn active_tab(&self) -> Option<&Tab> {
@@ -611,28 +597,13 @@ mod tests {
     }
 
     #[test]
-    fn pinning_and_closing_others_preserves_other_workspaces_and_undo() {
+    fn closing_active_tab_wakes_its_replacement() {
         let mut state = BrowserState::new();
-        let pinned = state.add_tab(Some("https://example.com".into()), false);
-        state.toggle_pin(pinned);
-        state.switch_workspace(2);
-        let other_workspace = state.active_tab_id;
-        state.switch_workspace(1);
-        let active = state.add_tab(None, false);
-        state.clear_unpinned_tabs();
-        assert_eq!(state.tabs.len(), 3);
-        assert!(
-            state
-                .tabs
-                .iter()
-                .any(|tab| tab.id == pinned && tab.is_pinned)
-        );
-        assert!(state.tabs.iter().any(|tab| tab.id == other_workspace));
-        assert_eq!(state.active_tab_id, active);
-        assert!(state.can_restore_closed_tab);
-        state.restore_closed_tab();
-        assert_eq!(state.tabs.len(), 4);
-        assert!(!state.can_restore_closed_tab);
+        let active = state.add_tab(Some("https://example.com".into()), false);
+        state.sleep_inactive_tabs();
+        state.close_tab(active);
+        assert_eq!(state.active_tab_id, 1);
+        assert!(!state.active_tab().unwrap().is_sleeping);
     }
 
     #[test]

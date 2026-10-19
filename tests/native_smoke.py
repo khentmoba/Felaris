@@ -11,24 +11,36 @@ import uuid
 
 
 class Fixture(BaseHTTPRequestHandler):
+    release_download = threading.Event()
+
     def do_GET(self):
-        if self.path == '/download':
-            body = b'Felaris download fixture\n'
+        if self.path in ('/download', '/slow-download'):
+            body = b'x' * 65536 if self.path == '/slow-download' else b'Felaris download fixture\n'
             self.send_response(200)
             self.send_header('Content-Type', 'application/octet-stream')
             self.send_header('Content-Disposition', 'attachment; filename="felaris-smoke.txt"')
         else:
             title = {'/': 'fixture', '/second': 'second', '/next': 'next', '/popup': 'popup'}.get(self.path, 'fixture')
+            extra = "<script>setTimeout(()=>{history.pushState({},'', '/route');document.title='Felaris route'},300)</script>" if self.path == '/spa' else ''
+            if self.path == '/slow':
+                extra = "<script>setTimeout(()=>document.getElementById('download').click(),500)</script>"
+            download = '/slow-download' if self.path == '/slow' else '/download'
             body = f'''<!doctype html><html><meta charset="utf-8"><title>Felaris {title}</title>
 <body style="font:16px system-ui;padding:40px"><h1>Felaris {title}</h1>
 <label>Keep this draft <input id="note"></label><p><a href="/next">Next page</a></p>
 <p><a href="/popup" target="_blank">Open a new tab</a></p>
-<a id="download" href="/download">Download test file</a></body></html>'''.encode()
+<a id="download" href="{download}">Download test file</a>{extra}</body></html>'''.encode()
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        if self.path == '/slow-download':
+            self.wfile.write(body[:32768])
+            self.wfile.flush()
+            self.release_download.wait(timeout=20)
+            self.wfile.write(body[32768:])
+        else:
+            self.wfile.write(body)
 
     def log_message(self, *_):
         pass

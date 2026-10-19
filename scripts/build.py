@@ -53,6 +53,8 @@ def publish_github_release(version, summary, exe_path, dry_run=False):
         "create",
         tag,
         str(exe_path),
+        str(exe_path.with_name("felaris-setup.exe")),
+        str(exe_path.with_name("SHA256SUMS")),
         "--title",
         f"Felaris {tag}",
         "--notes",
@@ -80,7 +82,7 @@ def main():
     print(f" Building Felaris v{version} (Release Mode)")
     print("==================================================")
 
-    build_cmd = ["cargo", "build", "--release"]
+    build_cmd = ["powershell", "-NoProfile", "-File", str(PROJECT_ROOT / "scripts/package.ps1")]
     print(f"[Build] Executing: {' '.join(build_cmd)}")
     res = subprocess.run(build_cmd, cwd=PROJECT_ROOT)
     if res.returncode != 0:

@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -63,23 +62,18 @@ pub fn cleanup_old_version() {
     }
 }
 
-pub fn check_for_updates() -> Option<UpdateManifest> {
+pub fn check_for_updates() -> Result<Option<UpdateManifest>, String> {
     // 1. Try static manifest (fast, zero rate limits)
     if let Some(manifest) = fetch_manifest(MANIFEST_URL) {
         if is_newer(&manifest.version, CURRENT_VERSION) {
-            return Some(manifest);
+            return Ok(Some(manifest));
         }
-        return None;
+        return Ok(None);
     }
 
-    // 2. Fallback to GitHub Releases API
-    if let Some(manifest) = fetch_github_latest()
-        && is_newer(&manifest.version, CURRENT_VERSION)
-    {
-        return Some(manifest);
-    }
-
-    None
+    let manifest = fetch_github_latest()
+        .ok_or("Could not check for updates. Check your connection and try again.")?;
+    Ok(is_newer(&manifest.version, CURRENT_VERSION).then_some(manifest))
 }
 
 pub fn is_newer(remote: &str, current: &str) -> bool {
@@ -90,7 +84,7 @@ pub fn is_newer(remote: &str, current: &str) -> bool {
 }
 
 fn run_curl(args: &[&str]) -> Option<String> {
-    let output = Command::new("curl.exe").args(args).output().ok()?;
+    let output = hidden_command("curl.exe").args(args).output().ok()?;
     if output.status.success() {
         String::from_utf8(output.stdout).ok()
     } else {
@@ -119,7 +113,7 @@ fn fetch_github_latest() -> Option<UpdateManifest> {
     let exe_asset = release.assets.as_ref().and_then(|assets| {
         assets
             .iter()
-            .find(|a| a.name.to_lowercase().ends_with(".exe"))
+            .find(|a| a.name.eq_ignore_ascii_case("felaris.exe"))
             .map(|a| a.browser_download_url.clone())
     });
 
@@ -141,16 +135,20 @@ pub fn download_and_apply_update(download_url: &str) -> Result<(), String> {
         .ok_or_else(|| "Invalid executable parent directory".to_string())?;
 
     let new_exe_temp = target_dir.join("felaris.exe.new");
-    let old_exe = current_exe.with_extension("exe.old");
-
-    // Download new binary using curl
-    let status = Command::new("curl.exe")
+    validate_download_url(download_url)?;
+    let status = hidden_command("curl.exe")
         .args([
             "-s",
             "-f",
             "-L",
             "--max-time",
             "120",
+            "--proto",
+            "=https",
+            "--proto-redir",
+            "=https",
+            "--connect-timeout",
+            "10",
             "-o",
             new_exe_temp.to_str().ok_or("Invalid temp path")?,
             download_url,
@@ -163,7 +161,6 @@ pub fn download_and_apply_update(download_url: &str) -> Result<(), String> {
         return Err(format!("Download failed with status: {status}"));
     }
 
-    // Sanity check binary size (> 500 KB)
     let meta = std::fs::metadata(&new_exe_temp)
         .map_err(|e| format!("Cannot read downloaded file metadata: {e}"))?;
     if meta.len() < 500_000 {
@@ -174,180 +171,203 @@ pub fn download_and_apply_update(download_url: &str) -> Result<(), String> {
         ));
     }
 
-    // Windows atomic binary swap:
-    // 1. Rename running felaris.exe -> felaris.exe.old
-    // 2. Rename felaris.exe.new -> felaris.exe
-    if old_exe.exists() {
-        let _ = std::fs::remove_file(&old_exe);
-    }
-    std::fs::rename(&current_exe, &old_exe)
-        .map_err(|e| format!("Failed to move running executable to .old: {e}"))?;
-
-    if let Err(e) = std::fs::rename(&new_exe_temp, &current_exe) {
-        // Attempt recovery
-        let _ = std::fs::rename(&old_exe, &current_exe);
-        return Err(format!(
-            "Failed to replace executable with new version: {e}"
-        ));
+    if !valid_executable(&std::fs::read(&new_exe_temp).map_err(|error| error.to_string())?) {
+        let _ = std::fs::remove_file(&new_exe_temp);
+        return Err(
+            "The downloaded file is not a compatible Windows app. Your current version was kept."
+                .into(),
+        );
     }
 
-    // Spawn new version
-    Command::new(&current_exe)
-        .spawn()
-        .map_err(|e| format!("Failed to launch updated binary: {e}"))?;
-
-    // Exit old process immediately
+    replace_and_launch(&current_exe, &new_exe_temp)?;
     std::process::exit(0);
 }
 
-pub fn get_install_paths() -> (PathBuf, PathBuf, PathBuf) {
-    let local_app_data = std::env::var("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("C:\\Users\\Default\\AppData\\Local"));
-
-    let app_data = std::env::var("APPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("C:\\Users\\Default\\AppData\\Roaming"));
-
-    let user_profile = std::env::var("USERPROFILE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("C:\\Users\\Default"));
-
-    let target_dir = local_app_data.join("Programs").join("Felaris");
-    let target_exe = target_dir.join("felaris.exe");
-
-    let start_menu_shortcut = app_data
-        .join("Microsoft")
-        .join("Windows")
-        .join("Start Menu")
-        .join("Programs")
-        .join("Felaris.lnk");
-
-    let desktop_shortcut = user_profile.join("Desktop").join("Felaris.lnk");
-
-    (target_exe, start_menu_shortcut, desktop_shortcut)
+fn replace_and_launch(
+    current_exe: &std::path::Path,
+    new_exe: &std::path::Path,
+) -> Result<(), String> {
+    let old_exe = current_exe.with_extension("exe.old");
+    if old_exe.exists() {
+        std::fs::remove_file(&old_exe)
+            .map_err(|error| format!("Could not clear the previous update backup: {error}"))?;
+    }
+    std::fs::rename(current_exe, &old_exe)
+        .map_err(|error| format!("Could not back up the running app: {error}"))?;
+    if let Err(error) = std::fs::rename(new_exe, current_exe) {
+        std::fs::rename(&old_exe, current_exe).map_err(|recovery| {
+            format!(
+                "Update failed ({error}); recovery failed ({recovery}). Your previous app is at {}",
+                old_exe.display()
+            )
+        })?;
+        return Err(format!(
+            "Update could not be installed; your previous version was restored: {error}"
+        ));
+    }
+    if let Err(error) = Command::new(current_exe).arg("--updated").spawn() {
+        std::fs::remove_file(current_exe).and_then(|_| std::fs::rename(&old_exe, current_exe))
+            .map_err(|recovery| format!("The update could not start ({error}); recovery failed ({recovery}). Your previous app is at {}", old_exe.display()))?;
+        return Err(format!(
+            "The update could not start; your previous version was restored: {error}"
+        ));
+    }
+    Ok(())
 }
 
-fn create_shortcut(target_exe: &Path, shortcut_path: &Path) -> Result<(), String> {
-    let ps_script = format!(
-        "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('{}'); $s.TargetPath = '{}'; $s.Description = 'Felaris Browser'; $s.Save();",
-        shortcut_path.display(),
-        target_exe.display()
-    );
+fn hidden_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    command
+}
 
-    let status = Command::new("powershell.exe")
+fn validate_download_url(value: &str) -> Result<(), String> {
+    let url = url::Url::parse(value).map_err(|_| "Invalid update address")?;
+    if url.scheme() != "https"
+        || url.host_str() != Some("github.com")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || !url
+            .path()
+            .starts_with("/khentmoba/Felaris/releases/download/")
+        || !url.path().ends_with("/felaris.exe")
+        || url.port().is_some()
+    {
+        return Err("Update address is not an official Felaris release.".into());
+    }
+    Ok(())
+}
+
+fn valid_executable(bytes: &[u8]) -> bool {
+    if bytes.len() < 64 || &bytes[..2] != b"MZ" {
+        return false;
+    }
+    let offset = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+    let Some(header) = bytes.get(offset..offset.saturating_add(94)) else {
+        return false;
+    };
+    let machine = u16::from_le_bytes([header[4], header[5]]);
+    let expected = if cfg!(target_arch = "aarch64") {
+        0xaa64
+    } else {
+        0x8664
+    };
+    &header[..4] == b"PE\0\0"
+        && machine == expected
+        && u16::from_le_bytes([header[92], header[93]]) == 2
+}
+
+fn installer_command(action: &str) -> Result<Command, String> {
+    let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let mut command = Command::new("powershell.exe");
+    command
         .args([
             "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
+            "-NonInteractive",
             "-Command",
-            &ps_script,
+            include_str!("install.ps1"),
         ])
-        .status()
-        .map_err(|e| format!("Failed to run powershell for shortcut: {e}"))?;
-
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("Shortcut creation exited with: {status}"))
+        .env("FELARIS_INSTALL_ACTION", action)
+        .env("FELARIS_SOURCE_EXE", current_exe)
+        .env("FELARIS_VERSION", CURRENT_VERSION)
+        .env("FELARIS_PARENT_PID", std::process::id().to_string());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
     }
+    Ok(command)
 }
 
 pub fn install_to_system() -> Result<String, String> {
-    let current_exe =
-        std::env::current_exe().map_err(|e| format!("Cannot locate current executable: {e}"))?;
-    let (target_exe, start_menu_shortcut, desktop_shortcut) = get_install_paths();
-    let target_dir = target_exe.parent().unwrap();
+    run_installer("install")
+}
 
-    std::fs::create_dir_all(target_dir)
-        .map_err(|e| format!("Failed to create install directory: {e}"))?;
-
-    // Copy to install location if not running from there
-    if current_exe != target_exe {
-        std::fs::copy(&current_exe, &target_exe)
-            .map_err(|e| format!("Failed to copy binary to install directory: {e}"))?;
+fn run_installer(action: &str) -> Result<String, String> {
+    let output = installer_command(action)?
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
-
-    // Create Start Menu & Desktop shortcuts
-    let _ = create_shortcut(&target_exe, &start_menu_shortcut);
-    let _ = create_shortcut(&target_exe, &desktop_shortcut);
-
-    // Register with Windows Uninstall registry
-    let reg_key = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Felaris";
-    let exe_str = target_exe.to_str().unwrap_or_default();
-    let dir_str = target_dir.to_str().unwrap_or_default();
-    let uninstall_cmd = format!("\"{exe_str}\" --uninstall");
-
-    let _ = Command::new("reg.exe")
-        .args(["add", reg_key, "/v", "DisplayName", "/d", "Felaris", "/f"])
-        .status();
-    let _ = Command::new("reg.exe")
-        .args([
-            "add",
-            reg_key,
-            "/v",
-            "DisplayVersion",
-            "/d",
-            CURRENT_VERSION,
-            "/f",
-        ])
-        .status();
-    let _ = Command::new("reg.exe")
-        .args([
-            "add",
-            reg_key,
-            "/v",
-            "Publisher",
-            "/d",
-            "Felaris Browser",
-            "/f",
-        ])
-        .status();
-    let _ = Command::new("reg.exe")
-        .args(["add", reg_key, "/v", "DisplayIcon", "/d", exe_str, "/f"])
-        .status();
-    let _ = Command::new("reg.exe")
-        .args(["add", reg_key, "/v", "InstallLocation", "/d", dir_str, "/f"])
-        .status();
-    let _ = Command::new("reg.exe")
-        .args([
-            "add",
-            reg_key,
-            "/v",
-            "UninstallString",
-            "/d",
-            &uninstall_cmd,
-            "/f",
-        ])
-        .status();
-
-    Ok(format!(
-        "Felaris installed successfully to {}",
-        target_dir.display()
-    ))
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
 pub fn uninstall_from_system() -> Result<String, String> {
-    let (_, start_menu_shortcut, desktop_shortcut) = get_install_paths();
-
-    if start_menu_shortcut.exists() {
-        let _ = std::fs::remove_file(start_menu_shortcut);
-    }
-    if desktop_shortcut.exists() {
-        let _ = std::fs::remove_file(desktop_shortcut);
-    }
-
-    let reg_key = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Felaris";
-    let _ = Command::new("reg.exe")
-        .args(["delete", reg_key, "/f"])
-        .status();
-
-    Ok("Felaris shortcuts and uninstall registry removed.".to_string())
+    run_installer("uninstall")?;
+    installer_command("cleanup")?
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Failed to start uninstaller: {e}"))?;
+    Ok("Felaris uninstall started. Browser data is preserved.".to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(windows)]
+    fn failed_update_launch_restores_the_previous_binary() {
+        let directory =
+            std::env::temp_dir().join(format!("felaris-rollback-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let current = directory.join("felaris.exe");
+        let new = directory.join("felaris.exe.new");
+        std::fs::write(&current, b"previous app").unwrap();
+        std::fs::write(&new, b"not executable").unwrap();
+        assert!(replace_and_launch(&current, &new).is_err());
+        assert_eq!(std::fs::read(&current).unwrap(), b"previous app");
+        assert!(!current.with_extension("exe.old").exists());
+        assert!(replace_and_launch(&current, &new).is_err());
+        assert_eq!(std::fs::read(&current).unwrap(), b"previous app");
+        std::fs::remove_file(current).unwrap();
+        std::fs::remove_dir(directory).unwrap();
+    }
+
+    #[test]
+    fn updates_only_accept_official_https_app_assets() {
+        assert!(
+            validate_download_url(
+                "https://github.com/khentmoba/Felaris/releases/download/v0.2.0/felaris.exe"
+            )
+            .is_ok()
+        );
+        for address in [
+            "http://github.com/khentmoba/Felaris/releases/download/v0.2.0/felaris.exe",
+            "https://github.com.evil.test/khentmoba/Felaris/releases/download/v0.2.0/felaris.exe",
+            "https://github.com/other/project/releases/download/v0.2.0/felaris.exe",
+            "https://github.com/khentmoba/Felaris/releases/download/v0.2.0/felaris-setup.exe",
+        ] {
+            assert!(validate_download_url(address).is_err(), "{address}");
+        }
+    }
+
+    #[test]
+    fn update_validation_rejects_html_and_truncated_executables() {
+        assert!(!valid_executable(&vec![0; 600_000]));
+        assert!(!valid_executable(b"MZ"));
+        let mut bytes = vec![0; 512];
+        bytes[..2].copy_from_slice(b"MZ");
+        bytes[60..64].copy_from_slice(&64u32.to_le_bytes());
+        bytes[64..68].copy_from_slice(b"PE\0\0");
+        let machine: u16 = if cfg!(target_arch = "aarch64") {
+            0xaa64
+        } else {
+            0x8664
+        };
+        bytes[68..70].copy_from_slice(&machine.to_le_bytes());
+        bytes[156..158].copy_from_slice(&2u16.to_le_bytes());
+        assert!(valid_executable(&bytes));
+        bytes[60..64].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(!valid_executable(&bytes));
+    }
 
     #[test]
     fn test_version_parsing() {

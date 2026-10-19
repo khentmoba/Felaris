@@ -14,7 +14,7 @@
 - **Rust desktop shell:** Tao handles the Windows window and Wry hosts WebView2.
 - **Independent live tabs:** Switching tabs preserves page state and native back/forward history while the tabs stay awake.
 - **Session recovery:** Tabs, workspace selection, pins, and recent closed tabs are saved locally, with a backup for recovery. Site storage uses a persistent WebView2 profile.
-- **Windows integration:** Per-user setup, Start menu and desktop shortcuts, Installed apps registration, default-browser eligibility, and link handoff to the running instance.
+- **Windows integration:** Setup wizard with uninstaller, Start menu and desktop shortcuts, Installed apps registration, default-browser eligibility, and link handoff to the running instance.
 - **Native downloads:** WebView2 provides download progress and file actions; Felaris reports completion and warns before closing active downloads.
 - **Explicit tab sleeping:** Unloads inactive pages. Selecting a sleeping tab reloads its saved URL; unsaved form state and page history do not survive sleeping or an app restart.
 - **Built-in Upstream Sync & Conflict Inspector:** Includes an automated local tool and agent skill to fetch upstream sources, compare local changes, and simulate pre-merge conflict status in memory before applying.
@@ -147,25 +147,30 @@ Felaris is a Rust desktop app using Tao and Wry (Windows WebView2). Release
 builds include an Explorer icon, Windows product/version details, and a taskbar
 identity, and open without a console window.
 
-Build the app and double-click setup executable locally:
+Build the app and its installer locally (needs [Inno Setup 6](https://jrsoftware.org/isinfo.php):
+`winget install JRSoftware.InnoSetup`):
 
 ```powershell
 .\scripts\package.ps1
 ```
 
-Double-click `target\release\felaris-setup.exe` to install for the current user,
-with Start menu and desktop shortcuts and an entry in Windows Installed apps.
-Setup shows the result in a Windows dialog. No administrator access is needed.
-The portable app is `target\release\felaris.exe`; it also accepts `--setup`.
+Run `target\release\felaris-setup.exe` to install for the current user: a
+standard setup wizard with Start menu and optional desktop shortcuts, an entry in
+Windows Installed apps with a real uninstaller, and no administrator prompt. The
+source is `installer\felaris.iss`. For unattended installs use
+`felaris-setup.exe /VERYSILENT /NOLAUNCH`; add `/DIR="path"` to choose a folder.
+The portable app, `target\release\felaris.exe`, runs from anywhere without installing.
 After installation, choose **Set default browser?** from the sidebar menu, then
 select Felaris in Windows Settings. Felaris registers HTTP, HTTPS, and HTML
 file support; Windows keeps the final choice with you.
 Uninstall from Windows Settings to remove the app and shortcuts. Browser data
-is preserved. This is a simple self-installer, without an MSI or setup wizard.
+is preserved. Running the new setup over an install from before the wizard
+replaces it and removes the old Installed apps entry.
 
 ### Verification and signing
 
-`package.ps1` verifies Windows icons/version resources and runs the release app
+`package.ps1` verifies Windows icons/version resources, installs and uninstalls the built
+setup silently, and runs the release app
 headlessly against local fixtures using a temporary profile. The tests cover
 live tab form retention, native history, pop-ups, downloads, error/retry,
 address and palette drafts, second-launch link handoff, forced-exit recovery,
@@ -210,32 +215,22 @@ use isolated profiles and hidden windows.
 
 ### One-Line Install (PowerShell)
 
-Install the latest release to `%LOCALAPPDATA%\Programs\Felaris` with Start Menu & Desktop shortcuts:
+Download the latest `felaris-setup.exe`, check it against the release `SHA256SUMS`,
+and install it silently (add `-NoLaunch` to skip opening Felaris):
 
 ```powershell
 irm https://raw.githubusercontent.com/khentmoba/Felaris/main/scripts/install.ps1 | iex
 ```
 
-### Portable Executable & Self-Installer
+### Automatic Updates
 
-Felaris runs fully portably. You can also self-install or uninstall directly via CLI:
-
-```bash
-# Register Start Menu & Desktop shortcuts
-felaris.exe --install
-
-# Check for updates from command line
-felaris.exe --check-update
-
-# Remove the installed app, shortcuts and registry entry (preserves browser data)
-felaris.exe --uninstall
-```
-
-### Native In-App Auto-Updater
-
-- On launch, Felaris automatically checks for new versions in the background.
-- When an update is available, an "Update Available" banner appears in the sidebar and browser menu.
-- Clicking **Update now** downloads the binary, swaps the executable in-place, and restarts seamlessly.
+- Felaris checks for a new version shortly after launch and every 6 hours while it runs.
+  `felaris.exe --check-update` checks from the command line.
+- When one is available, an "Update Available" banner appears in the sidebar.
+- **Update now** saves your session, downloads the release, verifies it against the
+  release `SHA256SUMS`, and restarts Felaris on the new version.
+  - Installed copies run `felaris-setup.exe` silently, so Windows' version record stays correct.
+  - Portable copies swap `felaris.exe` in place and restore the previous one if that fails.
 
 ---
 

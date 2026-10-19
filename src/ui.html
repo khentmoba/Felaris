@@ -90,7 +90,7 @@ button:active:not(:disabled),summary:active { transform:scale(.96); }
 <footer class="footer">
 <button class="download-control" id="btn-downloads" title="Downloads (Ctrl+J)" aria-label="Downloads"><svg><use href="#download"/></svg><span>Downloads</span><small id="download-count"></small></button>
 <button class="sleep-control" id="btn-ram-saver" title="Unload background tabs to free memory (Ctrl+Shift+S)"><svg><use href="#moon"/></svg><span id="sleep-label">Sleep background tabs</span><svg><use href="#forward"/></svg></button>
-<div class="workspace-switcher"><div id="spaces" aria-label="Workspaces"></div><details id="browser-menu"><summary class="icon" title="Tab actions" aria-label="Tab actions"><svg><use href="#more"/></svg></summary><div class="menu"><button id="btn-pin-tab">Pin current tab</button><button id="btn-reopen-tab">Reopen closed tab <kbd>Ctrl Shift T</kbd></button><button id="btn-clear-tabs">Close other unpinned tabs</button><hr><button id="btn-check-update">Check for updates</button><button id="btn-default-browser">Set default browser?</button><button id="btn-install-app">Install to Start Menu</button><hr><p>Workspaces: Alt + 1 / 2 / 3<br>Address bar: Ctrl + L<br>Toggle sidebar: Ctrl + S</p></div></details></div>
+<div class="workspace-switcher"><div id="spaces" aria-label="Workspaces"></div><details id="browser-menu"><summary class="icon" title="Tab actions" aria-label="Tab actions"><svg><use href="#more"/></svg></summary><div class="menu"><button id="btn-pin-tab">Pin current tab</button><button id="btn-reopen-tab">Reopen closed tab <kbd>Ctrl Shift T</kbd></button><button id="btn-clear-tabs">Close other unpinned tabs</button><hr><button id="btn-check-update">Check for updates</button><button id="btn-default-browser">Set default browser?</button><hr><p>Workspaces: Alt + 1 / 2 / 3<br>Address bar: Ctrl + L<br>Toggle sidebar: Ctrl + S</p></div></details></div>
 </footer>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-message"></span><button id="toast-undo" hidden>Reopen tab</button></div>
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -249,7 +249,6 @@ $('btn-downloads').onclick=()=>Felaris.send('open_downloads');
 $('btn-default-browser').onclick=()=>Felaris.send('default_browser');
 $('dismiss-status').onclick=()=>{ $('activity').hidden=true; };
 $('btn-check-update').onclick=()=>Felaris.send('check_updates');
-$('btn-install-app').onclick=()=>Felaris.send('install_app');
 $('btn-apply-update').onclick=()=>{ Felaris.send('apply_update'); $('btn-apply-update').disabled=true; $('btn-apply-update').textContent='Updating…'; };
 $('browser-menu').querySelector('summary').onclick=e=>{ if(currentState.sidebar_collapsed) { e.preventDefault(); openMenuAfterExpand=true; Felaris.send('toggle_sidebar'); } };
 $('browser-menu').addEventListener('click',e=>{ if(e.target.closest('button')) $('browser-menu').open=false; });

@@ -105,23 +105,22 @@ target/release/felaris.exe
 ## UI Verification
 
 ```bash
-cargo test
+cargo fmt --check
+cargo clippy --all-targets --locked -- -D warnings
+cargo test --locked
 node tests/browser.test.cjs
 ```
 
-For the 43 DOM interaction checks, serve the repository with `python -m http.server 5173`, then open `http://localhost:5173/tests/ui.html`. This is a fixture with sample tabs; its IPC messages are recorded rather than sent to Rust. Test both 1380×860 and the minimum 640×480 desktop window; the compact rail can be inspected by setting `fixtureState.sidebar_collapsed = true`, `sidebar.style.width = '56px'`, and calling `sidebar.contentWindow.updateState(fixtureState)` in the test page console.
+For the 44 DOM interaction checks, serve the repository with `python -m http.server 0` (using an ephemeral port so worktrees do not collide), then open `http://localhost:<port>/tests/ui.html`. This is a fixture with sample tabs; its IPC messages are recorded rather than sent to Rust. Test both 1380×860 and the minimum 640×480 desktop window; the compact rail can be inspected by setting `fixtureState.sidebar_collapsed = true`, `sidebar.style.width = '56px'`, and calling `sidebar.contentWindow.updateState(fixtureState)` in the test page console.
 
-To exercise actual WebView2 keyboard input and Rust IPC on Windows, build with `cargo build`, launch a fresh test instance from PowerShell, then run the native smoke test with Node 22+:
+To exercise actual WebView2 keyboard input and Rust IPC on Windows, build with `cargo build` and run the self-contained native smoke test with Node 22+ (which copies the binary to a temp executable, allocates a free debugging port, and cleans up the child process automatically):
 
-```powershell
-$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9223'
-$p = Start-Process .\target\debug\felaris.exe -PassThru
+```bash
+cargo build
 node tests/native-smoke.cjs
-Stop-Process -Id $p.Id
-Remove-Item Env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
 ```
 
-Use this only with a test instance: it opens/closes tabs and changes workspaces. Do not leave remote debugging enabled for normal browsing. Native captures are saved under the ignored `.impeccable/review/` directory.
+Native captures are saved under the ignored `.impeccable/review/` directory.
 
 ## Upstream Synchronization & Conflict Detection
 
@@ -135,7 +134,23 @@ python scripts/upstream_sync.py --upstream <remote_or_url> --branch main
 .\scripts\upstream-sync.ps1 -Upstream <remote_or_url> -Branch main
 ```
 
-A dedicated agent skill is available at `.agents/skills/upstream-sync/SKILL.md` (and `.pi/skills/upstream-sync/SKILL.md`) to guide automated synchronization and conflict audits.
+A dedicated agent skill is available at `.agents/skills/upstream-sync/SKILL.md` to guide automated synchronization and conflict audits.
+
+---
+
+## Releases & Discord Notifications
+
+Felaris includes automated Discord release scripts that publish announcements, changelogs, and binary uploads (`felaris.exe`) directly to the `#felaris-releases` Discord channel:
+
+```bash
+# Test Discord webhook connectivity
+python scripts/notify_discord.py --test
+
+# Build release and publish with changelog and binary upload
+python scripts/build.py -s "Release summary"
+```
+
+Webhook configuration is resolved from `DISCORD_WEBHOOK_URL`, `scripts/discord_webhook.txt` (gitignored), or `%LOCALAPPDATA%\Felaris\discord_webhook.txt` (shared across worktrees). See `.agents/skills/discord-release/SKILL.md`.
 
 ---
 

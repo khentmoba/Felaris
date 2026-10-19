@@ -14,6 +14,15 @@ class Fixture(BaseHTTPRequestHandler):
     release_download = threading.Event()
 
     def do_GET(self):
+        path = self.path.split('?', 1)[0]
+        if path in ('/tests/ui.html', '/src/ui.html', '/src/start_page.html', '/src/new_tab.html', '/src/browser.js'):
+            body = (Path(__file__).resolve().parent.parent / path.lstrip('/')).read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/javascript; charset=utf-8' if path.endswith('.js') else 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if self.path in ('/download', '/slow-download'):
             body = b'x' * 65536 if self.path == '/slow-download' else b'Felaris download fixture\n'
             self.send_response(200)

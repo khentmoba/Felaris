@@ -179,6 +179,11 @@ fn content(
             }
         });
     if std::env::var_os("FELARIS_SMOKE_TEST").is_some() {
+        #[cfg(windows)]
+        if let Ok(arguments) = std::env::var("FELARIS_SMOKE_CONTENT_BROWSER_ARGUMENTS") {
+            use wry::WebViewBuilderExtWindows;
+            builder = builder.with_additional_browser_args(arguments);
+        }
         builder = builder.with_download_started_handler(|_, path| {
             *path = profile::directory().join("smoke-download.txt");
             true

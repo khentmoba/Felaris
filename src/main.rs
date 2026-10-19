@@ -97,9 +97,9 @@ enum UserEvent {
     PageLoad(bool, String),
 }
 
-fn load_content_url(view: &WebView, url: &str) {
+fn load_content_url(view: &WebView, state: &BrowserState, url: &str) {
     if url == "felaris://newtab" {
-        let _ = view.load_html(&start_page::get_start_page_html());
+        let _ = view.load_html(&start_page::get_start_page_html(&state.top_shortcuts()));
     } else {
         let _ = view.load_url(url);
     }
@@ -230,7 +230,9 @@ fn main() -> wry::Result<()> {
     let content_view = WebViewBuilder::new()
         .with_initialization_script(&shortcut_script)
         .with_bounds(content_bounds)
-        .with_html(start_page::get_start_page_html())
+        .with_html(start_page::get_start_page_html(
+            &browser_state.top_shortcuts(),
+        ))
         .with_document_title_changed_handler(move |title| {
             let _ = proxy_title.send_event(UserEvent::TitleChanged(title));
         })
@@ -354,7 +356,7 @@ fn main() -> wry::Result<()> {
 
                 UserEvent::Navigate(url) => {
                     browser_state.update_active_tab(url.clone(), None);
-                    load_content_url(&content_view, &url);
+                    load_content_url(&content_view, &browser_state, &url);
                     sync_ui(&browser_state, &sidebar_view);
                 }
 
@@ -369,7 +371,8 @@ fn main() -> wry::Result<()> {
                 UserEvent::Reload => {
                     if let Some(active) = browser_state.active_tab() {
                         if active.url == "felaris://newtab" {
-                            load_content_url(&content_view, &active.url);
+                            let url = active.url.clone();
+                            load_content_url(&content_view, &browser_state, &url);
                         } else {
                             let _ = content_view.evaluate_script("location.reload()");
                         }
@@ -404,8 +407,11 @@ fn main() -> wry::Result<()> {
                 }
 
                 UserEvent::CycleTab(backwards) => {
-                    if let Some(tab) = browser_state.cycle_tab(backwards) {
-                        load_content_url(&content_view, &tab.url);
+                    if let Some(url) = browser_state
+                        .cycle_tab(backwards)
+                        .map(|tab| tab.url.clone())
+                    {
+                        load_content_url(&content_view, &browser_state, &url);
                     }
                     sync_ui(&browser_state, &sidebar_view);
                 }
@@ -425,8 +431,8 @@ fn main() -> wry::Result<()> {
                         let _ = new_tab_view.set_visible(false);
                     }
                     browser_state.add_tab(Some(url), false);
-                    if let Some(active) = browser_state.active_tab() {
-                        load_content_url(&content_view, &active.url);
+                    if let Some(url) = browser_state.active_tab().map(|active| active.url.clone()) {
+                        load_content_url(&content_view, &browser_state, &url);
                     }
                     let _ = content_view.focus();
                     sync_ui(&browser_state, &sidebar_view);
@@ -438,9 +444,10 @@ fn main() -> wry::Result<()> {
                         let _ = new_tab_view.set_visible(false);
                         let _ = content_view.focus();
                     }
-                    if let Some(tab) = browser_state.switch_tab(id) {
-                        let target_url = tab.url.clone();
-                        load_content_url(&content_view, &target_url);
+                    if let Some(target_url) =
+                        browser_state.switch_tab(id).map(|tab| tab.url.clone())
+                    {
+                        load_content_url(&content_view, &browser_state, &target_url);
                     }
                     sync_ui(&browser_state, &sidebar_view);
                 }
@@ -449,8 +456,10 @@ fn main() -> wry::Result<()> {
                     let was_active = id == browser_state.active_tab_id;
                     browser_state.close_tab(id);
                     if was_active {
-                        if let Some(active) = browser_state.active_tab() {
-                            load_content_url(&content_view, &active.url);
+                        if let Some(url) =
+                            browser_state.active_tab().map(|active| active.url.clone())
+                        {
+                            load_content_url(&content_view, &browser_state, &url);
                         }
                     }
                     sync_ui(&browser_state, &sidebar_view);
@@ -484,17 +493,21 @@ fn main() -> wry::Result<()> {
                 }
 
                 UserEvent::SwitchWorkspace(id) => {
-                    if let Some(active) = browser_state.switch_workspace(id) {
-                        let target_url = active.url.clone();
-                        load_content_url(&content_view, &target_url);
+                    if let Some(target_url) = browser_state
+                        .switch_workspace(id)
+                        .map(|active| active.url.clone())
+                    {
+                        load_content_url(&content_view, &browser_state, &target_url);
                     }
                     sync_ui(&browser_state, &sidebar_view);
                 }
 
                 UserEvent::RestoreClosedTab => {
                     if let Some(_id) = browser_state.restore_closed_tab() {
-                        if let Some(active) = browser_state.active_tab() {
-                            load_content_url(&content_view, &active.url);
+                        if let Some(url) =
+                            browser_state.active_tab().map(|active| active.url.clone())
+                        {
+                            load_content_url(&content_view, &browser_state, &url);
                         }
                         sync_ui(&browser_state, &sidebar_view);
                     }

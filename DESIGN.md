@@ -7,7 +7,7 @@ Operate mode: a Zen-inspired desktop sidebar, not a browser feature clone. Keep 
 ## Surfaces
 
 - `src/ui.html`: 260px expanded sidebar; 56px compact rail. Navigation, address field, workspace heading, new-tab/search actions, pinned and ordinary tab groups, sleep state, and bottom workspace dock.
-- `src/start_page.html`: quiet, left-aligned startup/Home page with the existing eight shortcuts. Two-column shortcuts in narrow content panes; scrolling remains available at the minimum desktop window size.
+- `src/start_page.html`: quiet, left-aligned startup/Home page with eight shortcuts ranked by user visit frequency (`LOCALAPPDATA/Felaris/shortcuts.json`) and padded with default sites. Two-column shortcuts in narrow content panes; scrolling remains available at the minimum desktop window size.
 - `src/new_tab.html`: Zen-style floating new-tab search in a separate transparent, normally hidden WebView. It covers the client area without replacing or modifying the current page.
 - `src/browser.js`: shared address resolution and keyboard shortcuts. Embedded into both local pages and initialized before remote content. Management IPC from content requires the injected trusted-key handler's per-process token; ordinary page scripts do not receive that token through the public helper.
 

@@ -29,7 +29,7 @@ window.fixtureState={
 };
 async function load(frame,file,common) {
  const html=await fetch('../src/'+file).then(r=>r.text());
- await new Promise(resolve=>{frame.onload=resolve;frame.srcdoc=html.replace('__COMMON_SCRIPT__',common);});
+ await new Promise(resolve=>{frame.onload=resolve;frame.srcdoc=html.replace('__COMMON_SCRIPT__',common).replace('__SHORTCUTS__','[]');});
  frame.contentWindow.ipc={postMessage:json=>messages.push(JSON.parse(json))};
 }
 window.runChecks=async()=>{
@@ -78,6 +78,9 @@ window.runChecks=async()=>{
  check('sidebar search uses Brave',messages.at(-1).action==='navigate'&&messages.at(-1).url==='https://search.brave.com/search?q=rust%20async');
  check('Brave Home shortcut and label',p.querySelector('.search-note').textContent==='Web searches use Brave Search'&&p.querySelector('.shortcut[href="https://search.brave.com"]').textContent==='Brave Search');
  p.querySelector('.shortcut').click();check('shortcut IPC',messages.at(-1).url==='https://github.com/');
+ page.contentWindow.renderShortcuts([{host:'youtube.com',title:'YouTube',url:'https://youtube.com',visits:5},{host:'x.com',title:'X',url:'https://x.com',visits:3},{host:'github.com',title:'GitHub',url:'https://github.com',visits:0}]);
+ check('frequent sites lead shortcuts',[...p.querySelectorAll('.shortcut-label')].slice(0,2).map(el=>el.textContent).join(',')==='YouTube,X'&&p.getElementById('shortcuts-heading').textContent==='Most visited');
+ p.querySelector('.shortcut').click();check('ranked shortcut IPC',messages.at(-1).url==='https://youtube.com/');
  w.updateState({...structuredClone(fixtureState),sidebar_collapsed:true});
  d.querySelector('summary').click();check('collapsed menu requests expansion',messages.at(-1).action==='toggle_sidebar');
  w.updateState(structuredClone(fixtureState));check('expanded menu opens',d.getElementById('browser-menu').open);

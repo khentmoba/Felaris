@@ -18,6 +18,8 @@ try {
     & (Join-Path $PSScriptRoot 'verify-package.ps1')
     python (Join-Path $PSScriptRoot '..\tests\native_smoke.py') --exe 'target\release\felaris.exe'
     if ($LASTEXITCODE -ne 0) { throw 'Native app verification failed' }
+    python (Join-Path $PSScriptRoot '..\tests\native_regressions.py') --exe 'target\release\felaris.exe'
+    if ($LASTEXITCODE -ne 0) { throw 'Native regression verification failed' }
     $checksums = foreach ($name in @('felaris.exe', 'felaris-setup.exe')) {
         $hash = (Get-FileHash -LiteralPath (Join-Path 'target\release' $name) -Algorithm SHA256).Hash.ToLowerInvariant()
         "$hash  $name"

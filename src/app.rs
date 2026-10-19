@@ -58,6 +58,7 @@ pub enum UserEvent {
     Title(usize, u64, String),
     PageLoad(usize, u64, bool, String),
     History(usize, u64, bool, bool),
+    Source(usize, u64, String),
     Failed(usize, u64, String, String),
     Crashed(usize, u64),
     DownloadStarted(usize),
@@ -361,8 +362,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                     }
                     UserEvent::Command(command) => {
                         match command {
-                            Command::Navigate { url } => if profile::allowed_url(&url) {
-                                if state.active_tab().is_some_and(|tab| tab.error.is_some()) { views.remove(&state.active_tab_id); }
+                            Command::Navigate { url } => if let Some(url) = profile::normalize_url(&url) {
                                 state.update_active_tab(url.clone(), None);
                                 if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == state.active_tab_id) { tab.error = None; tab.pending_url = Some(url.clone()); tab.is_loading = true; }
                                 if let Some(view) = views.get(&state.active_tab_id) { let _ = load(view, &state, &url); if !headless { let _ = view.focus(); } }
@@ -370,8 +370,10 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             Command::Back | Command::Forward => if let Some(view) = views.get(&state.active_tab_id) { desktop::navigate(view, matches!(command, Command::Back)); },
                             Command::Reload | Command::Retry => if let Some(tab) = state.active_tab() {
                                 let url = tab.url.clone(); let id = tab.id;
-                                if tab.error.is_some() { views.remove(&id); state.tabs.iter_mut().find(|tab| tab.id == id).unwrap().error = None; }
-                                else if let Some(view) = views.get(&id) { let _ = if url == "felaris://newtab" { load(view, &state, &url) } else { view.reload() }; }
+                                let crashed = tab.error.is_some() && views.get(&id).and_then(|view| view.url().ok()).is_some_and(|url| url == "about:blank" || url.starts_with("data:"));
+                                if crashed { views.remove(&id); }
+                                if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id) { tab.error = None; tab.pending_url = Some(url.clone()); tab.is_loading = true; }
+                                if let Some(view) = views.get(&id) { let _ = if url == "felaris://newtab" { load(view, &state, &url) } else { view.reload() }; }
                             },
                             Command::Stop => { if let Some(view) = views.get(&state.active_tab_id) { let _ = view.evaluate_script("window.stop()"); }
                                 if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == state.active_tab_id) { tab.is_loading = false; } },
@@ -418,15 +420,16 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         if loading {
                             if tab.pending_url.as_ref().is_some_and(|expected| expected != &url && !(expected == "felaris://newtab" && url == "about:blank")) { return; }
                             tab.pending_url = None;
-                            if profile::allowed_url(&url) { tab.url = url; }
+                            if let Some(url) = profile::normalize_url(&url) { tab.url = url; tab.error = None; }
                             else if tab.error.is_none() && (url == "about:blank" || url.starts_with("data:text/html;")) { tab.url = "felaris://newtab".into(); }
                             tab.is_loading = true;
-                        } else if tab.url == url || url == "about:blank" || url.starts_with("data:text/html;") { tab.is_loading = false; }
+                        } else if tab.url == url || url == "about:blank" || url.starts_with("data:text/html;") { tab.is_loading = false; if profile::allowed_url(&url) { tab.error = None; } }
                     },
+                    UserEvent::Source(id, generation, url) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation && tab.pending_url.is_none())
+                        && let Some(url) = profile::normalize_url(&url) { tab.url = url; },
                     UserEvent::History(id, generation, back, forward) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) { tab.can_go_back = back; tab.can_go_forward = forward; },
                     UserEvent::Failed(id, generation, url, message) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation && tab.pending_url.as_ref().is_none_or(|pending| pending == &url) && tab.url == url) {
                         tab.error = Some(message); tab.pending_url = None; tab.is_loading = false;
-                        if let Some(view) = views.get(&id) { let _ = view.load_html(include_str!("error.html")); }
                     },
                     UserEvent::Crashed(id, generation) => {
                         if state.tabs.iter().any(|tab| tab.id == id && tab.generation == generation) { views.remove(&id); }

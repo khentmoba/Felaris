@@ -87,6 +87,23 @@ pub fn attach(
             })),
             &mut token,
         )?;
+        let source = proxy.clone();
+        webview.add_SourceChanged(
+            &SourceChangedEventHandler::create(Box::new(move |view, args| {
+                if let (Some(view), Some(args)) = (view, args) {
+                    let mut new_document = BOOL::default();
+                    args.IsNewDocument(&mut new_document)?;
+                    if !new_document.as_bool() {
+                        let mut uri = PWSTR::null();
+                        view.Source(&mut uri)?;
+                        let _ =
+                            source.send_event(UserEvent::Source(id, generation, take_pwstr(uri)));
+                    }
+                }
+                Ok(())
+            })),
+            &mut token,
+        )?;
         let navigations =
             std::rc::Rc::new(std::cell::RefCell::new(std::collections::HashMap::new()));
         let starting = navigations.clone();

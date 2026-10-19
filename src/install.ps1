@@ -18,7 +18,7 @@ $clientKey = Join-Path $RegistryRoot 'Clients\StartMenuInternet\Felaris'
 $applicationsKey = Join-Path $RegistryRoot 'RegisteredApplications'
 
 function Set-RegistryString($path, $name, $value) {
-    New-Item -Path $path -Force | Out-Null
+    if (-not (Test-Path -LiteralPath $path)) { New-Item -Path $path -Force | Out-Null }
     New-ItemProperty -Path $path -Name $name -Value $value -PropertyType String -Force | Out-Null
 }
 

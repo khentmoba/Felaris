@@ -4,6 +4,7 @@ from http.server import ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import shutil
 import socket
 import subprocess
 import sys
@@ -21,15 +22,20 @@ def main():
     artifacts = (Path('target/native-regressions') / str(uuid.uuid4())).resolve()
     artifacts.mkdir(parents=True)
     profile = artifacts / 'profile'
-    with socket.socket() as reservation:
+    executable = artifacts / 'felaris.exe'
+    shutil.copy2(Path(args.exe).resolve(), executable)
+    with socket.socket() as reservation, socket.socket() as content_reservation:
         reservation.bind(('127.0.0.1', 0))
+        content_reservation.bind(('127.0.0.1', 0))
         port = reservation.getsockname()[1]
+        content_port = content_reservation.getsockname()[1]
     server = ThreadingHTTPServer(('127.0.0.1', 0), Fixture)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = f'http://127.0.0.1:{server.server_port}'
     environment = {**os.environ, 'FELARIS_PROFILE_DIR': str(profile),
                    'FELARIS_SMOKE_TEST': str(artifacts / 'disabled.json'),
-                   'FELARIS_SMOKE_BROWSER_ARGUMENTS': f'--remote-debugging-port={port} --remote-debugging-address=127.0.0.1'}
+                   'FELARIS_SMOKE_BROWSER_ARGUMENTS': f'--remote-debugging-port={port} --remote-debugging-address=127.0.0.1',
+                   'FELARIS_SMOKE_CONTENT_BROWSER_ARGUMENTS': f'--remote-debugging-port={content_port} --remote-debugging-address=127.0.0.1'}
     environment.pop('FELARIS_SMOKE_ORIGIN', None)
     checks = []
     process = None
@@ -70,7 +76,7 @@ def main():
 
     try:
         with (artifacts / 'app.log').open('w', encoding='utf-8') as log:
-            process = subprocess.Popen([str(Path(args.exe).resolve()), origin + '/'], env=environment, stdout=log, stderr=log)
+            process = subprocess.Popen([str(executable), origin + '/'], env=environment, stdout=log, stderr=log)
             command('navigate', url=origin + '/second')
             loaded(origin + '/second')
             command('navigate', url=origin)
@@ -125,6 +131,9 @@ def main():
             Fixture.release_download.set()
             wait(lambda _: sidebar('currentState.active_downloads') == 0, 'download completion')
             assert (profile / 'smoke-download.txt').read_bytes() == b'x' * 65536
+            subprocess.run(['node', str(Path(__file__).with_name('native_ui.mjs')), str(port), str(content_port), origin],
+                           check=True, timeout=120)
+            checks.append('Native keyboard interactions and 44 DOM checks at desktop and minimum sizes')
         (artifacts / 'results.json').write_text(json.dumps({'success': True, 'checks': checks}, indent=2), encoding='utf-8')
         print('\n'.join(checks))
         print(f'Headless regression tests passed. Evidence: {artifacts}')
@@ -145,6 +154,7 @@ def main():
             if process is not None and process.poll() is None:
                 process.kill()
                 process.wait(timeout=10)
+            executable.unlink(missing_ok=True)
             server.shutdown()
 
 

@@ -114,14 +114,14 @@ node tests/browser.test.cjs
 
 For the 44 DOM interaction checks, serve the repository with `python -m http.server 0` (using an ephemeral port so worktrees do not collide), then open `http://localhost:<port>/tests/ui.html`. This is a fixture with sample tabs; its IPC messages are recorded rather than sent to Rust. Test both 1380×860 and the minimum 640×480 desktop window; the compact rail can be inspected by setting `fixtureState.sidebar_collapsed = true`, `sidebar.style.width = '56px'`, and calling `sidebar.contentWindow.updateState(fixtureState)` in the test page console.
 
-To exercise actual WebView2 keyboard input and Rust IPC on Windows, build with `cargo build` and run the self-contained native smoke test with Node 22+ (which copies the binary to a temp executable, allocates a free debugging port, and cleans up the child process automatically):
+To exercise actual WebView2 keyboard input and Rust IPC on Windows, build with `cargo build` and run the self-contained native smoke test with Python 3.11+ and Node 22+. The Node command delegates to the headless regression harness, which copies the executable, uses an isolated profile and dynamic debugging port, and cleans up the child process. It also runs all 44 DOM checks at 1380×860 and 640×480, including reduced motion:
 
 ```bash
 cargo build
 node tests/native-smoke.cjs
 ```
 
-Native captures are saved under the ignored `.impeccable/review/` directory.
+Native results and diagnostic logs are saved under `target/native-regressions/`. The runner always launches its own hidden app; it never attaches to an existing browser on port 9223. The same suite is mandatory during packaging and Windows CI.
 
 ## Upstream Synchronization & Conflict Detection
 
@@ -204,8 +204,9 @@ python tests/native_regressions.py
 
 The regression suite requires Node 22+ and checks normalized addresses, SPA
 routes, Back after page failures, sleeping-tab replacement, and the production
-Close Other Tabs command while a download is running. Both suites use isolated
-profiles and hidden windows.
+Close Other Tabs command while a download is running. It also exercises native
+keyboard input and the DOM fixture at desktop and minimum sizes. Both suites
+use isolated profiles and hidden windows.
 
 ### One-Line Install (PowerShell)
 
@@ -246,9 +247,23 @@ Felaris automates releases to both GitHub Releases and Discord (`#felaris-releas
 # Test Discord webhook connectivity
 python scripts/notify_discord.py --test
 
-# Build release, publish to GitHub Releases, and notify Discord
-python scripts/build.py -s "Release summary"
+# Prepare metadata before committing and merging the release change
+python scripts/build.py --prepare -s "Release summary"
+
+# From a clean checkout of the checked commit on origin/main
+python scripts/build.py --dry-run
+python scripts/build.py
 ```
+
+Python 3.11+ is required. Set the release version in `Cargo.toml` and update
+`Cargo.lock` before preparation. Commit and merge `version.json` with that change,
+then wait for CI. Publication checks the checkout against the current remote
+`main`, requires successful Windows CI for that exact SHA, verifies the release
+package, and pins the GitHub tag to the built SHA.
+An existing tag, dirty checkout, mismatched metadata, or failed GitHub publication
+stops the release. Discord runs only after GitHub succeeds, unless `--skip-github`
+was explicitly requested. `--dry-run` only validates and prints the plan.
+The PowerShell entry point forwards to this same implementation.
 
 Webhook configuration is resolved from `DISCORD_WEBHOOK_URL`, `scripts/discord_webhook.txt` (gitignored), or `%LOCALAPPDATA%\Felaris\discord_webhook.txt` (shared across worktrees). See `.agents/skills/discord-release/SKILL.md`.
 

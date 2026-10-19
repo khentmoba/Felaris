@@ -1,132 +1,103 @@
 #!/usr/bin/env python3
-"""
-Felaris Automated Build & Release Pipeline
-Compiles Felaris in release mode, publishes to GitHub Releases, and notifies Discord.
-"""
-
-import sys
+"""Prepare release metadata, or package and publish an already committed release."""
+import argparse
 import json
+from pathlib import Path
 import shutil
 import subprocess
-import argparse
-from pathlib import Path
+import sys
+import tomllib
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
-def get_cargo_version():
-    cargo_path = PROJECT_ROOT / "Cargo.toml"
-    if cargo_path.is_file():
-        for line in cargo_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("version ="):
-                return line.split("=")[1].strip(' "\'')
-    return "0.1.0"
+def git(*arguments):
+    return subprocess.run(['git', *arguments], cwd=PROJECT_ROOT, check=True,
+                          capture_output=True, text=True).stdout.strip()
 
 
-def sync_version_json(version, summary):
-    manifest_path = PROJECT_ROOT / "version.json"
-    data = {
-        "version": version,
-        "release_url": f"https://github.com/khentmoba/Felaris/releases/tag/v{version}",
-        "download_url": f"https://github.com/khentmoba/Felaris/releases/download/v{version}/felaris.exe",
-        "summary": summary,
+def manifest_for(version, summary):
+    return {
+        'version': version,
+        'release_url': f'https://github.com/khentmoba/Felaris/releases/tag/v{version}',
+        'download_url': f'https://github.com/khentmoba/Felaris/releases/download/v{version}/felaris.exe',
+        'summary': summary,
     }
-    manifest_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    print(f"[Version] Synced version.json with v{version}")
 
 
-def publish_github_release(version, summary, exe_path, dry_run=False):
-    tag = f"v{version}"
-    if not shutil.which("gh"):
-        print("[GitHub] 'gh' CLI not found. Skipping GitHub Release creation.")
-        return
-
-    if dry_run:
-        print(f"[DryRun] Would create GitHub release {tag} with asset: {exe_path}")
-        return
-
-    print(f"[GitHub] Creating GitHub Release {tag}...")
-    cmd = [
-        "gh",
-        "release",
-        "create",
-        tag,
-        str(exe_path),
-        str(exe_path.with_name("felaris-setup.exe")),
-        str(exe_path.with_name("SHA256SUMS")),
-        "--title",
-        f"Felaris {tag}",
-        "--notes",
-        summary,
-    ]
-    res = subprocess.run(cmd, cwd=PROJECT_ROOT)
-    if res.returncode == 0:
-        print(f"[GitHub] Release {tag} successfully published to GitHub!")
-    else:
-        print(f"[GitHub] Warning: gh release create returned code {res.returncode}")
+def clean_commit():
+    if git('status', '--porcelain'):
+        raise ValueError('Release checkout must be clean. Prepare and commit version.json before publishing.')
+    return git('rev-parse', 'HEAD')
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Build Felaris and automatically publish to Discord.")
-    parser.add_argument("--skip-discord", action="store_true", help="Build without publishing to Discord")
-    parser.add_argument("--skip-github", action="store_true", help="Build without creating a GitHub release")
-    parser.add_argument("--summary", "-s", help="Release changelog or summary")
-    parser.add_argument("--dry-run", action="store_true", help="Run build and print payload without sending")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--prepare', action='store_true', help='Write version.json only; commit it before publishing')
+    parser.add_argument('--skip-discord', action='store_true')
+    parser.add_argument('--skip-github', action='store_true')
+    parser.add_argument('--summary', '-s', help='Required for preparation; otherwise must match committed metadata')
+    parser.add_argument('--dry-run', action='store_true', help='Validate and print the plan without building or publishing')
     args = parser.parse_args()
-
-    version = get_cargo_version()
-    summary = args.summary or f"Felaris v{version} release — smooth, lightweight, Zen-inspired browser built in Rust."
-
-    print("==================================================")
-    print(f" Building Felaris v{version} (Release Mode)")
-    print("==================================================")
-
-    build_cmd = ["powershell", "-NoProfile", "-File", str(PROJECT_ROOT / "scripts/package.ps1")]
-    print(f"[Build] Executing: {' '.join(build_cmd)}")
-    res = subprocess.run(build_cmd, cwd=PROJECT_ROOT)
-    if res.returncode != 0:
-        print("[Build] Compilation failed.")
-        sys.exit(res.returncode)
-
-    exe_path = PROJECT_ROOT / "target" / "release" / "felaris.exe"
-    if not exe_path.is_file():
-        print(f"[Build] Binary not found at {exe_path}")
-        sys.exit(1)
-
-    size_mb = exe_path.stat().st_size / (1024 * 1024)
-    print(f"[Build] Compilation successful: {exe_path.name} ({size_mb:.2f} MB)")
-
-    sync_version_json(version, summary)
-
-    if not args.skip_github:
-        print("\n==================================================")
-        print(" Publishing GitHub Release")
-        print("==================================================")
-        publish_github_release(version, summary, exe_path, dry_run=args.dry_run)
-
-    if args.skip_discord:
-        print("[Discord] Skipping Discord notification (--skip-discord requested).")
+    version = tomllib.loads((PROJECT_ROOT / 'Cargo.toml').read_text(encoding='utf-8'))['package']['version']
+    manifest_path = PROJECT_ROOT / 'version.json'
+    if args.prepare:
+        if not args.summary or not args.summary.strip():
+            parser.error('--prepare requires a nonempty --summary')
+        if args.dry_run:
+            parser.error('--prepare and --dry-run are separate operations')
+        manifest_path.write_text(json.dumps(manifest_for(version, args.summary), indent=2) + '\n', encoding='utf-8')
+        print('Prepared version.json. Commit and merge it before publishing.')
         return
 
-    print("\n==================================================")
-    print(" Notifying Discord #felaris-releases")
-    print("==================================================")
-
-    notify_script = PROJECT_ROOT / "scripts" / "notify_discord.py"
-    notify_cmd = [sys.executable, str(notify_script)]
-    if summary:
-        notify_cmd.extend(["--summary", summary])
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8-sig'))
+    summary = manifest.get('summary')
+    if not isinstance(summary, str) or not summary.strip() or manifest != manifest_for(version, summary):
+        raise ValueError('version.json must match Cargo.toml and contain release notes. Run --prepare first.')
+    if args.summary is not None and args.summary != summary:
+        raise ValueError('--summary differs from committed release notes. Run --prepare and commit the change first.')
+    commit = clean_commit()
+    if not args.skip_github and not shutil.which('gh'):
+        raise ValueError("GitHub CLI 'gh' is required unless --skip-github is explicit.")
+    remote_main = git('ls-remote', 'origin', 'refs/heads/main').split()
+    if not remote_main or remote_main[0] != commit:
+        raise ValueError('Publish from the exact commit on origin/main, after its checks pass.')
+    if not args.skip_github:
+        result = subprocess.run(['gh', 'run', 'list', '--workflow', 'ci.yml', '--event', 'push',
+                                 '--branch', 'main', '--commit', commit, '--limit', '1',
+                                 '--json', 'headSha,status,conclusion'],
+                                cwd=PROJECT_ROOT, check=True, capture_output=True, text=True)
+        runs = json.loads(result.stdout)
+        if not runs or runs[0] != {'headSha': commit, 'status': 'completed', 'conclusion': 'success'}:
+            raise ValueError('Windows CI must pass on the exact release commit before publication.')
+        if git('ls-remote', '--tags', 'origin', f'refs/tags/v{version}', f'refs/tags/v{version}^{{}}'):
+            raise ValueError(f'Tag v{version} already exists. Prepare a new version before publishing.')
+    print(f'Felaris v{version}, source commit {commit}')
     if args.dry_run:
-        notify_cmd.append("--dry-run")
+        print(f'Would package and verify; GitHub: {not args.skip_github}; Discord: {not args.skip_discord}')
+        return
 
-    res = subprocess.run(notify_cmd, cwd=PROJECT_ROOT)
-    if res.returncode == 0:
-        print("[Discord] Release announcement and binary published successfully!")
-    else:
-        print("[Discord] Release notification encountered an error.")
-        sys.exit(res.returncode)
+    subprocess.run(['powershell', '-NoProfile', '-File', str(PROJECT_ROOT / 'scripts/package.ps1')],
+                   cwd=PROJECT_ROOT, check=True)
+    if clean_commit() != commit:
+        raise ValueError('Source commit changed during packaging; nothing was published.')
+    release = PROJECT_ROOT / 'target/release'
+    assets = [release / name for name in ('felaris.exe', 'felaris-setup.exe', 'SHA256SUMS')]
+    for asset in assets:
+        if not asset.is_file():
+            raise ValueError(f'Missing verified release asset: {asset}')
+    if not args.skip_github:
+        subprocess.run(['gh', 'release', 'create', f'v{version}', *map(str, assets),
+                        '--target', commit, '--title', f'Felaris v{version}', '--notes', summary],
+                       cwd=PROJECT_ROOT, check=True)
+    if not args.skip_discord:
+        subprocess.run([sys.executable, str(PROJECT_ROOT / 'scripts/notify_discord.py'), '--summary', summary],
+                       cwd=PROJECT_ROOT, check=True)
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    try:
+        main()
+    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        print(f'Release failed: {error}', file=sys.stderr)
+        sys.exit(1)

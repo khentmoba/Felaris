@@ -273,7 +273,7 @@ impl BrowserState {
 
     pub fn top_shortcuts(&self) -> Vec<Shortcut> {
         let mut items = self.shortcuts.clone();
-        items.sort_by(|a, b| b.visits.cmp(&a.visits));
+        items.sort_by_key(|a| std::cmp::Reverse(a.visits));
         for fallback in Self::default_shortcuts() {
             if items.len() >= 8 {
                 break;
@@ -353,7 +353,7 @@ impl BrowserState {
                 let first = stem.split('.').next().unwrap_or(stem);
                 let mut chars = first.chars();
                 match chars.next() {
-                    Some(ch) if first.len() <= 2 => first.to_ascii_uppercase(),
+                    Some(_) if first.len() <= 2 => first.to_ascii_uppercase(),
                     Some(ch) => format!("{}{}", ch.to_ascii_uppercase(), chars.as_str()),
                     None => host.to_string(),
                 }

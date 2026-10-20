@@ -360,17 +360,17 @@ impl BrowserState {
     pub fn sleep_candidates(
         &self,
         live: &std::collections::HashSet<usize>,
+        idle: &std::collections::HashSet<usize>,
         downloads: &std::collections::HashMap<usize, usize>,
         budget: usize,
     ) -> Vec<&Tab> {
-        if live.len() <= budget {
-            return Vec::new();
-        }
+        let over_budget = live.len() > budget;
         let mut candidates: Vec<_> = self
             .tabs
             .iter()
             .filter(|tab| {
                 live.contains(&tab.id)
+                    && (over_budget || idle.contains(&tab.id))
                     && tab.id != self.active_tab_id
                     && !tab.is_pinned
                     && !tab.is_sleeping
@@ -845,9 +845,10 @@ mod tests {
         let recent = state.add_tab(None, false);
         state.switch_tab(1);
         let live = state.tabs.iter().map(|tab| tab.id).collect();
+        let none = std::collections::HashSet::new();
         let downloads = [(download, 1)].into_iter().collect();
         let candidates: Vec<_> = state
-            .sleep_candidates(&live, &downloads, 1)
+            .sleep_candidates(&live, &none, &downloads, 1)
             .iter()
             .map(|tab| tab.id)
             .collect();
@@ -857,9 +858,24 @@ mod tests {
                 .iter()
                 .any(|id| [1, pinned, capture, loading, download].contains(id))
         );
-        assert!(state.sleep_candidates(&live, &downloads, 12).is_empty());
+        assert!(
+            state
+                .sleep_candidates(&live, &none, &downloads, 12)
+                .is_empty()
+        );
+        let idle = [pinned, download, recent].into_iter().collect();
+        let idle_candidates: Vec<_> = state
+            .sleep_candidates(&live, &idle, &downloads, 12)
+            .iter()
+            .map(|tab| tab.id)
+            .collect();
+        assert_eq!(
+            idle_candidates,
+            [recent],
+            "idle tabs sleep under budget, guards still apply"
+        );
         state.switch_tab(recent);
-        assert_eq!(state.sleep_candidates(&live, &downloads, 1)[0].id, 1);
+        assert_eq!(state.sleep_candidates(&live, &none, &downloads, 1)[0].id, 1);
     }
 
     #[test]

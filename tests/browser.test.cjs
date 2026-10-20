@@ -65,3 +65,4 @@ assert.ok(
   'scripts/notify_discord.py must support LOCALAPPDATA/Felaris/discord_webhook.txt fallback across worktrees',
 );
 console.log('Address resolution, shortcut routing, asset hygiene, and embedded script syntax passed.');
+require('./sleep.test.cjs');

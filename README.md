@@ -16,7 +16,7 @@
 - **Session recovery:** Tabs, workspace selection, pins, and recent closed tabs are saved locally, with a backup for recovery. Site storage uses a persistent WebView2 profile.
 - **Windows integration:** Setup wizard with uninstaller, Start menu and desktop shortcuts, Installed apps registration, default-browser eligibility, and link handoff to the running instance.
 - **Native downloads:** WebView2 provides download progress and file actions; Felaris reports completion and warns before closing active downloads.
-- **Explicit tab sleeping:** Unloads inactive pages. Selecting a sleeping tab reloads its saved URL; unsaved form state and page history do not survive sleeping or an app restart.
+- **Automatic tab sleeping:** Targets 12 live pages by unloading older background tabs. Pinned tabs stay awake, as do active downloads, playing media, capture sessions, and pages with detected edits or unload handlers. Pages with frames or failed safety checks stay awake too, so protected work can exceed the budget. Manual sleeping is still available. Selecting a sleeping tab reloads its saved URL; unsaved form state and page history do not survive sleeping or an app restart.
 - **Ad blocking built in:** uBlock Origin Lite is downloaded on first launch (SHA-256 checked) and loaded into every tab as a WebView2 extension. Turn it off in **Settings > Privacy and security**.
 - **App menu and Settings:** The button at the top-left of the sidebar opens the app menu (new tab, downloads, print, zoom, settings, updates, exit). Settings (`felaris://settings`) covers search engine, ad blocker, updates, extensions, and shortcuts.
 - **Built-in Upstream Sync & Conflict Inspector:** Includes an automated local tool and agent skill to fetch upstream sources, compare local changes, and simulate pre-merge conflict status in memory before applying.
@@ -76,7 +76,7 @@ Web searches use **Brave Search** by default (Settings can switch to DuckDuckGo,
 
 Shortcuts work while browser chrome or page content has focus. The bottom sidebar menu contains pin/unpin, reopen, and close-other-tabs actions. Close Others keeps pinned tabs, affects only the current workspace, and can be undone one tab at a time with Reopen.
 
-**Current engine limits:** tab and workspace state is session-only. Felaris uses one content WebView, so switching tabs reloads their URLs rather than preserving independent live page sessions. Sleep labels represent tab state, not measured RAM savings. The compact rail is not Zen's floating edge-hover mode.
+**Current engine limits:** Awake tabs preserve page state and navigation history. Sleeping tabs and restored sessions reload saved URLs; unsaved forms and per-tab history do not survive unloading or restart. Automatic sleeping uses conservative checks, but custom app state cannot always be detected; pin tabs whose state must be preserved.
 
 See [DESIGN.md](DESIGN.md) for the interface decisions and research references.
 
@@ -115,9 +115,9 @@ cargo test --locked
 node tests/browser.test.cjs
 ```
 
-For the 48 DOM interaction checks, serve the repository with `python -m http.server 0` (using an ephemeral port so worktrees do not collide), then open `http://localhost:<port>/tests/ui.html`. This is a fixture with sample tabs; its IPC messages are recorded rather than sent to Rust. Test both 1380×860 and the minimum 640×480 desktop window; the compact rail can be inspected by setting `fixtureState.sidebar_collapsed = true`, `sidebar.style.width = '56px'`, and calling `sidebar.contentWindow.updateState(fixtureState)` in the test page console.
+For the 49 DOM interaction checks, serve the repository with `python -m http.server 0` (using an ephemeral port so worktrees do not collide), then open `http://localhost:<port>/tests/ui.html`. This is a fixture with sample tabs; its IPC messages are recorded rather than sent to Rust. Test both 1380×860 and the minimum 640×480 desktop window; the compact rail can be inspected by setting `fixtureState.sidebar_collapsed = true`, `sidebar.style.width = '56px'`, and calling `sidebar.contentWindow.updateState(fixtureState)` in the test page console.
 
-To exercise actual WebView2 keyboard input and Rust IPC on Windows, build with `cargo build` and run the self-contained native smoke test with Python 3.11+ and Node 22+. The Node command delegates to the headless regression harness, which copies the executable, uses an isolated profile and dynamic debugging port, and cleans up the child process. It also runs all 48 DOM checks at 1380×860 and 640×480, including reduced motion:
+To exercise actual WebView2 keyboard input and Rust IPC on Windows, build with `cargo build` and run the self-contained native smoke test with Python 3.11+ and Node 22+. The Node command delegates to the headless regression harness, which copies the executable, uses an isolated profile and dynamic debugging port, and cleans up the child process. It also runs all 49 DOM checks at 1380×860 and 640×480, including reduced motion:
 
 ```bash
 cargo build
@@ -192,13 +192,16 @@ publish a GitHub release or send a Discord message.
 
 ### Extensions and ad blocking
 
-Felaris stores unpacked extensions in `%LOCALAPPDATA%\Felaris\extensions` and loads every folder there at startup. On first launch it downloads the latest uBlock Origin Lite (the Manifest V3 build; WebView2 no longer runs the Manifest V2 uBlock Origin) from `uBlockOrigin/uBOL-home`, checks the release's SHA-256, and unpacks it to `extensions\ublock-origin-lite`. If the first launch is offline, it retries on the next start or from **Settings > Extensions**. Preferences live in `settings.json` beside `session.json`.
+Felaris stores unpacked extensions in `%LOCALAPPDATA%\Felaris\extensions` and loads every folder there at startup. On first launch it downloads the latest uBlock Origin Lite (the Manifest V3 build; WebView2 no longer runs the Manifest V2 uBlock Origin) from `uBlockOrigin/uBOL-home`, checks the release's SHA-256, and unpacks it to `extensions\ublock-origin-lite`. If the first launch is offline, it retries on the next start or from **Settings > Extensions**. A new installation activates after restart so open pages keep their forms and history. Preferences live in `settings.json` beside `session.json`.
 
 ### Browser data and recovery
 
 Browser data is stored in `%LOCALAPPDATA%\Felaris`. `session.json` and
 `session.json.bak` retain tab URLs, workspaces, pins, and recently closed tabs.
-`WebView2` contains persistent site storage. Restarting restores URLs, rather
+`WebView2` contains persistent site storage. Session changes are batched every
+500 ms and written by one background writer. Clean exits and updates flush the
+latest state; an abrupt exit can lose changes since the last completed save.
+Restarting restores URLs, rather
 than unsaved forms or per-tab navigation history. Uninstall preserves this data.
 
 Page failures retain WebView2's native error page and navigation history; Reload
@@ -213,6 +216,8 @@ For an isolated headless development check after `cargo build --locked`:
 python tests/native_smoke.py
 python tests/native_regressions.py
 ```
+
+The regression suite also exercises 100, 300, and 500 saved tabs with lazy restore, a 12-view budget, protected drafts/media/pins/downloads, waking sleepers, and recovery after forced exit. It records startup and tab-switch timings and the process tree working set in `capacity.json`. These local fixtures do not establish a RAM guarantee for arbitrary websites.
 
 The regression suite requires Node 22+ and checks normalized addresses, SPA
 routes, Back after page failures, sleeping-tab replacement, and the production

@@ -1,0 +1,23 @@
+[
+  {
+    "tabs": 100,
+    "live_views": 12,
+    "startup_ms": 1109,
+    "max_switch_ms": 149,
+    "working_set_bytes": 1521049600
+  },
+  {
+    "tabs": 300,
+    "live_views": 12,
+    "startup_ms": 1094,
+    "max_switch_ms": 197,
+    "working_set_bytes": 1553063936
+  },
+  {
+    "tabs": 500,
+    "live_views": 12,
+    "startup_ms": 1110,
+    "max_switch_ms": 176,
+    "working_set_bytes": 1577349120
+  }
+]

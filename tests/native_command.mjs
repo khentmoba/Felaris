@@ -1,4 +1,4 @@
-const [port, expression] = process.argv.slice(2);
+const [port, expression, targetUrl] = process.argv.slice(2);
 let lastError;
 const deadline = Date.now() + 10000;
 while (Date.now() < deadline) {
@@ -11,7 +11,7 @@ while (Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, 100));
     continue;
   }
-  for (const target of targets.filter(target => target.type === 'page')) {
+  for (const target of targets.filter(target => target.type === 'page' && (!targetUrl || target.url === targetUrl))) {
     const socket = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
     let id = 0;
@@ -26,7 +26,7 @@ while (Date.now() < deadline) {
       pending.set(request, resolve);
       socket.send(JSON.stringify({ id: request, method: 'Runtime.evaluate', params: { expression, returnByValue: true, awaitPromise: true, userGesture: true } }));
     });
-    const probe = await evaluate("Boolean(document.getElementById('url-input') && window.ipc?.postMessage && window.updateState)");
+    const probe = await evaluate(targetUrl ? 'true' : "Boolean(document.getElementById('url-input') && window.ipc?.postMessage && window.updateState)");
     if (probe.result?.result?.value) {
       const response = await evaluate(expression);
       socket.close();

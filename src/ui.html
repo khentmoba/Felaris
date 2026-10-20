@@ -237,7 +237,7 @@ window.updateState = state => {
   $('activity-message').textContent=state.update_status; $('activity').hidden=false;
  }
 };
-window.focusAddress=()=>{ $('url-input').focus(); $('url-input').select(); };
+window.focusAddress=()=>{ let tries=0; const focus=()=>{ $('url-input').focus(); $('url-input').select(); if(document.activeElement!==$('url-input')&&++tries<10) setTimeout(focus,50); }; focus(); };
 for(const [id,action] of Object.entries({'btn-back':'back','btn-forward':'forward','btn-reload':'reload','btn-add-tab':'new_tab','btn-toggle-sidebar':'toggle_sidebar','btn-reopen-tab':'restore_closed_tab'})) $(id).onclick=()=>Felaris.send(action);
 $('btn-reload').onclick=()=>Felaris.send(currentState.is_loading?'stop':'reload');
 $('btn-home').onclick=()=>Felaris.navigate('felaris://newtab');

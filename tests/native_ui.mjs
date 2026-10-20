@@ -9,8 +9,7 @@ async function until(probe, label) {
     if (value) return value;
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  let info='';try{info=await (globalThis.__sidebar?.evaluate("JSON.stringify({c:currentState.sidebar_collapsed,peek:currentState.sidebar_peek,ae:document.activeElement.id||document.activeElement.tagName,cls:document.body.className,vis:getComputedStyle(document.getElementById('url-input')).visibility,w:innerWidth,h:innerHeight,vs:document.visibilityState,hf:document.hasFocus(),rect:JSON.stringify(document.getElementById('url-input').getBoundingClientRect()),sl:document.scrollingElement.scrollLeft,retry:(()=>{document.getElementById('url-input').focus();return document.activeElement.id})()})"))}catch(e){info=String(e)}
-  throw Error('Timed out: ' + label + ' ' + info);
+  throw Error('Timed out: ' + label);
 }
 async function connect(matches, port = chromePort) {
   const target = await until(async () => {
@@ -53,7 +52,7 @@ async function press(view, key, modifiers = 0) {
 }
 
 try {
-  const sidebar = await connect(page => page.title === 'Felaris'); globalThis.__sidebar = sidebar;
+  const sidebar = await connect(page => page.title === 'Felaris');
   const command = (action, payload = {}) => sidebar.evaluate(`window.ipc.postMessage(${JSON.stringify(JSON.stringify({ action, ...payload }))});true`);
   const palette = await connect(page => page.title.includes('New tab search'));
   const count = await sidebar.evaluate('currentState.tabs.length');

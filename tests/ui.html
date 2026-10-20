@@ -41,7 +41,13 @@ window.runChecks=async()=>{
  const passed=[];
  const check=(name,ok)=>{if(!ok)throw Error(name);passed.push(name);};
  w.updateState(structuredClone(fixtureState));
+ check('default browser action is available when not selected',!d.getElementById('btn-default-browser').hidden);
+ w.updateState({...structuredClone(fixtureState),is_default_browser:true});
+ check('default browser action hides when already selected',d.getElementById('btn-default-browser').hidden);
+ w.updateState({...structuredClone(fixtureState),is_default_browser:false});
+ check('default browser action returns when the association changes',!d.getElementById('btn-default-browser').hidden);
  check('current workspace tabs only',d.querySelectorAll('.tab').length===4);
+ check('sleeping tab icon explains sleep and how to wake',d.querySelector('.tab.sleeping .sleep-icon')?.parentElement.title==='This tab is sleeping to save memory. Select the tab to wake it.');
  check('newtab tab uses Felaris logo icon',d.querySelector('.tab-main[data-tab-id="1"] use')?.getAttribute('href')==='#felaris');
  check('sidebar shortcut dock removed',!d.querySelector('.essentials,.essential'));
  const github=d.querySelector('.tab[data-tab-id="3"] .favicon');
@@ -87,7 +93,13 @@ window.runChecks=async()=>{
  const ctxButtons=[...d.querySelectorAll('#tab-context-menu button')];
  ctxButtons.find(b=>b.textContent==='Duplicate tab').click();
  check('close IPC',messages.at(-1).action==='duplicate_tab'&&messages.at(-1).id===3&&d.getElementById('tab-context-menu').hidden&&(()=>{d.querySelector('#tabs-container .close-tab').click();return messages.at(-1).action==='close_tab';})());
+ w.updateState({...structuredClone(fixtureState),update_status:'Download complete. Open Downloads to view the file.'});
+ w.showToast('Tab closed',true);
+ d.getElementById('toast').getAnimations().forEach(animation=>animation.finish());
+ const statusRect=d.getElementById('activity').getBoundingClientRect(),toastRect=d.getElementById('toast').getBoundingClientRect();
+ check('status and undo messages do not overlap',statusRect.bottom<=toastRect.top||toastRect.bottom<=statusRect.top);
  d.getElementById('toast-undo').click();check('undo IPC',messages.at(-1).action==='restore_closed_tab');
+ d.getElementById('dismiss-status').click();
  w.updateState({...structuredClone(fixtureState),tabs:[...fixtureState.tabs,{id:6,workspace_id:1,title:'<img src=x onerror=alert(1)>',url:'https://example.net'}]});
  check('untrusted titles stay text',!d.querySelector('.tab-title img'));
  check('tab motion respects reduced motion',w.matchMedia('(prefers-reduced-motion: reduce)').matches?!d.getAnimations().some(animation=>animation.id==='tab-layout'):d.getAnimations().some(animation=>animation.id==='tab-layout'));

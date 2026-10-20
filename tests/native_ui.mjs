@@ -165,10 +165,50 @@ try {
         return null;
       }
     }, 'DOM fixture completion');
-    assert.equal(result, '63 checks passed', `${width}x${height}, ${motion}`);
-    assert.equal(await fixture.evaluate('window.checkResults.length'), 63);
+    assert.equal(result, '68 checks passed', `${width}x${height}, ${motion}`);
+    assert.equal(await fixture.evaluate('window.checkResults.length'), 68);
     console.log(`${result}: ${width}x${height}, ${motion}`);
   }
+  await command('open_settings');
+  const settings = await connect(page => page.title === 'Settings', contentPort);
+  const isDefault = await sidebar.evaluate('currentState.is_default_browser');
+  await until(() => settings.evaluate('typeof window.setDefaultBrowser === "function"'), 'default browser settings ready');
+  assert.equal(await settings.evaluate('document.getElementById("set-default-browser").hidden'), isDefault);
+  for (const selected of [true, false]) {
+    assert.deepEqual(await settings.evaluate(`(() => {
+      window.setDefaultBrowser(${selected});
+      return { hidden: document.getElementById('set-default-browser').hidden, selected: document.getElementById('default-browser-status').textContent === 'Felaris is your default browser.' };
+    })()`), { hidden: selected, selected });
+  }
+  console.log('Default browser actions and settings reflect the detected Windows association and both UI states.');
+  await command('open_history');
+  const history = await connect(page => page.title === 'History and bookmarks', contentPort);
+  await history.evaluate(`(() => {
+    entries=[{url:'${origin}/history-icon',title:'History with site icon',time:Date.now()}];
+    bookmarks=[{url:'${origin}/bookmark-icon',title:'Bookmark with site icon'}];
+    data.shortcuts=[{url:'${origin}/',favicon:'${origin}/assets/favicon.svg'}];
+    render();
+  })()`);
+  await until(() => history.evaluate('[...document.querySelectorAll(".site-icon img")].length === 2 && [...document.querySelectorAll(".site-icon img")].every(img=>img.complete && img.naturalWidth>0 && getComputedStyle(img).opacity==="1")'), 'history and bookmark favicons load');
+  assert.equal(await history.evaluate('[...document.querySelectorAll(".site-icon img")].every(img=>img.referrerPolicy==="no-referrer" && getComputedStyle(img).width==="16px" && getComputedStyle(img).height==="16px")'), true);
+  if (artifacts) {
+    const screenshot = await history.call('Page.captureScreenshot', { format: 'png' });
+    await writeFile(join(artifacts, 'history-icons.png'), Buffer.from(screenshot.data, 'base64'));
+  }
+  assert.deepEqual(await history.evaluate(`(() => {
+    render();
+    const icon=document.querySelector('#list .site-icon');
+    const img=icon.querySelector('img');
+    img.dispatchEvent(new Event('error'));
+    const retried=img.src === '${origin}/favicon.ico';
+    img.dispatchEvent(new Event('error'));
+    return { retried, fallback: !icon.querySelector('img') && icon.querySelector('svg').style.visibility !== 'hidden' };
+  })()`), { retried: true, fallback: true });
+  assert.equal(await history.evaluate(`(() => {
+    data.shortcuts[0].favicon='javascript:alert(1)';render();
+    return document.querySelector('#list .site-icon img').src === '${origin}/favicon.ico';
+  })()`), true);
+  console.log('History and bookmarks show saved site icons, retry the site favicon, and keep a globe fallback for missing or invalid images.');
 } catch (error) {
   if (artifacts) {
     try { await writeDiagnostics([chromePort, contentPort], artifacts, error); }

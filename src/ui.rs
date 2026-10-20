@@ -1,4 +1,8 @@
-use crate::{extensions, history, settings, state::Bookmark, updater};
+use crate::{
+    extensions, history, settings,
+    state::{Bookmark, Shortcut},
+    updater,
+};
 
 pub const SIDEBAR_WIDTH_EXPANDED: f64 = 260.0;
 pub const SIDEBAR_HOT_ZONE: f64 = 6.0;
@@ -29,12 +33,13 @@ pub fn get_new_tab_html() -> String {
     include_str!("new_tab.html").replace("__COMMON_SCRIPT__", &script())
 }
 
-pub fn get_history_html(bookmarks: &[Bookmark]) -> String {
+pub fn get_history_html(bookmarks: &[Bookmark], shortcuts: &[Shortcut]) -> String {
     // One placeholder, filled last, so page titles can't collide with another one.
     let data = serde_json::json!({
         "history": history::all(),
         "bookmarks": bookmarks,
         "saving": settings::get().save_history,
+        "shortcuts": shortcuts,
     });
     include_str!("history.html")
         .replace("__COMMON_SCRIPT__", &script())
@@ -49,6 +54,7 @@ pub fn get_settings_html() -> String {
         "ublock_active": extensions::active_at_startup(),
         "extensions_folder": extensions::directory(),
         "version": updater::CURRENT_VERSION,
+        "is_default_browser": crate::desktop::is_default_browser(),
     });
     include_str!("settings.html")
         .replace("__COMMON_SCRIPT__", &script())

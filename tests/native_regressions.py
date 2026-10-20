@@ -15,6 +15,7 @@ from urllib.request import urlopen
 from native_smoke import Fixture
 from native_app import NativeApp
 from tab_recovery import check_recovery
+from tab_input import check_tab_input
 from update_restore import check_update_restore
 
 
@@ -64,6 +65,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--exe', default='target/debug/felaris.exe')
     args = parser.parse_args()
+    check_tab_input(args.exe)
     check_recovery(args.exe)
     check_update_restore(args.exe)
     app = NativeApp(args.exe, 'native-regressions')
@@ -260,7 +262,7 @@ def main():
             assert (profile / 'smoke-download.txt').read_bytes() == b'x' * 65536
             subprocess.run(['node', str(Path(__file__).with_name('native_ui.mjs')), str(port), str(content_port), origin, str(artifacts)],
                            check=True, timeout=120)
-            checks.append('Native keyboard, pointer selection, site permission decisions, and 63 DOM checks at desktop and minimum sizes')
+            checks.append('Native keyboard, pointer selection, site permission decisions, default browser state, and 68 DOM checks at desktop and minimum sizes')
 
             source = next(tab['id'] for tab in sidebar('currentState.tabs') if tab['url'] == origin + '/next')
             command('duplicate_tab', id=source)

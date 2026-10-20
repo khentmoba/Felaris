@@ -41,7 +41,7 @@ section { display:flex; flex-direction:column; gap:12px; } section>h2 { font-siz
 <h1 id="title"></h1>
 
 <section data-section="general" data-label="General" data-icon="M3 10l9-7 9 7M5 9v11h5v-6h4v6h5V9">
-<div class="row"><div><h2>Default browser</h2><p>Make Felaris open links from other apps. Windows keeps the final choice with you.</p></div><button class="btn" data-send="default_browser">Open Windows settings</button></div>
+<div class="row"><div><h2>Default browser</h2><p id="default-browser-status"></p></div><button class="btn" id="set-default-browser" data-send="default_browser">Open Windows settings</button></div>
 <div class="row"><div><h2>Check for updates automatically</h2><p>Felaris looks for a new version shortly after launch and every 6 hours.</p></div><button class="switch" role="switch" id="auto-update" aria-label="Check for updates automatically"></button></div>
 <div class="row"><div><h2>Update now</h2><p>Check for a new version of Felaris.</p></div><button class="btn" data-send="check_updates">Check for updates</button></div>
 </section>
@@ -79,6 +79,11 @@ section { display:flex; flex-direction:column; gap:12px; } section>h2 { font-siz
 <script>
 const data=__SETTINGS__;
 const $=id=>document.getElementById(id);
+window.setDefaultBrowser=isDefault=>{
+ $('default-browser-status').textContent=isDefault?'Felaris is your default browser.':'Make Felaris open links from other apps. Windows keeps the final choice with you.';
+ $('set-default-browser').hidden=isDefault;
+};
+window.setDefaultBrowser(data.is_default_browser);
 const sections=[...document.querySelectorAll('section')];
 const shortcuts=[['New tab','Ctrl + T'],['Close tab','Ctrl + W'],['Address bar','Ctrl + L'],['Reload','Ctrl + R / F5'],['Back / forward','Alt + Left / Right'],['Reopen closed tab','Ctrl + Shift + T'],['Next / previous tab','Ctrl + Tab / Ctrl + Shift + Tab'],['Switch profile','Alt + 1-9'],['Collapse sidebar','Ctrl + Shift + B'],['Sleep background tabs','Ctrl + Shift + S'],['History and bookmarks','Ctrl + H'],['Bookmark page','Ctrl + D'],['New private tab','Ctrl + Shift + N'],['Find in page','Ctrl + F'],['Downloads','Ctrl + J'],['Zoom in / out / reset','Ctrl + + / Ctrl + - / Ctrl + 0'],['Full screen','F11']];
 $('keys').replaceChildren(...shortcuts.map(([name,keys])=>{ const row=document.createElement('tr'); const a=document.createElement('td'); a.textContent=name; const b=document.createElement('td'); for(const [index,part] of keys.split(' / ').entries()) { if(index) b.append(' / '); const kbd=document.createElement('kbd'); kbd.textContent=part.replace(/ \+ /g,' '); b.append(kbd); } row.append(a,b); return row; }));

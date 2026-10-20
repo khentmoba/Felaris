@@ -27,6 +27,23 @@ pub fn raise(view: &WebView) {
     }
 }
 
+pub fn round(view: &WebView, width: i32, height: i32, radius: i32) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::Graphics::Gdi::{CreateRoundRectRgn, SetWindowRgn};
+        use wry::WebViewExtWindows;
+        unsafe {
+            let region = (radius > 0)
+                .then(|| CreateRoundRectRgn(0, 0, width + 1, height + 1, radius * 2, radius * 2));
+            SetWindowRgn(view.hwnd(), region, true);
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (view, width, height, radius);
+    }
+}
+
 pub fn message(title: &str, text: &str, confirm: bool) -> bool {
     if std::env::var_os("FELARIS_SMOKE_TEST").is_some() {
         eprintln!("{title}: {text}");

@@ -19,12 +19,15 @@ User-requested black theme: sidebar `#101011`, page `#0c0c0e`, neutral accent `#
 
 - Ctrl+T and the sidebar New tab action open the floating search palette, focused immediately, without creating a tab or reloading the current page. Enter creates a tab for the typed address or Brave Search query. Open-tab suggestions can be selected with arrows/Enter or a click to switch instead. Escape, the close button, or the backdrop dismisses without creating a blank tab and returns focus to content. Ctrl+Shift+T still restores immediately. The startup/Home page remains available separately.
 - The palette owns native overlay bounds and blocks navigation to remote documents. Its canvas must stay transparent: root color-scheme is normal, with dark color-scheme scoped to the opaque panel. Reopening clears the draft; IME composition must not accidentally submit.
+- The sidebar stays above the search overlay, retaining hover and clickable New tab controls. Opening search does not count as leaving the sidebar; moving the pointer away still hides a floating sidebar after its normal delay.
 
 - Blurred HTTPS addresses display the complete hostname; focus exposes and selects the full URL. HTTP keeps its scheme visible. State updates must not overwrite an in-progress address edit or discard a focused tab button.
 - Pinning is workspace-scoped and protects a tab from Close Others. Closing others affects only the current workspace and retains restoration history.
 - Search filters tab titles and URLs within the selected workspace; Escape clears the filter and returns focus to its trigger.
 - The compact rail uses title tooltips. Opening its actions menu expands the rail first rather than clipping a menu into a narrow WebView. Ctrl+L also expands it and focuses the address field.
-- Back and Forward reflect native history availability. Loading changes Reload to Stop. Sleeping tabs use subdued text and a moon icon; never report invented MB savings.
+- Back and Forward reflect native history availability. Loading changes Reload to Stop. Sleeping tabs use subdued text and a moon icon; never report invented MB savings. Selecting a failed tab recreates its WebView and retries its saved address; healthy tabs retain their page state.
+- The top bar has an empty drag area and only Minimize, Maximize/Restore, and Close controls. Site titles and addresses stay in the sidebar. Sidebar favicons render at 16px with their natural transparency, without background tiles. Missing or broken saved icons fall back to the site's own favicon, then a neutral globe.
+- After an in-app update, the restored active HTTP(S) page revalidates its cached document on its initial navigation. It loads once, without requiring a manual reload or clearing site storage.
 - The user-highlighted four-tile Essentials dock is removed entirely, including compact-mode markup/styles. The separate Home page shortcuts remain.
 
 ## Research used

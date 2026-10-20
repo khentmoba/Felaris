@@ -222,7 +222,12 @@ impl Smoke {
             13 if !tab.is_loading && tab.error.is_none() && tab.title == "Felaris fixture" => {
                 self.phase = 14;
                 Self::command(proxy, Command::TogglePin { id: self.first });
-                Self::command(proxy, Command::SwitchWorkspace { id: 2 });
+                Self::command(
+                    proxy,
+                    Command::CreateProfile {
+                        name: "School".into(),
+                    },
+                );
                 Self::command(
                     proxy,
                     Command::NewTab {

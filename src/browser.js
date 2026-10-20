@@ -37,7 +37,7 @@
       if (key === 'arrowleft') action = 'back';
       else if (key === 'arrowright') action = 'forward';
       else if (key === 'd') action = 'focus_address';
-      else if (/^[1-3]$/.test(key)) { action = 'switch_workspace'; payload = { id: Number(key) }; }
+      else if (/^[1-9]$/.test(key)) { action = 'switch_profile'; payload = { index: Number(key) }; }
     } else if (!event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
       if (key === 'f5') action = 'reload';
       else if (key === 'f11') action = 'toggle_fullscreen';

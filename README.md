@@ -14,7 +14,7 @@
 - **Rust desktop shell:** Tao handles the Windows window and Wry hosts WebView2.
 - **Independent live tabs:** Switching tabs preserves page state and native back/forward history while the tabs stay awake.
 - **Floating sign-in & OAuth popups:** Login, OAuth, and confirmation popups open in a Zen-style floating window that shares your profile and `window.opener` session, with a compact read-only URL bar and one-click promotion to a full tab.
-- **Session recovery:** Tabs, workspace selection, pins, and recent closed tabs are saved locally, with a backup for recovery. Site storage uses a persistent WebView2 profile.
+- **Session recovery:** Tabs, profile selection, pins, and recent closed tabs are saved locally, with a backup for recovery. Site storage uses a persistent WebView2 profile.
 - **Windows integration:** Setup wizard with uninstaller, Start menu and desktop shortcuts, Installed apps registration, default-browser eligibility, and link handoff to the running instance.
 - **Native downloads:** WebView2 provides download progress and file actions; Felaris reports completion and warns before closing active downloads.
 - **Automatic tab sleeping:** Targets 12 live pages by unloading older background tabs. Pinned tabs stay awake, as do active downloads, playing media, capture sessions, and pages with detected edits or unload handlers. Pages with frames or failed safety checks stay awake too, so protected work can exceed the budget. Manual sleeping is still available. Selecting a sleeping tab reloads its saved URL; unsaved form state and page history do not survive sleeping or an app restart.
@@ -32,8 +32,8 @@
 │                                                        │
 │  Zen-inspired sidebar (260px / 56px compact rail)       │
 │  • Navigation and address / search                     │
-│  • Pinned tabs and searchable workspace tabs           │
-│  • Workspace dock and tab actions                      │
+│  • Pinned tabs and searchable profile tabs           │
+│  • Profile picker and tab actions                      │
 │                                                        │
 │  ┌─ Content Viewport (Hardware-Accelerated) ────────┐  │
 │  │                                                  │  │
@@ -61,8 +61,8 @@
 | `Alt + Left` | Navigate back |
 | `Alt + Right` | Navigate forward |
 | `Ctrl + Shift + T` | Reopen last closed tab |
-| `Ctrl + Tab` / `Ctrl + Shift + Tab` | Cycle tabs within the workspace |
-| `Alt + 1` / `2` / `3` | Switch workspace |
+| `Ctrl + Tab` / `Ctrl + Shift + Tab` | Cycle tabs within the profile |
+| `Alt + 1` to `9` | Switch profile |
 | `Ctrl + S` | Expand / collapse sidebar |
 | `Ctrl + Shift + S` | Unload background tabs (except active downloads) |
 | `Ctrl + H` | Open History |
@@ -73,11 +73,11 @@
 
 **New tabs work like Zen:** press `Ctrl+T` or click **New tab** to open a floating search/address bar over the current page. Enter opens the destination in a new tab; matching open tabs, history, and top shortcuts can be selected with the arrow keys. Escape, the close button, or clicking outside cancels without creating an empty tab or reloading the page. The startup/Home page remains available separately. The sidebar, Home page, native title bar, and palette share a black/charcoal theme.
 
-The sidebar has no fixed shortcut-tile dock. Search opens/closes with short, interruptible motion, and tab/workspace changes retain visual continuity. Reduced-motion preferences skip spatial effects. Home-page shortcuts rank your most-visited sites (such as YouTube or X) first and fill any remaining slots from the default 8 shortcuts.
+The sidebar has no fixed shortcut-tile dock. Search opens/closes with short, interruptible motion, and tab and profile changes retain visual continuity. Reduced-motion preferences skip spatial effects. Home-page shortcuts rank your most-visited sites (such as YouTube or X) first and fill any remaining slots from the default 8 shortcuts.
 
 Web searches use **Brave Search** by default (Settings can switch to DuckDuckGo, Google, or Bing) throughout the sidebar, Home page, and floating search bar. Suggestions come from your local open tabs, history, and shortcuts; no remote autocomplete requests are sent while typing.
 
-Shortcuts work while browser chrome or page content has focus. Right-clicking any tab in the sidebar opens quick actions to pin/unpin, duplicate, sleep/wake, move to another workspace, or close it. The bottom sidebar menu contains pin/unpin, reopen, and close-other-tabs actions. Close Others keeps pinned tabs, affects only the current workspace, and can be undone one tab at a time with Reopen.
+Shortcuts work while browser chrome or page content has focus. Right-clicking any tab in the sidebar opens quick actions to pin/unpin, duplicate, sleep/wake, move to another profile, or close it. The bottom sidebar menu contains pin/unpin, reopen, and close-other-tabs actions. Close Others keeps pinned tabs, affects only the current profile, and can be undone one tab at a time with Reopen.
 
 **Current engine limits:** Awake tabs preserve page state and navigation history. Sleeping tabs and restored sessions reload saved URLs; unsaved forms and per-tab history do not survive unloading or restart. Automatic sleeping uses conservative checks, but custom app state cannot always be detected; pin tabs whose state must be preserved.
 
@@ -205,7 +205,7 @@ Felaris stores unpacked extensions in `%LOCALAPPDATA%\Felaris\extensions` and lo
 ### Browser data and recovery
 
 Browser data is stored in `%LOCALAPPDATA%\Felaris`. `session.json` and
-`session.json.bak` retain tab URLs, workspaces, pins, and recently closed tabs.
+`session.json.bak` retain tab URLs, profiles, pins, and recently closed tabs.
 `WebView2` contains persistent site storage. Session changes are batched every
 500 ms and written by one background writer. Clean exits and updates flush the
 latest state; an abrupt exit can lose changes since the last completed save.

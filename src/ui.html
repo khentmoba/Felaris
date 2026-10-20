@@ -134,7 +134,7 @@ function displayAddress(url) { if(!url || url==='felaris://newtab') return ''; t
 function renderTabs() {
  const tabs=currentState.tabs.filter(t=>t.workspace_id===currentState.active_workspace_id);
  const query=$('tab-search').value.trim().toLowerCase();
- const signature=JSON.stringify([tabs,query,currentState.active_workspace_id]);
+ const signature=JSON.stringify([tabs.map(tab=>[tab.id,tab.title,tab.url,tab.is_pinned,tab.is_sleeping,tab.favicon,tab.error]),query,currentState.active_workspace_id]);
  if(signature===tabSignature) {
   document.querySelectorAll('.tab').forEach(row=>{
    const active=Number(row.dataset.tabId)===currentState.active_tab_id;

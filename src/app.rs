@@ -1,6 +1,7 @@
 use crate::{desktop, instance::Instance, profile, start_page, state::BrowserState, ui, updater};
 use serde::Deserialize;
 use std::{collections::HashMap, hash::BuildHasher};
+use tao::platform::windows::WindowBuilderExtWindows;
 use tao::{
     dpi::{LogicalPosition, LogicalSize, Position, Size},
     event::{Event, StartCause, WindowEvent},
@@ -83,10 +84,15 @@ fn bounds(window: &Window, state: &BrowserState) -> (Rect, Rect, Rect, Rect) {
     } else {
         ui::SIDEBAR_HOT_ZONE
     };
-    let content_left = if state.sidebar_collapsed {
-        8.
+    let margin = if window.is_maximized() || window.fullscreen().is_some() {
+        0.
     } else {
-        width + 8.
+        ui::WINDOW_MARGIN
+    };
+    let content_left = if state.sidebar_collapsed {
+        margin
+    } else {
+        width + margin
     };
     let top_left = if shown { width } else { 0. };
     let top_height = if state.topbar_peek {
@@ -100,10 +106,10 @@ fn bounds(window: &Window, state: &BrowserState) -> (Rect, Rect, Rect, Rect) {
             size: Size::Logical(LogicalSize::new(width, size.height)),
         },
         Rect {
-            position: Position::Logical(LogicalPosition::new(content_left, 8.)),
+            position: Position::Logical(LogicalPosition::new(content_left, margin)),
             size: Size::Logical(LogicalSize::new(
-                (size.width - content_left - 8.).max(10.),
-                (size.height - 16.).max(10.),
+                (size.width - content_left - margin).max(10.),
+                (size.height - margin * 2.).max(10.),
             )),
         },
         Rect {
@@ -271,6 +277,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         .with_focused(!headless)
         .with_theme(Some(tao::window::Theme::Dark))
         .with_decorations(false)
+        .with_undecorated_shadow(true)
         .with_background_color((16, 16, 17, 255))
         .with_window_icon(icon)
         .with_inner_size(if std::env::var_os("FELARIS_SMOKE_TEST").is_some() {
@@ -282,6 +289,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         .build(&event_loop)
         .expect("Cannot create window");
     let mut state = BrowserState::restore();
+    state.sidebar_collapsed = true;
     state.sidebar_peek = false;
     for url in urls {
         state.add_tab(Some(url), false);
@@ -374,6 +382,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     }
     let topbar = topbar_builder.build(&window)?;
     let mut last_loading = false;
+    let mut rounded: HashMap<usize, (u32, u32, i32)> = HashMap::new();
     let mut views = HashMap::new();
     let initial_id = state.active_tab_id;
     views.insert(
@@ -556,6 +565,11 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         let (sidebar_bounds, content_bounds, overlay_bounds, topbar_bounds) = bounds(&window, &state);
         let _ = sidebar.set_bounds(sidebar_bounds);
         for (id,view) in &views { let _ = view.set_bounds(content_bounds); let _ = view.set_visible(*id == active_id); }
+        let physical = content_bounds.size.to_physical::<u32>(window.scale_factor());
+        let radius = if window.is_maximized() || window.fullscreen().is_some() { 0 } else { (ui::CONTENT_RADIUS * window.scale_factor()) as i32 };
+        let shape = (physical.width, physical.height, radius);
+        rounded.retain(|id, _| views.contains_key(id));
+        for (id, view) in &views { if rounded.get(id) != Some(&shape) { desktop::round(view, shape.0 as i32, shape.1 as i32, radius); rounded.insert(*id, shape); } }
         let _ = topbar.set_bounds(topbar_bounds);
         if !palette_open {
             if state.sidebar_collapsed && state.sidebar_peek { desktop::raise(&sidebar); }

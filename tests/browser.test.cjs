@@ -31,14 +31,18 @@ assert.deepEqual(press('l', { ctrlKey: true }), { action: 'focus_address' });
 assert.deepEqual(press('j', { ctrlKey: true }), { action: 'open_downloads' });
 assert.deepEqual(press('w', { ctrlKey: true }), { action: 'close_active_tab' });
 assert.deepEqual(press('Tab', { ctrlKey: true, shiftKey: true }), { action: 'cycle_tab', backwards: true });
+assert.deepEqual(press('=', { ctrlKey: true }), { action: 'zoom', delta: 10 });
+assert.deepEqual(press('-', { ctrlKey: true }), { action: 'zoom', delta: -10 });
+assert.deepEqual(press('0', { ctrlKey: true }), { action: 'zoom', delta: 0 });
 assert.deepEqual(press('2', { altKey: true }), { action: 'switch_workspace', id: 2 });
 assert.deepEqual(press('F5'), { action: 'reload' });
+assert.deepEqual(press('F11'), { action: 'toggle_fullscreen' });
 vm.runInContext("Object.prototype.toJSON = function () { throw Error('page serialization hook'); }", context);
 assert.deepEqual(press('t', { ctrlKey: true }), { action: 'new_tab' });
 keydown({ key: 't', ctrlKey: true, isTrusted: true, isComposing: true });
 keydown({ key: 't', ctrlKey: true, isTrusted: false });
 assert.equal(messages.length, 0);
-for (const file of ['src/ui.html', 'src/start_page.html', 'src/new_tab.html']) {
+for (const file of ['src/ui.html', 'src/start_page.html', 'src/new_tab.html', 'src/topbar.html', 'src/popup.html']) {
   const html = fs.readFileSync(file, 'utf8').replace('__COMMON_SCRIPT__', fs.readFileSync('src/browser.js', 'utf8')).replace('__SHORTCUTS__', '[]');
   for (const script of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new vm.Script(script[1], { filename: file });
   assert.ok(!html.includes('__COMMON_SCRIPT__'));

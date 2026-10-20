@@ -19,7 +19,7 @@ form:focus-within { box-shadow:inset 0 -1px var(--focus); }
 .close { width:30px; height:30px; display:grid; place-items:center; border:0; border-radius:7px; background:none; color:var(--muted); cursor:pointer; flex-shrink:0; } .close svg { width:16px; height:16px; } .close:hover { background:#303034; color:white; } .close:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
 .results { padding:6px; overflow:auto; min-height:0; scrollbar-width:thin; scrollbar-color:#45454b transparent; }
 .option { display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:9px; cursor:pointer; }
-.option[aria-selected="true"] { background:#2d2d32; } .option:hover { background:#27272b; } .option[aria-selected="true"]:hover { background:#2d2d32; }
+.option[aria-selected="true"] { background:#2d2d32; }
 .option-icon { width:18px; height:18px; flex-shrink:0; display:grid; place-items:center; } .option-icon svg,.option-icon img { grid-area:1/1; width:18px; height:18px; } .option-icon img { object-fit:contain; background:#f5f5f7; border-radius:3px; padding:1px; } .option-text { min-width:0; flex:1; } .option-title,.option-detail { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .option-title { font-size:14px; line-height:1.5; } .option-detail { color:var(--muted); font-size:12px; line-height:1.5; }
 .empty { margin:0; padding:18px 16px 22px; font-size:13px; color:var(--muted); line-height:1.6; }
 footer { border-top:1px solid var(--line); display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:12px 18px; font-size:12px; color:var(--muted); flex-shrink:0; }
@@ -71,11 +71,11 @@ function finish(action,payload={}) {
  exit.finished.then(()=>Felaris.send(action,payload)).catch(()=>{});
 }
 const dismiss=()=>finish('dismiss_new_tab');
-function select(index) {
+function select(index,scroll=true) {
  selected=index;
  for(const [i,row] of [...results.children].entries()) row.setAttribute('aria-selected',String(i===selected));
  const row=results.children[selected];
- if(row) { input.setAttribute('aria-activedescendant',row.id); row.scrollIntoView({block:'nearest'}); }
+ if(row) { input.setAttribute('aria-activedescendant',row.id); if(scroll) row.scrollIntoView({block:'nearest'}); }
  else input.removeAttribute('aria-activedescendant');
 }
 function render() {
@@ -134,6 +134,7 @@ function render() {
   const title=document.createElement('span'); title.className='option-title'; title.textContent=option.title;
   const detail=document.createElement('span'); detail.className='option-detail'; detail.textContent=option.detail;
   text.append(title,detail); row.append(icon,text);
+  row.onpointermove=()=>{if(!submitting&&selected!==index)select(index,false);};
   row.onmousedown=event=>event.preventDefault(); row.onclick=()=>{select(index);submit();};
   results.append(row);
  });

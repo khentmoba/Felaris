@@ -14,9 +14,11 @@ from urllib.request import urlopen
 
 from native_smoke import Fixture
 from native_app import NativeApp
+from tab_recovery import check_recovery
+from update_restore import check_update_restore
 
 
-def assert_sidebar_above_content(process_id):
+def assert_sidebar_above_content(process_id, palette_open=False):
     user32 = ctypes.WinDLL('user32', use_last_error=True)
     callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
     user32.GetParent.argtypes = [wintypes.HWND]
@@ -52,7 +54,7 @@ def assert_sidebar_above_content(process_id):
 
     user32.EnumChildWindows(parent, child, 0)
     panels = [(i, width, height) for i, (width, height) in enumerate(children) if height > 100]
-    assert len(panels) == 2, children
+    assert len(panels) == (3 if palette_open else 2), children
     sidebar = min(panels, key=lambda panel: panel[1])[0]
     content = max(panels, key=lambda panel: panel[1])[0]
     assert sidebar < content, f'Sidebar hover area is behind page content: {children}'
@@ -62,6 +64,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--exe', default='target/debug/felaris.exe')
     args = parser.parse_args()
+    check_recovery(args.exe)
+    check_update_restore(args.exe)
     app = NativeApp(args.exe, 'native-regressions')
     artifacts, profile = app.artifacts, app.profile
     port, content_port = app.port, app.content_port
@@ -183,7 +187,21 @@ def main():
             assert animation['closedWidth'] >= 260, animation
             assert all(width == animation['closedWidth'] for width in animation['widths']), animation
             assert_sidebar_above_content(process.pid)
+            sidebar('document.documentElement.dispatchEvent(new MouseEvent("mouseenter"));true')
+            sidebar('(async()=>{await new Promise(resolve=>setTimeout(resolve,400));document.getElementById("btn-add-tab").click();return true})()')
+            sidebar('(async()=>{await new Promise(resolve=>setTimeout(resolve,500));if(!currentState.sidebar_peek)throw Error("New tab lost sidebar hover");return true})()')
+            assert_sidebar_above_content(process.pid, palette_open=True)
+            command('submit_new_tab', url=origin + '/second')
+            loaded(origin + '/second')
+            assert sidebar('currentState.sidebar_peek'), 'Opening a site must retain sidebar hover'
+            sidebar('document.getElementById("btn-add-tab").click();true')
+            sidebar('(async()=>{await new Promise(resolve=>setTimeout(resolve,400));return true})()')
+            assert_sidebar_above_content(process.pid, palette_open=True)
+            sidebar('document.documentElement.dispatchEvent(new MouseEvent("mouseleave"));true')
+            wait(lambda _: not sidebar('currentState.sidebar_peek'), 'sidebar hides after leaving while search is open')
+            command('dismiss_new_tab')
             command('toggle_sidebar')
+            checks.append('New tab search leaves the hovered sidebar above its overlay and hides it only after pointer leave')
             checks.append('Hover reveal, hide, and reversal keep the native sidebar width stable and above new pages')
             command('navigate', url=origin + '/second')
             loaded(origin + '/second')
@@ -242,7 +260,7 @@ def main():
             assert (profile / 'smoke-download.txt').read_bytes() == b'x' * 65536
             subprocess.run(['node', str(Path(__file__).with_name('native_ui.mjs')), str(port), str(content_port), origin, str(artifacts)],
                            check=True, timeout=120)
-            checks.append('Native keyboard, pointer selection, site permission decisions, and 60 DOM checks at desktop and minimum sizes')
+            checks.append('Native keyboard, pointer selection, site permission decisions, and 63 DOM checks at desktop and minimum sizes')
 
             source = next(tab['id'] for tab in sidebar('currentState.tabs') if tab['url'] == origin + '/next')
             command('duplicate_tab', id=source)

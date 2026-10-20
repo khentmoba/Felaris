@@ -165,8 +165,8 @@ try {
         return null;
       }
     }, 'DOM fixture completion');
-    assert.equal(result, '68 checks passed', `${width}x${height}, ${motion}`);
-    assert.equal(await fixture.evaluate('window.checkResults.length'), 68);
+    assert.equal(result, '69 checks passed', `${width}x${height}, ${motion}`);
+    assert.equal(await fixture.evaluate('window.checkResults.length'), 69);
     console.log(`${result}: ${width}x${height}, ${motion}`);
   }
   await command('open_settings');

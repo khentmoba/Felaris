@@ -53,6 +53,12 @@ pub enum Command {
     WindowMaximize,
     WindowClose,
     DragWindow,
+    SwitchProfile {
+        index: usize,
+    },
+    CreateProfile {
+        name: String,
+    },
     SwitchWorkspace {
         id: usize,
     },
@@ -471,7 +477,7 @@ fn content(
                                 | Command::RestoreClosedTab
                                 | Command::SleepInactiveTabs
                                 | Command::CycleTab { .. }
-                                | Command::SwitchWorkspace { .. }
+                                | Command::SwitchProfile { .. }
                                 | Command::OpenDownloads
                                 | Command::OpenHistory
                                 | Command::Zoom { .. }
@@ -924,7 +930,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                     | UserEvent::Command(Command::Navigate { .. } | Command::NewTab { url: Some(_) }
                         | Command::SubmitNewTab { .. } | Command::SwitchTab { .. } | Command::CloseTab { .. }
                         | Command::ToggleSleep { .. } | Command::SleepInactiveTabs | Command::ClearUnpinnedTabs
-                        | Command::ToggleSidebar | Command::SwitchWorkspace { .. } | Command::RestoreClosedTab
+                        | Command::ToggleSidebar | Command::SwitchWorkspace { .. } | Command::SwitchProfile { .. } | Command::CreateProfile { .. } | Command::RestoreClosedTab
                         | Command::TogglePin { .. } | Command::CycleTab { .. } | Command::FocusAddress
                         | Command::OpenSettings | Command::OpenHistory | Command::DuplicateTab { .. }
                         | Command::MoveTabToWorkspace { .. } | Command::ExpandPopup { .. }));
@@ -1082,6 +1088,12 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                     window.set_minimized(false);
                                     window.set_focus();
                                 }
+                            },
+                            Command::SwitchProfile { index } => {
+                                if let Some(profile) = state.workspaces.get(index.saturating_sub(1)) { let id = profile.id; state.switch_workspace(id); }
+                            },
+                            Command::CreateProfile { name } => {
+                                if let Err(error) = state.create_profile(&name) { state.update_status = Some(error); }
                             },
                             Command::SwitchWorkspace { id } => { state.switch_workspace(id); },
                             Command::RestoreClosedTab => { state.restore_closed_tab(); },

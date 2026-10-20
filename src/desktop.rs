@@ -27,6 +27,33 @@ pub fn raise(view: &WebView) {
     }
 }
 
+pub fn vsync() {
+    #[cfg(windows)]
+    unsafe {
+        if windows::Win32::Graphics::Dwm::DwmFlush().is_ok() {
+            return;
+        }
+    }
+    std::thread::sleep(std::time::Duration::from_millis(16));
+}
+
+pub fn round(view: &WebView, width: i32, height: i32, radius: i32) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::Graphics::Gdi::{CreateRoundRectRgn, SetWindowRgn};
+        use wry::WebViewExtWindows;
+        unsafe {
+            let region = (radius > 0)
+                .then(|| CreateRoundRectRgn(0, 0, width + 1, height + 1, radius * 2, radius * 2));
+            SetWindowRgn(view.hwnd(), region, true);
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (view, width, height, radius);
+    }
+}
+
 pub fn message(title: &str, text: &str, confirm: bool) -> bool {
     if std::env::var_os("FELARIS_SMOKE_TEST").is_some() {
         eprintln!("{title}: {text}");
@@ -143,6 +170,20 @@ pub fn attach(
             }
             Ok(())
         })), &mut token)?;
+        let favicon = proxy.clone();
+        webview.cast::<ICoreWebView2_15>()?.add_FaviconChanged(
+            &FaviconChangedEventHandler::create(Box::new(move |view, _| {
+                if let Some(view) = view
+                    && let Ok(view) = view.cast::<ICoreWebView2_15>()
+                {
+                    let mut uri = PWSTR::null();
+                    view.FaviconUri(&mut uri)?;
+                    let _ = favicon.send_event(UserEvent::Favicon(id, generation, take_pwstr(uri)));
+                }
+                Ok(())
+            })),
+            &mut token,
+        )?;
         let crashed = proxy.clone();
         webview.add_ProcessFailed(
             &ProcessFailedEventHandler::create(Box::new(move |_, _| {

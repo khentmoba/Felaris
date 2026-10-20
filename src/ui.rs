@@ -1,7 +1,11 @@
 use crate::{extensions, history, settings, updater};
 
 pub const SIDEBAR_WIDTH_EXPANDED: f64 = 260.0;
-pub const SIDEBAR_WIDTH_COLLAPSED: f64 = 56.0;
+pub const SIDEBAR_HOT_ZONE: f64 = 6.0;
+pub const WINDOW_MARGIN: f64 = 6.0;
+pub const CONTENT_RADIUS: f64 = 10.0;
+pub const TOPBAR_HOT_ZONE: f64 = 4.0;
+pub const TOPBAR_EXPANDED: f64 = 34.0;
 
 /// The shared page script, using the search engine chosen in Settings.
 pub fn script() -> String {
@@ -48,4 +52,8 @@ pub fn get_settings_html() -> String {
     include_str!("settings.html")
         .replace("__COMMON_SCRIPT__", &script())
         .replace("__SETTINGS__", &data.to_string().replace('<', "\\u003c"))
+}
+
+pub fn get_topbar_html() -> &'static str {
+    include_str!("topbar.html")
 }

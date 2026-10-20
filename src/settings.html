@@ -139,7 +139,7 @@ function renderExtension() {
   else if(wanted&&!data.ublock_active) { pill=['Turns on after restart','warn']; }
   else if(wanted) { pill=['Active','ok']; }
   else { pill=['Off','']; }
- } else if(state==='installing') { pill=['Downloading…','warn']; detail='Felaris is downloading the ad blocker. It starts blocking right after.'; }
+ } else if(state==='installing') { pill=['Downloading…','warn']; detail='Felaris is downloading the ad blocker. Restart after installation to activate it.'; }
  else if(state==='failed') { pill=['Download failed','warn']; detail='Felaris could not download the ad blocker. Check your connection and try again.'; action='Try again'; }
  else if(wanted) { pill=['Waiting to download','warn']; action='Install now'; }
  else { action='Install'; }

@@ -2,11 +2,15 @@
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import io
+import math
 import os
 from pathlib import Path
 import subprocess
 import threading
 import time
+import wave
+import struct
 import uuid
 
 
@@ -15,6 +19,18 @@ class Fixture(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split('?', 1)[0]
+        if path == '/tone.wav':
+            buffer = io.BytesIO()
+            with wave.open(buffer, 'wb') as audio:
+                audio.setparams((1, 2, 8000, 0, 'NONE', 'not compressed'))
+                audio.writeframes(b''.join(struct.pack('<h', int(2000 * math.sin(index * math.tau * 440 / 8000))) for index in range(8000)))
+            body = buffer.getvalue()
+            self.send_response(200)
+            self.send_header('Content-Type', 'audio/wav')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path in ('/tests/ui.html', '/src/ui.html', '/src/start_page.html', '/src/new_tab.html', '/src/browser.js', '/assets/favicon.svg'):
             body = (Path(__file__).resolve().parent.parent / path.lstrip('/')).read_bytes()
             self.send_response(200)
@@ -46,7 +62,7 @@ class Fixture(BaseHTTPRequestHandler):
         if self.path == '/slow-download':
             self.wfile.write(body[:32768])
             self.wfile.flush()
-            self.release_download.wait(timeout=20)
+            self.release_download.wait(timeout=60)
             self.wfile.write(body[32768:])
         else:
             self.wfile.write(body)

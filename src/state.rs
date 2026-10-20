@@ -32,6 +32,10 @@ pub struct Tab {
     pub generation: u64,
     #[serde(skip)]
     pub pending_url: Option<String>,
+    #[serde(skip)]
+    pub last_active: u64,
+    #[serde(skip)]
+    pub has_capture: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,6 +64,8 @@ pub struct BrowserState {
     pub shortcuts: Vec<Shortcut>,
     #[serde(skip)]
     next_tab_id: usize,
+    #[serde(skip)]
+    activity_clock: u64,
     pub homepage: String,
     #[serde(default)]
     pub closed_tabs: Vec<Tab>,
@@ -112,6 +118,8 @@ impl BrowserState {
             error: None,
             generation: 0,
             pending_url: None,
+            last_active: 0,
+            has_capture: false,
         };
 
         Self {
@@ -126,6 +134,7 @@ impl BrowserState {
             can_restore_closed_tab: false,
             shortcuts: Self::load_shortcuts(),
             next_tab_id: 2,
+            activity_clock: 0,
             homepage: "felaris://newtab".to_string(),
             closed_tabs: Vec::new(),
             update_available: None,
@@ -157,7 +166,7 @@ impl BrowserState {
         state
     }
 
-    fn from_session(json: &str) -> Option<Self> {
+    pub(crate) fn from_session(json: &str) -> Option<Self> {
         let mut state: Self = serde_json::from_str(json).ok()?;
         state.workspaces = Self::new().workspaces;
         let mut ids = std::collections::HashSet::new();
@@ -203,21 +212,6 @@ impl BrowserState {
         Some(state)
     }
 
-    pub fn save_session(&self) -> Result<(), String> {
-        let path = crate::profile::directory().join("session.json");
-        if let Ok(previous) = std::fs::read(&path)
-            && std::str::from_utf8(&previous)
-                .ok()
-                .and_then(Self::from_session)
-                .is_some()
-        {
-            crate::profile::write_atomic(&path.with_extension("json.bak"), &previous)
-                .map_err(|error| error.to_string())?;
-        }
-        let bytes = serde_json::to_vec(self).map_err(|error| error.to_string())?;
-        crate::profile::write_atomic(&path, &bytes).map_err(|error| error.to_string())
-    }
-
     pub fn add_tab(&mut self, url: Option<String>, is_pinned: bool) -> usize {
         let id = self.next_tab_id;
         self.next_tab_id += 1;
@@ -243,7 +237,10 @@ impl BrowserState {
             error: None,
             generation: 0,
             pending_url: None,
+            last_active: self.activity_clock.saturating_add(1),
+            has_capture: false,
         };
+        self.activity_clock = new_tab.last_active;
         self.tabs.push(new_tab);
         self.active_tab_id = id;
         self.record_visit(&target_url);
@@ -307,10 +304,12 @@ impl BrowserState {
             tab.can_go_forward = false;
             tab.error = None;
             tab.pending_url = None;
+            tab.has_capture = false;
             let id = tab.id;
             self.active_workspace_id = tab.workspace_id;
             self.tabs.push(tab);
             self.active_tab_id = id;
+            self.switch_tab(id);
             self.can_restore_closed_tab = !self.closed_tabs.is_empty();
             Some(id)
         } else {
@@ -320,11 +319,39 @@ impl BrowserState {
 
     pub fn switch_tab(&mut self, tab_id: usize) -> Option<&Tab> {
         if let Some(t) = self.tabs.iter_mut().find(|t| t.id == tab_id) {
+            self.activity_clock = self.activity_clock.saturating_add(1);
+            t.last_active = self.activity_clock;
             t.is_sleeping = false;
             self.active_tab_id = tab_id;
             self.active_workspace_id = t.workspace_id;
         }
         self.active_tab()
+    }
+
+    pub fn sleep_candidates(
+        &self,
+        live: &std::collections::HashSet<usize>,
+        downloads: &std::collections::HashMap<usize, usize>,
+        budget: usize,
+    ) -> Vec<&Tab> {
+        if live.len() <= budget {
+            return Vec::new();
+        }
+        let mut candidates: Vec<_> = self
+            .tabs
+            .iter()
+            .filter(|tab| {
+                live.contains(&tab.id)
+                    && tab.id != self.active_tab_id
+                    && !tab.is_pinned
+                    && !tab.is_sleeping
+                    && !tab.is_loading
+                    && !tab.has_capture
+                    && downloads.get(&tab.id).copied().unwrap_or(0) == 0
+            })
+            .collect();
+        candidates.sort_by_key(|tab| tab.last_active);
+        candidates
     }
 
     pub fn switch_workspace(&mut self, workspace_id: usize) -> Option<&Tab> {
@@ -407,10 +434,11 @@ impl BrowserState {
             error: None,
             generation: 0,
             pending_url: None,
+            last_active: 0,
+            has_capture: false,
         };
         self.tabs.insert(index + 1, copy);
-        self.active_tab_id = id;
-        self.active_workspace_id = source.workspace_id;
+        self.switch_tab(id);
         self.record_visit(&source.url);
         Some(id)
     }
@@ -663,6 +691,60 @@ mod tests {
     use super::*;
 
     #[test]
+    fn automatic_sleep_orders_old_tabs_and_protects_active_work() {
+        let mut state = BrowserState::new();
+        let pinned = state.add_tab(None, true);
+        let capture = state.add_tab(None, false);
+        state.tabs.last_mut().unwrap().has_capture = true;
+        let loading = state.add_tab(None, false);
+        state.tabs.last_mut().unwrap().is_loading = true;
+        let download = state.add_tab(None, false);
+        let recent = state.add_tab(None, false);
+        state.switch_tab(1);
+        let live = state.tabs.iter().map(|tab| tab.id).collect();
+        let downloads = [(download, 1)].into_iter().collect();
+        let candidates: Vec<_> = state
+            .sleep_candidates(&live, &downloads, 1)
+            .iter()
+            .map(|tab| tab.id)
+            .collect();
+        assert_eq!(candidates, [recent]);
+        assert!(
+            !candidates
+                .iter()
+                .any(|id| [1, pinned, capture, loading, download].contains(id))
+        );
+        assert!(state.sleep_candidates(&live, &downloads, 12).is_empty());
+        state.switch_tab(recent);
+        assert_eq!(state.sleep_candidates(&live, &downloads, 1)[0].id, 1);
+    }
+
+    #[test]
+    fn large_sessions_restore_lazily_without_losing_tabs() {
+        for count in [100, 300, 500] {
+            let mut state = BrowserState::new();
+            for index in 1..count {
+                state.add_tab(
+                    Some(format!("https://example.com/{index}")),
+                    index % 25 == 0,
+                );
+            }
+            let restored =
+                BrowserState::from_session(&serde_json::to_string(&state).unwrap()).unwrap();
+            assert_eq!(restored.tabs.len(), count);
+            assert_eq!(
+                restored.tabs.iter().filter(|tab| !tab.is_sleeping).count(),
+                1
+            );
+            assert_eq!(restored.active_tab_id, state.active_tab_id);
+            assert_eq!(
+                restored.tabs.iter().filter(|tab| tab.is_pinned).count(),
+                state.tabs.iter().filter(|tab| tab.is_pinned).count()
+            );
+        }
+    }
+
+    #[test]
     fn saved_session_restores_pins_workspaces_and_unique_ids() {
         let mut state = BrowserState::new();
         state.toggle_pin(1);
@@ -791,10 +873,13 @@ mod tests {
     fn duplicate_and_move_tab_preserve_workspace_invariants() {
         let mut state = BrowserState::new();
         state.update_active_tab("https://example.com".into(), Some("Example".into()));
+        state.tabs[0].has_capture = true;
         let copy = state.duplicate_tab(1).unwrap();
         assert_eq!(state.active_tab_id, copy);
         assert_eq!(state.active_tab().unwrap().url, "https://example.com");
         assert_eq!(state.active_tab().unwrap().title, "Example");
+        assert!(!state.active_tab().unwrap().has_capture);
+        assert!(state.active_tab().unwrap().last_active > state.tabs[0].last_active);
 
         state.move_tab_to_workspace(copy, 2);
         assert_eq!(state.active_workspace_id, 1);

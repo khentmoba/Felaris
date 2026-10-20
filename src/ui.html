@@ -24,7 +24,7 @@ svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7;
 .tabs { flex:1; min-height:0; overflow:auto; scrollbar-width:thin; scrollbar-color:var(--line) transparent; margin:0 -4px; padding:0 4px; }
 .tab-group { display:flex; flex-direction:column; gap:4px; } .tab-group:not(:empty)+.tab-group:not(:empty) { border-top:1px solid var(--line); margin-top:12px; padding-top:12px; }
 .tab { display:flex; align-items:center; gap:4px; min-height:40px; border-radius:9px; position:relative; } .tab:hover { background:var(--surface); } .tab.active { background:var(--active); } .tab.active .tab-main { font-weight:600; }
-.tab-main { min-width:0; display:flex; gap:10px; align-items:center; flex:1; text-align:left; height:40px; padding:0 9px; border-radius:9px; } .tab-main:hover { background:transparent; } .favicon { width:21px; height:21px; flex-shrink:0; display:grid; place-items:center; background:var(--surface); border-radius:6px; color:var(--accent); font-size:11px; font-weight:600; } .favicon svg { width:14px; height:14px; } .favicon { position:relative; overflow:hidden; } .favicon img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:var(--surface); } .tab-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .tab.sleeping:not(.active) .tab-title { color:var(--muted); } .sleep-icon { color:var(--muted); width:13px; height:13px; }
+.tab-main { min-width:0; display:flex; gap:10px; align-items:center; flex:1; text-align:left; height:40px; padding:0 9px; border-radius:9px; } .tab-main:hover { background:transparent; } .favicon { width:16px; height:16px; flex-shrink:0; display:grid; place-items:center; color:var(--accent); font-size:11px; font-weight:600; } .favicon svg { width:14px; height:14px; } .favicon { position:relative; } .favicon img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; } .tab-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .tab.sleeping:not(.active) .tab-title { color:var(--muted); } .sleep-icon { color:var(--muted); width:13px; height:13px; }
 .close-tab { width:28px; height:28px; display:grid; place-items:center; opacity:0; margin-right:5px; flex-shrink:0; } .close-tab svg { width:14px; } .tab:hover .close-tab,.tab:focus-within .close-tab,.tab.active .close-tab { opacity:1; } .close-tab:hover { background:#45454b; color:var(--text); }
 .empty { text-align:center; color:var(--muted); line-height:1.6; padding:24px 10px; }
 .footer { border-top:1px solid var(--line); padding-top:10px; display:flex; flex-direction:column; gap:10px; } .workspace-switcher { display:flex; align-items:center; gap:6px; } #profiles { flex:1; min-width:0; } #profiles summary { display:flex; align-items:center; gap:8px; min-height:34px; padding:6px 8px; border-radius:8px; } #profile-current { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } #profiles .menu { left:0; right:auto; width:236px; } #spaces { display:flex; flex-direction:column; gap:4px; max-height:180px; overflow:auto; scrollbar-width:thin; } .space { min-height:36px; color:var(--muted); overflow-wrap:anywhere; } #profile-form { display:flex; flex-direction:column; gap:8px; padding:10px; border-top:1px solid var(--line); margin-top:8px; } #profile-name { width:100%; padding:9px; background:var(--bg); border:1px solid var(--line); border-radius:8px; } #profile-form button { background:var(--active); justify-content:center; } #profile-form small { color:var(--muted); line-height:1.5; } #profile-error { color:var(--text); margin:0; } .space[aria-pressed="true"] { background:var(--active); color:var(--accent); } .space svg { width:17px; }
@@ -165,8 +165,19 @@ function renderTabs() {
   const select=document.createElement('button'); select.className='tab-main'; select.title=tab.title+'\n'+tab.url+(tab.is_pinned?'\nPinned':'')+(tab.is_sleeping?'\nSleeping — select to wake':'');
   if(tab.id===currentState.active_tab_id) select.setAttribute('aria-current','page');
   const favicon=document.createElement('span'); favicon.className='favicon'; favicon.setAttribute('aria-hidden','true');
-  try { favicon.textContent=new URL(tab.url).hostname.replace(/^www\./,'').charAt(0).toUpperCase(); } catch { favicon.append(icon('globe')); }
-  if(tab.favicon) { const img=document.createElement('img'); img.src=tab.favicon; img.alt=''; img.onerror=()=>img.remove(); favicon.append(img); }
+  const fallback=icon('globe'); favicon.append(fallback);
+  try {
+   const site=new URL(tab.url);
+   if(['https:','http:'].includes(site.protocol)) {
+    const root=site.origin+'/favicon.ico';
+    let source=root;
+    try { if(['https:','http:'].includes(new URL(tab.favicon).protocol)) source=tab.favicon; } catch {}
+    const img=document.createElement('img'); img.alt=''; img.referrerPolicy='no-referrer'; img.hidden=true;
+    img.onload=()=>{ img.hidden=false; fallback.style.visibility='hidden'; };
+    img.onerror=()=>{ if(img.src!==root) img.src=root; else img.remove(); };
+    img.src=source; favicon.append(img);
+   }
+  } catch {}
   if(tab.url==='felaris://newtab') { favicon.replaceChildren(icon('felaris')); }
   const label=document.createElement('span'); label.className='tab-title'; label.textContent=tab.title||tab.url;
   select.dataset.tabId=tab.id; select.setAttribute('aria-label',(tab.title||tab.url)+(tab.is_pinned?', pinned':'')+(tab.is_sleeping?', sleeping':'')+(tab.error?', page unavailable':''));

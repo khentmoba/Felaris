@@ -394,6 +394,7 @@ fn content(
     id: usize,
     proxy: &EventLoopProxy<UserEvent>,
     popup_host: &PopupHost,
+    fresh: bool,
 ) -> wry::Result<WebView> {
     let generation = std::collections::hash_map::RandomState::new().hash_one(id);
     let tab = state.tabs.iter_mut().find(|tab| tab.id == id).unwrap();
@@ -523,7 +524,16 @@ fn content(
     {
         view.load_html(include_str!("error.html"))?;
     } else {
-        load(&view, state, &url)?;
+        if fresh && (url.starts_with("https://") || url.starts_with("http://")) {
+            let mut headers = wry::http::HeaderMap::new();
+            headers.insert(
+                wry::http::header::CACHE_CONTROL,
+                wry::http::HeaderValue::from_static("no-cache"),
+            );
+            view.load_url_with_headers(&url, headers)?;
+        } else {
+            load(&view, state, &url)?;
+        }
         if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id) {
             tab.is_loading = true;
         }
@@ -635,6 +645,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         headless,
     };
     let mut state = BrowserState::restore();
+    let refresh_after_update = args.iter().any(|arg| arg == "--updated") && urls.is_empty();
     let saved = proxy.clone();
     let session = SessionWriter::new(move |result| {
         let _ = saved.send_event(UserEvent::SessionSaved(result));
@@ -770,7 +781,6 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     }
     let popup_bar = popup_bar_builder.build(&*popup_window)?;
     let mut last_loading = false;
-    let mut last_topbar_tab: Option<(String, String)> = None;
     let mut cursor_pos = (100., 100.);
     let mut popup_loading = false;
     let mut side_progress = if state.sidebar_collapsed { 0. } else { 1. };
@@ -805,6 +815,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             initial_id,
             &proxy,
             &popup_host,
+            refresh_after_update,
         )?,
     );
     let mut palette_open = false;
@@ -977,7 +988,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         if let Some(smoke) = &mut smoke && smoke.result(phase, success, &proxy) { *flow = ControlFlow::Exit; }
                     }
                     UserEvent::Ready => { last_sidebar_state.clear(); },
-                    UserEvent::TopbarReady => { last_loading = false; last_topbar_tab = None; },
+                    UserEvent::TopbarReady => { last_loading = false; },
                     UserEvent::PopupReady => {
                         if let Ok(url_json) = serde_json::to_string(&*popup_host.url.borrow()) {
                             let _ = popup_bar.evaluate_script(&format!("window.setPopupState?.({url_json},{popup_loading})"));
@@ -1193,9 +1204,15 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         downloads.retain(|id, count| *count > 0 || awake.contains(id));
         sleep_pending.retain(|(id, _)| views.contains_key(id));
         let active_id = state.active_tab_id;
+        if visible_id != Some(active_id)
+            && let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == active_id)
+            && tab.error.take().is_some()
+        {
+            views.remove(&active_id);
+        }
         let mut created = false;
         if let std::collections::hash_map::Entry::Vacant(entry) = views.entry(active_id) {
-            match content(&window, &mut context, &mut state, active_id, &proxy, &popup_host) {
+            match content(&window, &mut context, &mut state, active_id, &proxy, &popup_host, false) {
                 Ok(view) => {
                     if state.active_tab().is_some_and(|tab| tab.error.is_some()) { let _ = view.load_html(include_str!("error.html")); }
                     entry.insert(view);
@@ -1247,6 +1264,10 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         }
         let _ = palette.set_bounds(overlay_bounds);
         let _ = palette.set_visible(palette_open);
+        if palette_open {
+            desktop::raise(&palette);
+            desktop::raise(&sidebar);
+        }
         if visible_id != Some(active_id) && !palette_open {
             if !headless && let Some(view) = views.get(&active_id) { let _ = view.focus(); }
             visible_id = Some(active_id);
@@ -1255,19 +1276,11 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         if state.is_loading != last_loading { last_loading = state.is_loading; let _ = topbar.evaluate_script(&format!("window.setLoading?.({last_loading})")); }
         if let Some(tab) = state.active_tab() {
             window.set_title(&format!("{} — Felaris", tab.title));
-            let pair = (tab.title.clone(), tab.url.clone());
-            if last_topbar_tab.as_ref() != Some(&pair) {
-                if let (Ok(t), Ok(u)) = (serde_json::to_string(&pair.0), serde_json::to_string(&pair.1)) {
-                    let _ = topbar.evaluate_script(&format!("window.setTab?.({t},{u})"));
-                }
-                last_topbar_tab = Some(pair);
-            }
         }
         if let Ok(json) = serde_json::to_string(&state) {
             if json != last_sidebar_state && sidebar.evaluate_script(&format!("window.updateState?.({json})")).is_ok() { last_sidebar_state = json.clone(); }
             if focus_address { if !headless { let _ = sidebar.focus(); } let _ = sidebar.evaluate_script("window.focusAddress()"); focus_address = false; }
             if palette_open && palette_needs_open {
-                desktop::raise(&palette);
                 let history_json = serde_json::to_string(&history::all()).unwrap_or_else(|_| "[]".into());
                 let _ = palette.evaluate_script(&format!("window.openNewTab?.({json},{history_json})"));
                 if !headless { let _ = palette.focus(); }

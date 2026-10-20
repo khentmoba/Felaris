@@ -44,6 +44,16 @@ window.runChecks=async()=>{
  check('current workspace tabs only',d.querySelectorAll('.tab').length===4);
  check('newtab tab uses Felaris logo icon',d.querySelector('.tab-main[data-tab-id="1"] use')?.getAttribute('href')==='#felaris');
  check('sidebar shortcut dock removed',!d.querySelector('.essentials,.essential'));
+ const github=d.querySelector('.tab[data-tab-id="3"] .favicon');
+ check('missing sidebar favicon tries the site icon',github.querySelector('img')?.src==='https://github.com/favicon.ico');
+ check('sidebar icons keep their natural shape',w.getComputedStyle(github).width==='16px'&&w.getComputedStyle(github).backgroundColor==='rgba(0, 0, 0, 0)');
+ const withIcon=structuredClone(fixtureState);
+ withIcon.tabs[2].favicon=location.origin+'/assets/favicon.svg';
+ w.updateState(withIcon);
+ const siteImage=d.querySelector('.tab[data-tab-id="3"] .favicon img');
+ await new Promise((resolve,reject)=>{if(siteImage.complete&&siteImage.naturalWidth)resolve();else {siteImage.addEventListener('load',resolve,{once:true});siteImage.addEventListener('error',reject,{once:true});}});
+ check('sidebar uses the real site logo without sending a referrer',siteImage.naturalWidth>0&&!siteImage.hidden&&siteImage.referrerPolicy==='no-referrer'&&siteImage.parentNode.querySelector('svg').style.visibility==='hidden');
+ w.updateState(structuredClone(fixtureState));
  const originalRow=d.querySelector('.tab');
  const originalButton=originalRow.querySelector('.tab-main');
  const changed=structuredClone(fixtureState);
@@ -79,7 +89,7 @@ window.runChecks=async()=>{
  check('close IPC',messages.at(-1).action==='duplicate_tab'&&messages.at(-1).id===3&&d.getElementById('tab-context-menu').hidden&&(()=>{d.querySelector('#tabs-container .close-tab').click();return messages.at(-1).action==='close_tab';})());
  d.getElementById('toast-undo').click();check('undo IPC',messages.at(-1).action==='restore_closed_tab');
  w.updateState({...structuredClone(fixtureState),tabs:[...fixtureState.tabs,{id:6,workspace_id:1,title:'<img src=x onerror=alert(1)>',url:'https://example.net'}]});
- check('untrusted titles stay text',!d.querySelector('.tab img'));
+ check('untrusted titles stay text',!d.querySelector('.tab-title img'));
  check('tab motion respects reduced motion',w.matchMedia('(prefers-reduced-motion: reduce)').matches?!d.getAnimations().some(animation=>animation.id==='tab-layout'):d.getAnimations().some(animation=>animation.id==='tab-layout'));
  d.querySelector('.tab-main').focus();w.updateState(structuredClone(fixtureState));
  check('keyboard focus survives updates',d.activeElement.classList.contains('tab-main'));

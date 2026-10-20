@@ -86,9 +86,10 @@ window.runChecks=async()=>{
  page.contentWindow.renderShortcuts([{host:'youtube.com',title:'YouTube',url:'https://youtube.com',visits:5},{host:'x.com',title:'X',url:'https://x.com',visits:3},{host:'github.com',title:'GitHub',url:'https://github.com',visits:0}]);
  check('frequent sites lead shortcuts',[...p.querySelectorAll('.shortcut-label')].slice(0,2).map(el=>el.textContent).join(',')==='YouTube,X'&&p.getElementById('shortcuts-heading').textContent==='Most visited');
  p.querySelector('.shortcut').click();check('ranked shortcut IPC',messages.at(-1).url==='https://youtube.com/');
- w.updateState({...structuredClone(fixtureState),sidebar_collapsed:true});
- d.querySelector('summary').click();check('collapsed menu requests expansion',messages.at(-1).action==='toggle_sidebar');
- w.updateState(structuredClone(fixtureState));check('expanded menu opens',d.getElementById('browser-menu').open);
+ w.updateState({...structuredClone(fixtureState),sidebar_collapsed:true});const hidden=d.body.classList.contains('collapsed');
+ check('collapsed sidebar hides its controls',hidden);
+ w.updateState({...structuredClone(fixtureState),sidebar_collapsed:true,sidebar_peek:true});
+ check('hidden sidebar reveals on peek',!d.body.classList.contains('collapsed'));
  d.getElementById('browser-menu').open=false;
  w.updateState(structuredClone(fixtureState));
  palette.hidden=false;

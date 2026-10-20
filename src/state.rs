@@ -21,6 +21,8 @@ pub struct Tab {
     #[serde(default)]
     pub is_loading: bool,
     #[serde(default)]
+    pub favicon: Option<String>,
+    #[serde(default)]
     pub can_go_back: bool,
     #[serde(default)]
     pub can_go_forward: bool,
@@ -38,6 +40,8 @@ pub struct Shortcut {
     pub title: String,
     pub url: String,
     pub visits: usize,
+    #[serde(default)]
+    pub favicon: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +51,10 @@ pub struct BrowserState {
     pub active_workspace_id: usize,
     pub workspaces: Vec<Workspace>,
     pub sidebar_collapsed: bool,
+    #[serde(default)]
+    pub sidebar_peek: bool,
+    #[serde(skip)]
+    pub topbar_peek: bool,
     pub is_loading: bool,
     pub can_restore_closed_tab: bool,
     pub shortcuts: Vec<Shortcut>,
@@ -96,6 +104,7 @@ impl BrowserState {
             is_pinned: false,
             is_sleeping: false,
             is_loading: false,
+            favicon: None,
             can_go_back: false,
             can_go_forward: false,
             error: None,
@@ -109,6 +118,8 @@ impl BrowserState {
             active_workspace_id: 1,
             workspaces,
             sidebar_collapsed: false,
+            sidebar_peek: false,
+            topbar_peek: false,
             is_loading: false,
             can_restore_closed_tab: false,
             shortcuts: Self::load_shortcuts(),
@@ -221,6 +232,7 @@ impl BrowserState {
             is_pinned,
             is_sleeping: false,
             is_loading: false,
+            favicon: None,
             can_go_back: false,
             can_go_forward: false,
             error: None,
@@ -331,6 +343,7 @@ impl BrowserState {
 
     pub fn toggle_sidebar(&mut self) -> bool {
         self.sidebar_collapsed = !self.sidebar_collapsed;
+        self.sidebar_peek = false;
         self.sidebar_collapsed
     }
 
@@ -410,6 +423,29 @@ impl BrowserState {
         items
     }
 
+    pub fn set_favicon(&mut self, id: usize, favicon: Option<String>) {
+        let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == id) else {
+            return;
+        };
+        tab.favicon = favicon.clone();
+        let (Some(favicon), Some((host, ..))) = (favicon, Self::shortcut_origin(&tab.url)) else {
+            return;
+        };
+        for tab in &mut self.tabs {
+            if tab.favicon.is_none()
+                && Self::shortcut_origin(&tab.url).is_some_and(|origin| origin.0 == host)
+            {
+                tab.favicon = Some(favicon.clone());
+            }
+        }
+        if let Some(item) = self.shortcuts.iter_mut().find(|item| item.host == host)
+            && item.favicon.as_ref() != Some(&favicon)
+        {
+            item.favicon = Some(favicon);
+            self.save_shortcuts();
+        }
+    }
+
     fn record_visit(&mut self, url: &str) {
         let Some((host, root_url, label)) = Self::shortcut_origin(url) else {
             return;
@@ -428,6 +464,7 @@ impl BrowserState {
                     title: label,
                     url: root_url,
                     visits: 1,
+                    favicon: None,
                 },
             );
         }
@@ -514,6 +551,7 @@ impl BrowserState {
             title: title.to_string(),
             url: url.to_string(),
             visits: 0,
+            favicon: None,
         })
         .collect()
     }

@@ -143,6 +143,20 @@ pub fn attach(
             }
             Ok(())
         })), &mut token)?;
+        let favicon = proxy.clone();
+        webview.cast::<ICoreWebView2_15>()?.add_FaviconChanged(
+            &FaviconChangedEventHandler::create(Box::new(move |view, _| {
+                if let Some(view) = view
+                    && let Ok(view) = view.cast::<ICoreWebView2_15>()
+                {
+                    let mut uri = PWSTR::null();
+                    view.FaviconUri(&mut uri)?;
+                    let _ = favicon.send_event(UserEvent::Favicon(id, generation, take_pwstr(uri)));
+                }
+                Ok(())
+            })),
+            &mut token,
+        )?;
         let crashed = proxy.clone();
         webview.add_ProcessFailed(
             &ProcessFailedEventHandler::create(Box::new(move |_, _| {

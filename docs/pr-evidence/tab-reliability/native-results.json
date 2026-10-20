@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "checks": [
+    "An address without a trailing slash finishes loading",
+    "pushState updates the saved URL and native Back and Forward still work",
+    "Back leaves a failed navigation and clears its error",
+    "Closing the active tab wakes its sleeping replacement",
+    "Close Other Tabs preserves pins, other workspaces, the active tab and a real download, with undo",
+    "Native keyboard interactions and 49 DOM checks at desktop and minimum sizes",
+    "100/300/500-tab sessions restore lazily, bound actual WebViews, protect drafts/media/pins/downloads, wake sleepers, and recover after forced exit"
+  ]
+}

@@ -4,7 +4,7 @@ use crate::{
 };
 use serde::Deserialize;
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
     hash::BuildHasher,
     rc::Rc,
@@ -226,6 +226,7 @@ struct PopupHost {
     window: Rc<Window>,
     view: Rc<RefCell<Option<WebView>>>,
     url: Rc<RefCell<String>>,
+    auth_seen: Rc<Cell<bool>>,
     headless: bool,
 }
 
@@ -322,6 +323,7 @@ fn open_popup(
         host.window.set_focus();
     }
     *host.url.borrow_mut() = url.to_string();
+    host.auth_seen.set(false);
     let title_proxy = proxy.clone();
     let nav_proxy = proxy.clone();
     let tab_proxy = proxy.clone();
@@ -642,6 +644,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         window: popup_window.clone(),
         view: Rc::new(RefCell::new(None)),
         url: Rc::new(RefCell::new(String::new())),
+        auth_seen: Rc::new(Cell::new(false)),
         headless,
     };
     let mut state = BrowserState::restore();
@@ -1002,6 +1005,12 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                     UserEvent::PopupState(url, loading) => {
                         popup_loading = loading;
                         if !url.is_empty() && url != "about:blank" {
+                            // A sign-in flow that lands on a normal page instead of closing belongs in the main window.
+                            if profile::is_auth_url(&url) {
+                                popup_host.auth_seen.set(true);
+                            } else if !loading && popup_host.auth_seen.get() && popup_host.view.borrow().is_some() {
+                                let _ = proxy.send_event(UserEvent::Command(Command::ExpandPopup { url: url.clone() }));
+                            }
                             *popup_host.url.borrow_mut() = url;
                         }
                         if let Ok(url_json) = serde_json::to_string(&*popup_host.url.borrow()) {

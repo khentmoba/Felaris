@@ -42,7 +42,7 @@ assert.deepEqual(press('t', { ctrlKey: true }), { action: 'new_tab' });
 keydown({ key: 't', ctrlKey: true, isTrusted: true, isComposing: true });
 keydown({ key: 't', ctrlKey: true, isTrusted: false });
 assert.equal(messages.length, 0);
-for (const file of ['src/ui.html', 'src/start_page.html', 'src/new_tab.html', 'src/topbar.html', 'src/popup.html']) {
+for (const file of ['src/ui.html', 'src/start_page.html', 'src/new_tab.html', 'src/topbar.html', 'src/popup.html', 'src/permission.html']) {
   const html = fs.readFileSync(file, 'utf8').replace('__COMMON_SCRIPT__', fs.readFileSync('src/browser.js', 'utf8')).replace('__SHORTCUTS__', '[]');
   for (const script of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new vm.Script(script[1], { filename: file });
   assert.ok(!html.includes('__COMMON_SCRIPT__'));

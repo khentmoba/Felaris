@@ -136,6 +136,16 @@ window.runChecks=async()=>{
  check('palette traps focus',nd.activeElement.id==='dismiss');
  n.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',cancelable:true}));
  check('palette focus wraps to input',nd.activeElement===ni);
+ n.openNewTab({tabs:[],shortcuts:[{title:'Facebook',url:'https://www.facebook.com'},{title:'X',url:'https://x.com'}]},[]);
+ const hoverRows=[...nd.querySelectorAll('.option')];
+ hoverRows[1].dispatchEvent(new PointerEvent('pointermove',{bubbles:true,pointerType:'mouse'}));
+ check('pointer selects the hovered suggestion',hoverRows[1].getAttribute('aria-selected')==='true'&&ni.getAttribute('aria-activedescendant')===hoverRows[1].id);
+ check('only one search suggestion is highlighted',nd.querySelectorAll('.option[aria-selected="true"]').length===1);
+ n.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowUp'}));
+ check('keyboard continues from the hovered suggestion',hoverRows[0].getAttribute('aria-selected')==='true');
+ hoverRows[1].dispatchEvent(new PointerEvent('pointermove',{bubbles:true,pointerType:'mouse'}));submit();await settle();
+ check('Enter opens the hovered suggestion',messages.at(-1).action==='submit_new_tab'&&messages.at(-1).url==='https://x.com');
+ n.openNewTab(structuredClone(fixtureState));
  ni.dispatchEvent(new CompositionEvent('compositionstart'));change('入力');const beforeComposition=messages.length;submit();
  check('IME composition does not submit',messages.length===beforeComposition);
  ni.dispatchEvent(new CompositionEvent('compositionend'));

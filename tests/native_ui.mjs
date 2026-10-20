@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { connect as connectView, closeConnections, writeDiagnostics } from './native_cdp.mjs';
 
 const [chromePort, contentPort, origin, artifacts] = process.argv.slice(2);
@@ -95,6 +97,52 @@ try {
   await until(() => restored.evaluate('window.authDone === true'), 'OAuth popup communicates with opener and closes');
   console.log('Native keyboard, palette open/cancel/submit, page retention, restoration, compact address focus, workspaces, pinning, reduced motion, OAuth popup, and IPC guard passed.');
 
+  await command('new_tab');
+  await until(() => palette.evaluate('!input.readOnly'), 'open palette for pointer regression');
+  await palette.evaluate(`window.openNewTab({tabs:[],shortcuts:[{title:'Facebook',url:'${origin}/facebook'},{title:'X',url:'${origin}/x'}]},[])`);
+  const xRow = await palette.evaluate('(()=>{const r=document.querySelectorAll(".option")[1].getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()');
+  await palette.call('Input.dispatchMouseEvent', { type: 'mouseMoved', ...xRow });
+  assert.equal(await palette.evaluate('document.querySelector(".option[aria-selected=true] .option-title").textContent'), 'X');
+  await press(palette, 'Enter');
+  await until(() => sidebar.evaluate(`currentState.tabs.find(tab=>tab.id===currentState.active_tab_id)?.url === '${origin}/x'`), 'Enter opens pointer-selected X result');
+  console.log('Native pointer movement selects X and Enter opens the same result.');
+
+  const permission = await connect(page => page.title === 'Felaris — Site permission');
+  for (const [site, allow] of [[origin, false], [origin.replace('127.0.0.1', 'localhost'), true]]) {
+    await command('new_tab', { url: site + '/permission' });
+    const requester = await connect(page => page.url === site + '/permission', contentPort);
+    await until(() => requester.evaluate('document.readyState === "complete"'), 'permission fixture ready');
+    await requester.call('Runtime.evaluate', { expression: 'window.permissionResult="pending";Notification.requestPermission().then(result=>window.permissionResult=result);true', userGesture: true });
+    await until(() => permission.evaluate(`current?.origin === ${JSON.stringify(site)} && current.kind === 'notifications'`), 'notification permission prompt');
+    assert.equal(await permission.evaluate('document.getElementById("title").textContent'), 'Show notifications?');
+    assert.equal(await permission.evaluate('document.getElementById("origin").textContent'), site);
+    assert.equal(await permission.evaluate('document.activeElement.id'), 'block');
+    if (artifacts && !allow) {
+      const screenshot = await permission.call('Page.captureScreenshot', { format: 'png' });
+      await writeFile(join(artifacts, 'permission.png'), Buffer.from(screenshot.data, 'base64'));
+    }
+    await permission.evaluate(`document.getElementById('${allow ? 'allow' : 'block'}').click()`);
+    await until(() => requester.evaluate(`window.permissionResult === '${allow ? 'granted' : 'denied'}'`), 'native permission decision applied');
+  }
+  console.log('Native notification permission prompts show the requesting origin and apply Block and Allow.');
+
+  await command('new_tab', { url: origin + '/location' });
+  const locator = await connect(page => page.url === origin + '/location', contentPort);
+  await until(() => locator.evaluate('document.readyState === "complete"'), 'location fixture ready');
+  await locator.call('Runtime.evaluate', { expression: 'navigator.geolocation.getCurrentPosition(()=>{},()=>{});true', userGesture: true });
+  await until(() => permission.evaluate('current?.kind === "location"'), 'location prompt');
+  const staleToken = await permission.evaluate('current.token');
+  await locator.evaluate(`window.ipc.postMessage(JSON.stringify({token:${staleToken},allow:true}));true`);
+  assert.equal(await permission.evaluate('current.token'), staleToken, 'page IPC cannot answer a browser permission prompt');
+  assert.notEqual(await locator.evaluate('navigator.permissions.query({name:"geolocation"}).then(result=>result.state)'), 'granted');
+  await command('navigate', { url: origin + '/navigated' });
+  await until(() => permission.evaluate('current === null'), 'navigation dismisses pending permission');
+  await permission.evaluate(`window.ipc.postMessage(JSON.stringify({token:${staleToken},allow:true}));true`);
+  assert.equal(await permission.evaluate('current'), null);
+  await until(() => locator.evaluate(`location.href === '${origin}/navigated' && document.readyState === 'complete'`), 'navigation completes');
+  assert.notEqual(await locator.evaluate('navigator.permissions.query({name:"geolocation"}).then(result=>result.state)'), 'granted', 'stale responses cannot grant a permission after navigation');
+  console.log('Navigation dismisses a pending permission; stale responses cannot grant it.');
+
   await command('new_tab', { url: origin + '/tests/ui.html' });
   const fixture = await connect(page => page.url === origin + '/tests/ui.html', contentPort);
   await fixture.call('Emulation.setFocusEmulationEnabled', { enabled: true });
@@ -110,8 +158,8 @@ try {
         return null;
       }
     }, 'DOM fixture completion');
-    assert.equal(result, '56 checks passed', `${width}x${height}, ${motion}`);
-    assert.equal(await fixture.evaluate('window.checkResults.length'), 56);
+    assert.equal(result, '60 checks passed', `${width}x${height}, ${motion}`);
+    assert.equal(await fixture.evaluate('window.checkResults.length'), 60);
     console.log(`${result}: ${width}x${height}, ${motion}`);
   }
 } catch (error) {

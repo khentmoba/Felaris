@@ -1,0 +1,226 @@
+use crate::{app::UserEvent, desktop, state::BrowserState};
+use serde::Deserialize;
+use std::{cell::RefCell, collections::VecDeque};
+use tao::{event_loop::EventLoopProxy, window::Window};
+use webview2_com::Microsoft::Web::WebView2::Win32::*;
+use windows::core::Interface;
+use wry::{PageLoadEvent, Rect, WebContext, WebView, WebViewBuilder};
+
+thread_local! {
+    // WebView2 event arguments and deferrals must stay on the UI thread.
+    static REQUESTS: RefCell<VecDeque<Request>> = const { RefCell::new(VecDeque::new()) };
+}
+
+struct Request {
+    token: u64,
+    tab: usize,
+    generation: u64,
+    origin: String,
+    kind: &'static str,
+    args: ICoreWebView2PermissionRequestedEventArgs,
+    deferral: Option<ICoreWebView2Deferral>,
+    proxy: EventLoopProxy<UserEvent>,
+}
+
+impl Request {
+    fn current(&self, state: &BrowserState) -> bool {
+        state.active_tab().is_some_and(|tab| {
+            tab.id == self.tab
+                && tab.generation == self.generation
+                && tab.error.is_none()
+                && url::Url::parse(tab.pending_url.as_ref().unwrap_or(&tab.url))
+                    .is_ok_and(|url| url.origin().ascii_serialization() == self.origin)
+        })
+    }
+
+    fn finish(&mut self, allow: bool) {
+        if let Some(deferral) = self.deferral.take() {
+            unsafe {
+                let granted = self
+                    .args
+                    .SetState(if allow {
+                        COREWEBVIEW2_PERMISSION_STATE_ALLOW
+                    } else {
+                        COREWEBVIEW2_PERMISSION_STATE_DENY
+                    })
+                    .is_ok();
+                let _ = deferral.Complete();
+                if allow && granted && matches!(self.kind, "camera" | "microphone") {
+                    let _ = self
+                        .proxy
+                        .send_event(UserEvent::CaptureAllowed(self.tab, self.generation));
+                }
+            }
+        }
+    }
+}
+
+impl Drop for Request {
+    fn drop(&mut self) {
+        self.finish(false);
+    }
+}
+
+pub fn request(
+    args: &ICoreWebView2PermissionRequestedEventArgs,
+    tab: usize,
+    generation: u64,
+    origin: String,
+    kind: &'static str,
+    proxy: EventLoopProxy<UserEvent>,
+) -> windows::core::Result<()> {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    unsafe {
+        if let Ok(args) = args.cast::<ICoreWebView2PermissionRequestedEventArgs3>() {
+            args.SetSavesInProfile(false)?;
+        }
+        let request = Request {
+            token: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            tab,
+            generation,
+            origin,
+            kind,
+            args: args.clone(),
+            deferral: Some(args.GetDeferral()?),
+            proxy: proxy.clone(),
+        };
+        REQUESTS.with_borrow_mut(|requests| requests.push_back(request));
+        if proxy.send_event(UserEvent::PermissionRequested).is_err() {
+            REQUESTS.with_borrow_mut(|requests| requests.clear());
+        }
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+pub struct Response {
+    pub token: u64,
+    pub allow: bool,
+}
+
+pub struct Prompt {
+    view: WebView,
+    pending: Option<Request>,
+    ready: bool,
+    dirty: bool,
+    visible: bool,
+}
+
+impl Prompt {
+    pub fn new(
+        window: &Window,
+        context: &mut WebContext,
+        proxy: EventLoopProxy<UserEvent>,
+        headless: bool,
+    ) -> wry::Result<Self> {
+        let loaded = proxy.clone();
+        let mut builder = WebViewBuilder::new_with_web_context(context)
+            .with_visible(false)
+            .with_focused(false)
+            .with_transparent(true)
+            .with_background_color((0, 0, 0, 0))
+            .with_html(include_str!("permission.html"))
+            .with_navigation_handler(|url| {
+                url == "about:blank" || url.starts_with("data:text/html;")
+            })
+            .with_on_page_load_handler(move |event, _| {
+                if matches!(event, PageLoadEvent::Finished) {
+                    let _ = loaded.send_event(UserEvent::PermissionReady);
+                }
+            })
+            .with_ipc_handler(move |request| {
+                if let Ok(response) = serde_json::from_str::<Response>(request.body()) {
+                    let _ = proxy.send_event(UserEvent::PermissionResponse(
+                        response.token,
+                        response.allow,
+                    ));
+                }
+            });
+        if headless && let Ok(arguments) = std::env::var("FELARIS_SMOKE_BROWSER_ARGUMENTS") {
+            use wry::WebViewBuilderExtWindows;
+            builder = builder.with_additional_browser_args(arguments);
+        }
+        Ok(Self {
+            view: builder.build(window)?,
+            pending: None,
+            ready: false,
+            dirty: false,
+            visible: false,
+        })
+    }
+
+    pub fn ready(&mut self) {
+        self.ready = true;
+        self.dirty = true;
+    }
+
+    pub fn respond(&mut self, token: u64, allow: bool, state: &BrowserState) -> bool {
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|request| request.token == token)
+            && let Some(mut request) = self.pending.take()
+        {
+            request.finish(allow && request.current(state));
+            return true;
+        }
+        false
+    }
+
+    pub fn cancel_tab(&mut self, tab: usize) {
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|request| request.tab == tab)
+        {
+            self.pending.take();
+        }
+        REQUESTS.with_borrow_mut(|requests| requests.retain(|request| request.tab != tab));
+    }
+
+    pub fn sync(&mut self, state: &BrowserState, bounds: Rect, blocked: bool, headless: bool) {
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|request| blocked || !request.current(state))
+        {
+            self.pending.take();
+        }
+        while self.pending.is_none() {
+            let Some(request) = REQUESTS.with_borrow_mut(|requests| requests.pop_front()) else {
+                break;
+            };
+            if !blocked && request.current(state) {
+                self.pending = Some(request);
+                self.dirty = true;
+            }
+        }
+        let visible = self.ready && self.pending.is_some();
+        if visible {
+            let _ = self.view.set_bounds(bounds);
+            if self.dirty
+                && let Some(request) = &self.pending
+            {
+                let data = serde_json::json!({ "token":request.token, "origin":request.origin, "kind":request.kind });
+                if self
+                    .view
+                    .evaluate_script(&format!("window.showPermission({data})"))
+                    .is_ok()
+                {
+                    self.dirty = false;
+                }
+            }
+            desktop::raise(&self.view);
+        }
+        if visible != self.visible {
+            if !visible {
+                let _ = self.view.evaluate_script("window.hidePermission()");
+            }
+            let _ = self.view.set_visible(visible);
+            if !headless && visible {
+                let _ = self.view.focus();
+            }
+            self.visible = visible;
+        }
+    }
+}

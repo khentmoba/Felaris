@@ -219,38 +219,24 @@ pub fn attach(
                     let mut kind = COREWEBVIEW2_PERMISSION_KIND::default();
                     args.PermissionKind(&mut kind)?;
                     let permission = match kind {
-                        COREWEBVIEW2_PERMISSION_KIND_CAMERA => "use your camera",
-                        COREWEBVIEW2_PERMISSION_KIND_MICROPHONE => "use your microphone",
-                        COREWEBVIEW2_PERMISSION_KIND_GEOLOCATION => "access your location",
-                        COREWEBVIEW2_PERMISSION_KIND_NOTIFICATIONS => "show notifications",
-                        COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ => "read your clipboard",
+                        COREWEBVIEW2_PERMISSION_KIND_CAMERA => "camera",
+                        COREWEBVIEW2_PERMISSION_KIND_MICROPHONE => "microphone",
+                        COREWEBVIEW2_PERMISSION_KIND_GEOLOCATION => "location",
+                        COREWEBVIEW2_PERMISSION_KIND_NOTIFICATIONS => "notifications",
+                        COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ => "clipboard",
                         _ => {
                             args.SetState(COREWEBVIEW2_PERMISSION_STATE_DENY)?;
                             return Ok(());
                         }
                     };
-                    let allow = message(
-                        "Site permission",
-                        &format!("{origin} wants to {permission}.\n\nAllow this request?"),
-                        true,
-                    );
-                    args.SetState(if allow {
-                        COREWEBVIEW2_PERMISSION_STATE_ALLOW
-                    } else {
-                        COREWEBVIEW2_PERMISSION_STATE_DENY
-                    })?;
-                    if allow
-                        && matches!(
-                            kind,
-                            COREWEBVIEW2_PERMISSION_KIND_CAMERA
-                                | COREWEBVIEW2_PERMISSION_KIND_MICROPHONE
-                        )
-                    {
-                        let _ = capture.send_event(UserEvent::CaptureAllowed(id, generation));
-                    }
-                    if let Ok(args) = args.cast::<ICoreWebView2PermissionRequestedEventArgs3>() {
-                        args.SetSavesInProfile(false)?;
-                    }
+                    crate::permission::request(
+                        &args,
+                        id,
+                        generation,
+                        origin,
+                        permission,
+                        capture.clone(),
+                    )?;
                 }
                 Ok(())
             })),

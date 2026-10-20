@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Felaris — Site permission</title>
+<style>
+:root { font-family:"Segoe UI",system-ui,sans-serif; color:#f5f5f7; color-scheme:normal; }
+* { box-sizing:border-box; }
+html { background:transparent; }
+body { margin:0; min-height:100vh; padding:24px; background:rgb(0 0 0 / .28); display:flex; align-items:flex-start; justify-content:center; }
+.prompt { color-scheme:dark; position:relative; width:min(420px,100%); margin-top:24px; background:#171719; border:1px solid #424246; border-radius:14px; padding:24px; }
+.heading { display:flex; align-items:center; gap:12px; padding-right:24px; }
+.icon { width:40px; height:40px; display:grid; place-items:center; flex-shrink:0; background:#29292d; border-radius:10px; }
+svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.label { margin:0 0 4px; color:#b2b2b8; font-size:12px; }
+h1 { margin:0; font-size:18px; line-height:1.35; font-weight:600; }
+.origin { margin:20px 0 8px; font-size:14px; font-weight:600; line-height:1.5; overflow-wrap:anywhere; direction:ltr; unicode-bidi:isolate; }
+.description { margin:0; color:#b2b2b8; font-size:13px; line-height:1.6; }
+.actions { display:flex; justify-content:flex-end; gap:8px; margin-top:24px; }
+button { font:600 13px "Segoe UI",system-ui,sans-serif; color:#f5f5f7; border:1px solid #45454b; border-radius:8px; background:#29292d; min-height:38px; min-width:86px; padding:8px 16px; cursor:pointer; }
+button:hover { background:#38383e; }
+button:focus-visible { outline:2px solid #dedee3; outline-offset:3px; }
+.allow { color:#101011; background:#dedee3; border-color:#dedee3; }
+.allow:hover { background:white; }
+.close { position:absolute; top:14px; right:14px; min-width:30px; min-height:30px; padding:4px; border:0; background:transparent; color:#b2b2b8; display:grid; place-items:center; }
+.close svg { width:16px; height:16px; }
+@media(max-height:400px) { body { padding:12px; } .prompt { margin-top:0; padding:20px; } }
+@media(forced-colors:active) { .prompt,button { border:1px solid CanvasText; } }
+</style>
+<section class="prompt" role="dialog" aria-modal="true" aria-labelledby="title" aria-describedby="origin description">
+ <button class="close" id="close" aria-label="Block and close" title="Block and close (Escape)"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+ <div class="heading"><span class="icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path id="permission-icon"/></svg></span><div><p class="label">Site permission</p><h1 id="title">Allow this request?</h1></div></div>
+ <p class="origin" id="origin"></p>
+ <p class="description" id="description"></p>
+ <div class="actions"><button id="block">Block</button><button class="allow" id="allow">Allow</button></div>
+</section>
+<script>
+const content={
+ notifications:['Show notifications?','Allow this site to send you notifications.','M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4'],
+ camera:['Use your camera?','Allow this site to access your camera.','M3 6h12v12H3zM15 10l6-4v12l-6-4'],
+ microphone:['Use your microphone?','Allow this site to access your microphone.','M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0V5M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8'],
+ location:['Share your location?','Allow this site to access your current location.','M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0ZM15 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0'],
+ clipboard:['Read your clipboard?','Allow this site to read text and other content you have copied.','M8 5H5v16h14V5h-3M8 3h8v4H8zM8 12h8M8 16h5']
+};
+let current=null;
+const block=document.getElementById('block');
+const allow=document.getElementById('allow');
+const close=document.getElementById('close');
+window.showPermission=request=>{
+ const entry=content[request.kind];
+ if(!entry) return;
+ current=request;
+ document.getElementById('origin').textContent=request.origin;
+ document.getElementById('title').textContent=entry[0];
+ document.getElementById('description').textContent=entry[1];
+ document.getElementById('permission-icon').setAttribute('d',entry[2]);
+ block.disabled=allow.disabled=close.disabled=false;
+ block.focus();
+};
+function respond(granted) {
+ if(!current) return;
+ const token=current.token; current=null;
+ block.disabled=allow.disabled=close.disabled=true;
+ window.ipc?.postMessage(JSON.stringify({token,allow:granted}));
+}
+window.hidePermission=()=>{current=null;block.disabled=allow.disabled=close.disabled=true;};
+block.onclick=close.onclick=()=>respond(false);
+allow.onclick=()=>respond(true);
+window.addEventListener('keydown',event=>{
+ if(event.key==='Escape') { event.preventDefault(); respond(false); }
+ else if(event.key==='Tab') {
+  const buttons=[close,block,allow];
+  const index=buttons.indexOf(document.activeElement);
+  event.preventDefault(); buttons[(index+(event.shiftKey?-1:1)+buttons.length)%buttons.length].focus();
+ }
+});
+</script>
+</html>

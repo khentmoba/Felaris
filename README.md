@@ -19,6 +19,9 @@
 - **Native downloads:** WebView2 provides download progress and file actions; Felaris reports completion and warns before closing active downloads.
 - **Automatic tab sleeping:** Targets 12 live pages by unloading older background tabs. Pinned tabs stay awake, as do active downloads, playing media, capture sessions, and pages with detected edits or unload handlers. Pages with frames or failed safety checks stay awake too, so protected work can exceed the budget. Manual sleeping is still available. Selecting a sleeping tab reloads its saved URL; unsaved form state and page history do not survive sleeping or an app restart.
 - **Ad blocking built in:** uBlock Origin Lite is downloaded on first launch (SHA-256 checked) and loaded into every tab as a WebView2 extension. Turn it off in **Settings > Privacy and security**.
+- **Bookmarks:** Press `Ctrl + D` or the star in the address bar. Bookmarks appear first in new-tab suggestions and at the top of History, where you can remove them.
+- **Private tabs:** `Ctrl + Shift + N` (or **New private tab** in the app menu) opens a tab in the Private profile. Its pages use an InPrivate WebView2 profile, and none of their tabs, history, or top sites are saved. Ad blocking may not apply to private pages.
+- **Connection security:** The address bar shows a lock for HTTPS pages and a warning for plain HTTP. WebView2 blocks pages with certificate errors.
 - **App menu and Settings:** The button at the top-left of the sidebar opens the app menu (new tab, downloads, print, zoom, settings, updates, exit). Settings (`felaris://settings`) covers search engine, ad blocker, updates, extensions, and shortcuts.
 - **Built-in Upstream Sync & Conflict Inspector:** Includes an automated local tool and agent skill to fetch upstream sources, compare local changes, and simulate pre-merge conflict status in memory before applying.
 
@@ -63,9 +66,12 @@
 | `Ctrl + Shift + T` | Reopen last closed tab |
 | `Ctrl + Tab` / `Ctrl + Shift + Tab` | Cycle tabs within the profile |
 | `Alt + 1` to `9` | Switch profile |
-| `Ctrl + S` | Expand / collapse sidebar |
+| `Ctrl + Shift + B` | Expand / collapse sidebar |
 | `Ctrl + Shift + S` | Unload background tabs (except active downloads) |
-| `Ctrl + H` | Open History |
+| `Ctrl + H` | Open History and bookmarks |
+| `Ctrl + D` | Bookmark / unbookmark the current page |
+| `Ctrl + Shift + N` | Open a private tab |
+| `Ctrl + F` | Find in page |
 | `Ctrl + J` | Open Downloads |
 | `Ctrl + +` / `Ctrl + -` / `Ctrl + 0` | Zoom in, zoom out, or reset zoom |
 | `F11` | Toggle full screen |
@@ -77,7 +83,7 @@ The sidebar has no fixed shortcut-tile dock. Search opens/closes with short, int
 
 Web searches use **Brave Search** by default (Settings can switch to DuckDuckGo, Google, or Bing) throughout the sidebar, Home page, and floating search bar. Suggestions come from your local open tabs, history, and shortcuts; no remote autocomplete requests are sent while typing.
 
-Shortcuts work while browser chrome or page content has focus. Right-clicking any tab in the sidebar opens quick actions to pin/unpin, duplicate, sleep/wake, move to another profile, or close it. The bottom sidebar menu contains pin/unpin, reopen, and close-other-tabs actions. Close Others keeps pinned tabs, affects only the current profile, and can be undone one tab at a time with Reopen.
+Shortcuts work while browser chrome or page content has focus. In pages they are caught natively before the page sees the key, so sites and focused iframes can't swallow them; `Ctrl + S`, `Ctrl + F`, and other keys not listed stay with the page. Right-clicking any tab in the sidebar opens quick actions to pin/unpin, duplicate, sleep/wake, move to another profile, or close it. The bottom sidebar menu contains pin/unpin, reopen, and close-other-tabs actions. Close Others keeps pinned tabs, affects only the current profile, and can be undone one tab at a time with Reopen.
 
 **Current engine limits:** Awake tabs preserve page state and navigation history. Sleeping tabs and restored sessions reload saved URLs; unsaved forms and per-tab history do not survive unloading or restart. Automatic sleeping uses conservative checks, but custom app state cannot always be detected; pin tabs whose state must be preserved.
 
@@ -131,7 +137,7 @@ Native results and diagnostic logs are saved under `target/native-regressions/`.
 
 For repeatable visual captures, run `python -B tests/native_capture.py` after building. It launches its own hidden app against local fixtures, uses a separate executable, profile, and debugging ports, and stops only its owned process tree. PNGs and a target manifest are saved under `target/native-capture/`. These are WebView captures; they do not prove native window composition or animation smoothness. The regression suite separately checks native sidebar stacking order and stable width during reveal, hide, and reversal, and menu opacity throughout its opening animation.
 
-`python -B tests/native_tools.test.py` verifies that capture cleanup preserves a second running app, deliberately reintroduces the menu fade, and omits Ctrl+S input to prove both the guards and failure diagnostics. `powershell -NoProfile -File tests/version.test.ps1` builds two successive Windows resource versions without cleaning. Both checks also run in CI.
+`python -B tests/native_tools.test.py` verifies that capture cleanup preserves a second running app, deliberately reintroduces the menu fade, and omits Ctrl+Shift+B input to prove both the guards and failure diagnostics. `powershell -NoProfile -File tests/version.test.ps1` builds two successive Windows resource versions without cleaning. Both checks also run in CI.
 
 
 ## Upstream Synchronization & Conflict Detection

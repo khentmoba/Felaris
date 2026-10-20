@@ -16,7 +16,7 @@ input { color:var(--text); caret-color:var(--accent); min-width:0; } input::plac
 svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; } svg[aria-hidden] { pointer-events:none; }
 .nav { display:flex; gap:4px; align-items:center; } .icon { width:32px; height:32px; display:grid; place-items:center; flex-shrink:0; color:var(--muted); } .icon:hover { color:var(--text); } .nav .toggle { margin-left:auto; }
 .address { position:relative; display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:10px; min-height:42px; padding:0 10px; }
-.address:focus-within { border-color:var(--accent); } .address>svg { color:var(--muted); width:16px; } #url-input:focus-visible { outline:none; } #url-input { width:100%; height:40px; outline:0; border:0; background:transparent; font-size:12px; user-select:text; } .address .icon { width:26px; height:28px; } .address .icon svg { width:14px; }
+.address:focus-within { border-color:var(--accent); } #btn-bookmark[aria-pressed="true"] svg { fill:currentColor; color:var(--accent); } #security.insecure { color:#f2b8b5; } .address>svg { color:var(--muted); width:16px; } #url-input:focus-visible { outline:none; } #url-input { width:100%; height:40px; outline:0; border:0; background:transparent; font-size:12px; user-select:text; } .address .icon { width:26px; height:28px; } .address .icon svg { width:14px; }
 .workspace-heading { display:flex; align-items:center; gap:9px; padding:8px 4px 0; } .workspace-heading svg { width:16px; color:var(--accent); } #workspace-name { font-weight:600; flex:1; } .count { color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
 .tab-tools { display:flex; gap:4px; align-items:center; } .new-tab { flex:1; display:flex; gap:10px; align-items:center; height:36px; color:var(--muted); text-align:left; padding:0 10px; } .new-tab svg { width:16px; } kbd { font:11px "Segoe UI",sans-serif; color:var(--muted); } .new-tab kbd { margin-left:auto; }
 #tab-search { width:100%; background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:9px 10px; outline-offset:0; }
@@ -65,9 +65,10 @@ button:active:not(:disabled),summary:active { transform:scale(.96); }
 <nav class="nav" aria-label="Browser navigation">
 <details class="app-menu" id="app-menu"><summary class="icon" title="Menu" aria-label="Menu"><svg><use href="#menu"/></svg></summary><div class="menu">
 <button data-action="new_tab"><span class="item"><svg><use href="#plus"/></svg>New tab</span><kbd>Ctrl T</kbd></button>
+<button data-action="new_private_tab"><span class="item"><svg><use href="#private"/></svg>New private tab</span><kbd>Ctrl Shift N</kbd></button>
 <button id="app-reopen" data-action="restore_closed_tab"><span class="item"><svg><use href="#reload"/></svg>Reopen closed tab</span></button>
 <hr>
-<button data-action="open_history"><span class="item"><svg><use href="#clock"/></svg>History</span><kbd>Ctrl H</kbd></button>
+<button data-action="open_history"><span class="item"><svg><use href="#clock"/></svg>History and bookmarks</span><kbd>Ctrl H</kbd></button>
 <button data-action="open_downloads"><span class="item"><svg><use href="#download"/></svg>Downloads</span><kbd>Ctrl J</kbd></button>
 <button data-action="print"><span class="item"><svg><use href="#print"/></svg>Print…</span></button>
 <div class="zoom"><span class="item"><svg><use href="#zoom"/></svg>Zoom</span><span class="zoom-controls"><button data-action="zoom" data-delta="-10" title="Zoom out" aria-label="Zoom out">−</button><button id="zoom-level" data-action="zoom" data-delta="0" title="Reset zoom">100%</button><button data-action="zoom" data-delta="10" title="Zoom in" aria-label="Zoom in">+</button></span></div>
@@ -81,11 +82,12 @@ button:active:not(:disabled),summary:active { transform:scale(.96); }
 <button class="icon secondary" id="btn-forward" title="Forward (Alt+Right)" aria-label="Forward"><svg><use href="#forward"/></svg></button>
 <button class="icon" id="btn-reload" title="Reload (Ctrl+R)" aria-label="Reload"><svg><use href="#reload"/></svg></button>
 <button class="icon secondary" id="btn-home" title="New tab page" aria-label="Home"><svg><use href="#home"/></svg></button>
-<button class="icon toggle" id="btn-toggle-sidebar" title="Collapse sidebar (Ctrl+S)" aria-label="Collapse sidebar" aria-expanded="true"><svg><use href="#sidebar"/></svg></button>
+<button class="icon toggle" id="btn-toggle-sidebar" title="Collapse sidebar (Ctrl+Shift+B)" aria-label="Collapse sidebar" aria-expanded="true"><svg><use href="#sidebar"/></svg></button>
 </nav>
 <form class="address" id="address-form" aria-label="Address bar">
-<svg aria-hidden="true"><use href="#search"/></svg>
+<svg id="security" role="img" aria-label="Search"><use href="#search"/></svg>
 <input id="url-input" aria-label="Search or enter address" placeholder="Search or enter address" autocomplete="off" spellcheck="false">
+<button type="button" class="icon" id="btn-bookmark" title="Bookmark this page (Ctrl+D)" aria-label="Bookmark this page" aria-pressed="false"><svg><use href="#star"/></svg></button>
 <button type="button" class="icon" id="btn-copy-url" title="Copy address" aria-label="Copy address"><svg><use href="#copy"/></svg></button>
 </form>
 <div class="workspace-heading"><svg aria-hidden="true"><use id="workspace-icon" href="#home"/></svg><span id="workspace-name">General</span><span class="count" id="tab-count">1 tab</span></div>
@@ -100,7 +102,7 @@ button:active:not(:disabled),summary:active { transform:scale(.96); }
 <footer class="footer">
 <button class="download-control" id="btn-downloads" title="Downloads (Ctrl+J)" aria-label="Downloads"><svg><use href="#download"/></svg><span>Downloads</span><small id="download-count"></small></button>
 <button class="sleep-control" id="btn-ram-saver" title="Unload background tabs to free memory (Ctrl+Shift+S)"><svg><use href="#moon"/></svg><span id="sleep-label">Sleep background tabs</span><svg><use href="#forward"/></svg></button>
-<div class="workspace-switcher"><details id="profiles"><summary aria-label="Switch profile"><svg aria-hidden="true"><use href="#globe"/></svg><span id="profile-current">General</span></summary><div class="menu"><p>Profiles</p><div id="spaces" aria-label="Profiles"></div><form id="profile-form"><label for="profile-name">New profile</label><input id="profile-name" placeholder="e.g. School" maxlength="40" required autocomplete="off"><small>Each profile keeps its own tabs and pins. Website logins are shared.</small><p id="profile-error" role="alert" hidden></p><button type="submit">Create profile</button></form></div></details><details id="browser-menu"><summary class="icon" title="Tab actions" aria-label="Tab actions"><svg><use href="#more"/></svg></summary><div class="menu"><button id="btn-pin-tab">Pin current tab</button><button id="btn-reopen-tab">Reopen closed tab <kbd>Ctrl Shift T</kbd></button><button id="btn-clear-tabs">Close other unpinned tabs</button><hr><button id="btn-check-update">Check for updates</button><button id="btn-default-browser">Set default browser?</button><hr><p>Profiles: Alt + 1-9<br>Address bar: Ctrl + L<br>Toggle sidebar: Ctrl + S</p></div></details></div>
+<div class="workspace-switcher"><details id="profiles"><summary aria-label="Switch profile"><svg aria-hidden="true"><use href="#globe"/></svg><span id="profile-current">General</span></summary><div class="menu"><p>Profiles</p><div id="spaces" aria-label="Profiles"></div><form id="profile-form"><label for="profile-name">New profile</label><input id="profile-name" placeholder="e.g. School" maxlength="40" required autocomplete="off"><small>Each profile keeps its own tabs and pins. Website logins are shared.</small><p id="profile-error" role="alert" hidden></p><button type="submit">Create profile</button></form></div></details><details id="browser-menu"><summary class="icon" title="Tab actions" aria-label="Tab actions"><svg><use href="#more"/></svg></summary><div class="menu"><button id="btn-pin-tab">Pin current tab</button><button id="btn-reopen-tab">Reopen closed tab <kbd>Ctrl Shift T</kbd></button><button id="btn-clear-tabs">Close other unpinned tabs</button><hr><button id="btn-check-update">Check for updates</button><button id="btn-default-browser">Set default browser?</button><hr><p>Profiles: Alt + 1-9<br>Address bar: Ctrl + L<br>Toggle sidebar: Ctrl + Shift + B<br>Bookmark page: Ctrl + D<br>Find in page: Ctrl + F</p></div></details></div>
 </footer>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-message"></span><button id="toast-undo" hidden>Reopen tab</button></div>
 <div class="menu" id="tab-context-menu" role="menu" aria-label="Tab options" hidden></div>
@@ -111,6 +113,7 @@ button:active:not(:disabled),summary:active { transform:scale(.96); }
 <symbol id="copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M15 8V3H3v13h5"/></symbol><symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol><symbol id="close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
 <symbol id="book" viewBox="0 0 24 24"><path d="M12 5v15M12 5C8 3 5 3 2 4v14c4-1 7-1 10 2 3-3 6-3 10-2V4c-3-1-6-1-10 1Z"/></symbol>
 <symbol id="moon" viewBox="0 0 24 24"><path d="M20 14a8 8 0 0 1-10-10 8.5 8.5 0 1 0 10 10Z"/></symbol><symbol id="more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol><symbol id="code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18"/></symbol><symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></symbol>
+<symbol id="star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-2.9-5.5 2.9 1-6.2L3 9.6l6.2-.9z"/></symbol><symbol id="lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol><symbol id="warn" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Zm0 6v5m0 3v.5"/></symbol><symbol id="private" viewBox="0 0 24 24"><path d="M3 11h18M6 11l2-6h8l2 6"/><circle cx="7.5" cy="16" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/><path d="M10 16h4"/></symbol>
 <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol><symbol id="print" viewBox="0 0 24 24"><path d="M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z"/></symbol><symbol id="zoom" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol><symbol id="gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/></symbol><symbol id="exit" viewBox="0 0 24 24"><path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9"/></symbol>
 <symbol id="felaris" viewBox="0 0 24 24"><path d="M15 3.8A9 9 0 1 0 19.8 14.5"/><path d="M9.5 18c0-3 1-5 1-5V7c0-.6.5-1 1.1-1H16"/><path d="M10.5 11H15"/><path d="M19 3.5v3M17.5 5h3"/></symbol>
 </defs></svg>
@@ -214,11 +217,12 @@ window.updateState = state => {
  syncCollapsed();
  $('btn-toggle-sidebar').setAttribute('aria-expanded',String(!state.sidebar_collapsed));
  $('btn-toggle-sidebar').setAttribute('aria-label',state.sidebar_collapsed?'Expand sidebar':'Collapse sidebar');
- $('btn-toggle-sidebar').title=(state.sidebar_collapsed?'Expand':'Collapse')+' sidebar (Ctrl+S)';
+ $('btn-toggle-sidebar').title=(state.sidebar_collapsed?'Expand':'Collapse')+' sidebar (Ctrl+Shift+B)';
  if(state.sidebar_collapsed) { $('tab-search').hidden=true; $('tab-search').value=''; $('btn-search-tabs').setAttribute('aria-expanded','false'); }
  const workspace=state.workspaces.find(w=>w.id===state.active_workspace_id);
  $('workspace-name').textContent=workspace?.name||'General';
- $('workspace-icon').setAttribute('href','#globe');
+ $('workspace-icon').setAttribute('href',workspace?.private?'#private':'#globe');
+ $('workspace-name').title=workspace?.private?'Private: pages, history, and tabs here are not saved':'';
  $('profile-current').textContent=workspace?.name||'General';
  if(previous.active_workspace_id!==state.active_workspace_id) $('tab-search').value='';
  const spacesSignature=JSON.stringify(state.workspaces);
@@ -233,6 +237,15 @@ window.updateState = state => {
  $('zoom-level').textContent=(state.zoom||100)+'%';
  const active=activeTab();
  if(document.activeElement!==$('url-input') || previous.active_tab_id!==state.active_tab_id) $('url-input').value=displayAddress(active?.url);
+ const scheme=(()=>{ try { return new URL(active?.url).protocol; } catch { return ''; } })();
+ const [securityIcon,securityLabel]=scheme==='https:'?['lock','Connection is secure']:scheme==='http:'?['warn','Not secure: this site does not use HTTPS']:['search','Search'];
+ $('security').firstElementChild.setAttribute('href','#'+securityIcon); $('security').setAttribute('aria-label',securityLabel); $('security').classList.toggle('insecure',securityIcon==='warn');
+ $('security').replaceChildren($('security').firstElementChild,Object.assign(document.createElementNS('http://www.w3.org/2000/svg','title'),{textContent:securityLabel}));
+ const bookmarked=!!active&&(state.bookmarks||[]).some(b=>b.url===active.url);
+ $('btn-bookmark').disabled=!['https:','http:','file:'].includes(scheme);
+ $('btn-bookmark').setAttribute('aria-pressed',String(bookmarked));
+ $('btn-bookmark').setAttribute('aria-label',bookmarked?'Remove bookmark':'Bookmark this page');
+ $('btn-bookmark').title=(bookmarked?'Remove bookmark':'Bookmark this page')+' (Ctrl+D)';
  $('btn-reload').replaceChildren(icon(state.is_loading?'close':'reload'));
  $('btn-reload').setAttribute('aria-label',state.is_loading?'Stop loading':'Reload');
  $('btn-reload').title=state.is_loading?'Stop loading':'Reload (Ctrl+R)';
@@ -272,6 +285,7 @@ $('btn-copy-url').onclick=async()=>{ try { await navigator.clipboard.writeText(a
 $('btn-search-tabs').onclick=()=>{ const show=$('tab-search').hidden; $('tab-search').hidden=!show; $('btn-search-tabs').setAttribute('aria-expanded',String(show)); if(show) $('tab-search').focus(); else { $('tab-search').value=''; renderTabs(); } };
 $('tab-search').oninput=renderTabs;
 $('tab-search').onkeydown=e=>{ if(e.key==='Escape') { $('tab-search').value=''; $('tab-search').hidden=true; $('btn-search-tabs').setAttribute('aria-expanded','false'); $('btn-search-tabs').focus(); renderTabs(); } };
+$('btn-bookmark').onclick=()=>Felaris.send('toggle_bookmark');
 $('btn-pin-tab').onclick=()=>Felaris.send('toggle_pin',{id:currentState.active_tab_id});
 $('btn-clear-tabs').onclick=()=>Felaris.send('clear_unpinned_tabs');
 $('btn-ram-saver').onclick=()=>Felaris.send('sleep_inactive_tabs');
@@ -296,7 +310,8 @@ function openTabContextMenu(tab,clientY) {
  addItem(tab.is_pinned?'Unpin tab':'Pin tab',()=>Felaris.send('toggle_pin',{id:tab.id}));
  addItem('Duplicate tab',()=>Felaris.send('duplicate_tab',{id:tab.id}));
  addItem(tab.is_sleeping?'Wake tab':'Sleep tab',()=>Felaris.send(tab.is_sleeping?'switch_tab':'toggle_sleep',{id:tab.id}),tab.id===currentState.active_tab_id);
- const others=(currentState.workspaces||[]).filter(w=>w.id!==tab.workspace_id);
+ const privateIds=(currentState.workspaces||[]).filter(w=>w.private).map(w=>w.id);
+ const others=privateIds.includes(tab.workspace_id)?[]:(currentState.workspaces||[]).filter(w=>w.id!==tab.workspace_id&&!w.private);
  if(others.length) {
   tabMenu.append(document.createElement('hr'));
   for(const space of others) addItem(`Move to ${space.name}`,()=>Felaris.send('move_tab_to_workspace',{id:tab.id,workspace_id:space.id}));

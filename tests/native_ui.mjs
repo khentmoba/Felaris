@@ -67,8 +67,8 @@ try {
   await until(() => sidebar.evaluate(`currentState.tabs.length === ${count + 2}`), 'Ctrl+Shift+T restores tab');
   const restored = await connect(page => page.url === origin + '/submitted', contentPort);
   await until(() => restored.evaluate(`location.href === ${JSON.stringify(origin + '/submitted')} && document.readyState === 'complete' && !!window.Felaris`), 'restored page ready for keyboard input');
-  await press(restored, 's', 2);
-  await until(() => sidebar.evaluate('currentState.sidebar_collapsed'), 'Ctrl+S collapses sidebar');
+  await press(restored, 'B', 10);
+  await until(() => sidebar.evaluate('currentState.sidebar_collapsed'), 'Ctrl+Shift+B collapses sidebar');
   await press(restored, 'l', 2);
   await until(() => sidebar.evaluate('!currentState.sidebar_collapsed && document.activeElement.id === "url-input"'), 'Ctrl+L expands and selects address');
   if (await sidebar.evaluate('currentState.workspaces.length < 2')) await command('create_profile', { name: 'School' });

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>History</title>
+<title>History and bookmarks</title>
 <style>
 :root { color-scheme:dark; --bg:#0c0c0e; --surface:#1b1b1e; --hover:#27272b; --active:#2e2e33; --line:#3a3a40; --text:#f5f5f7; --muted:#b2b2b8; --accent:#dedee3; font-family:"Segoe UI",system-ui,sans-serif; font-size:14px; }
 * { box-sizing:border-box; } body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); padding:28px 40px; }
@@ -30,44 +30,51 @@ li { display:flex; align-items:center; border-bottom:1px solid var(--line); } li
 <body>
 <main>
 <header><h1>History</h1><button class="btn" id="clear">Clear history</button></header>
-<label class="find"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 5 5"/></svg><input id="find" type="search" placeholder="Search history" aria-label="Search history" autocomplete="off" spellcheck="false" autofocus></label>
+<label class="find"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 5 5"/></svg><input id="find" type="search" placeholder="Search bookmarks and history" aria-label="Search bookmarks and history" autocomplete="off" spellcheck="false" autofocus></label>
+<section id="bookmarks" aria-label="Bookmarks" hidden><h2>Bookmarks</h2><ul id="bookmark-list"></ul></section>
 <div id="list"></div>
 <p class="empty" id="empty" hidden></p>
 </main>
 <script>__COMMON_SCRIPT__</script>
 <script>
-let entries=__HISTORY__;
-const saving=__SAVING__;
+const data=__HISTORY__;
+let entries=data.history,bookmarks=data.bookmarks;
+const saving=data.saving;
 const $=id=>document.getElementById(id);
 const dayLabel=time=>{ const day=new Date(time); const today=new Date(); const start=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime(); const diff=Math.round((start(today)-start(day))/864e5); return diff===0?'Today':diff===1?'Yesterday':day.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:day.getFullYear()===today.getFullYear()?undefined:'numeric'}); };
 const clock=time=>new Date(time).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
 function hostOf(url) { try { return new URL(url).host.replace(/^www\./,''); } catch { return url; } }
+function row(entry,label,removeLabel,onRemove) {
+ const row=document.createElement('li');
+ const open=document.createElement('button'); open.className='visit'; open.title=entry.url;
+ const time=document.createElement('span'); time.className='time'; time.textContent=label;
+ const name=document.createElement('span'); name.className='name'; name.textContent=entry.title||entry.url;
+ const host=document.createElement('span'); host.className='host'; host.textContent=hostOf(entry.url);
+ open.append(time,name,host); open.onclick=()=>Felaris.navigate(entry.url);
+ const remove=document.createElement('button'); remove.className='remove'; remove.title=removeLabel; remove.setAttribute('aria-label',removeLabel+': '+(entry.title||entry.url));
+ remove.innerHTML='<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></svg>';
+ remove.onclick=onRemove;
+ row.append(open,remove); return row;
+}
 function render() {
  const query=$('find').value.trim().toLowerCase();
- const shown=entries.filter(entry=>!query||(entry.title+' '+entry.url).toLowerCase().includes(query));
+ const matches=entry=>!query||(entry.title+' '+entry.url).toLowerCase().includes(query);
+ const marked=bookmarks.filter(matches);
+ $('bookmark-list').replaceChildren(...marked.map(entry=>row(entry,'★','Remove bookmark',()=>{ Felaris.send('toggle_bookmark',{url:entry.url}); bookmarks=bookmarks.filter(item=>item.url!==entry.url); render(); })));
+ $('bookmarks').hidden=!marked.length;
+ const shown=entries.filter(matches);
  const groups=new Map();
  for(const entry of shown) { const label=dayLabel(entry.time); if(!groups.has(label)) groups.set(label,[]); groups.get(label).push(entry); }
  const nodes=[];
  for(const [label,items] of groups) {
   const heading=document.createElement('h2'); heading.textContent=label;
   const list=document.createElement('ul');
-  for(const entry of items) {
-   const row=document.createElement('li');
-   const open=document.createElement('button'); open.className='visit'; open.title=entry.url;
-   const time=document.createElement('span'); time.className='time'; time.textContent=clock(entry.time);
-   const name=document.createElement('span'); name.className='name'; name.textContent=entry.title||entry.url;
-   const host=document.createElement('span'); host.className='host'; host.textContent=hostOf(entry.url);
-   open.append(time,name,host); open.onclick=()=>Felaris.navigate(entry.url);
-   const remove=document.createElement('button'); remove.className='remove'; remove.title='Remove from history'; remove.setAttribute('aria-label','Remove '+(entry.title||entry.url)+' from history');
-   remove.innerHTML='<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></svg>';
-   remove.onclick=()=>{ Felaris.send('delete_history',{url:entry.url}); entries=entries.filter(item=>item.url!==entry.url); render(); };
-   row.append(open,remove); list.append(row);
-  }
+  for(const entry of items) list.append(row(entry,clock(entry.time),'Remove from history',()=>{ Felaris.send('delete_history',{url:entry.url}); entries=entries.filter(item=>item.url!==entry.url); render(); }));
   nodes.push(heading,list);
  }
  $('list').replaceChildren(...nodes);
  $('clear').disabled=!entries.length;
- const empty=$('empty'); empty.hidden=shown.length>0;
+ const empty=$('empty'); empty.hidden=shown.length>0||marked.length>0;
  empty.textContent=entries.length?'No history matches your search.':saving?'Pages you visit will show up here.':'History is turned off. Turn it on in Settings > Privacy and security.';
 }
 $('find').oninput=render;

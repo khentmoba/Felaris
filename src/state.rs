@@ -8,6 +8,15 @@ pub struct Workspace {
     pub name: String,
     pub icon: String,
     pub accent: String,
+    /// Private profiles open InPrivate pages and are never saved or recorded in history.
+    #[serde(default)]
+    pub private: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Bookmark {
+    pub url: String,
+    pub title: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,6 +80,8 @@ pub struct BrowserState {
     pub homepage: String,
     #[serde(default)]
     pub closed_tabs: Vec<Tab>,
+    #[serde(default)]
+    pub bookmarks: Vec<Bookmark>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub update_available: Option<UpdateManifest>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -90,6 +101,7 @@ impl BrowserState {
             name: "General".into(),
             icon: "home".into(),
             accent: "#dedee3".into(),
+            private: false,
         }];
 
         let initial_tab = Tab {
@@ -126,6 +138,7 @@ impl BrowserState {
             activity_clock: 0,
             homepage: "felaris://newtab".to_string(),
             closed_tabs: Vec::new(),
+            bookmarks: Vec::new(),
             update_available: None,
             update_status: None,
             active_downloads: 0,
@@ -174,7 +187,8 @@ impl BrowserState {
         state.profiles_version = 1;
         let mut workspace_ids = std::collections::HashSet::new();
         state.workspaces.retain(|w| {
-            w.id > 0
+            !w.private
+                && w.id > 0
                 && w.id < usize::MAX - 1
                 && !w.name.trim().is_empty()
                 && workspace_ids.insert(w.id)
@@ -215,6 +229,9 @@ impl BrowserState {
             crate::profile::allowed_url(&tab.url) && workspace_ids.contains(&tab.workspace_id)
         });
         state.closed_tabs.truncate(30);
+        state
+            .bookmarks
+            .retain(|bookmark| crate::profile::allowed_url(&bookmark.url));
         state.can_restore_closed_tab = !state.closed_tabs.is_empty();
         state.is_loading = false;
         state.active_downloads = 0;
@@ -289,17 +306,13 @@ impl BrowserState {
         }
 
         if self.active_tab_id == tab_id {
-            let same_workspace: Vec<usize> = self
+            match self
                 .tabs
                 .iter()
-                .filter(|t| t.workspace_id == self.active_workspace_id)
-                .map(|t| t.id)
-                .collect();
-
-            if !same_workspace.is_empty() {
-                self.active_tab_id = *same_workspace.last().unwrap();
-            } else {
-                return Some(self.add_tab(None, false));
+                .rfind(|t| t.workspace_id == self.active_workspace_id)
+            {
+                Some(tab) => self.active_tab_id = tab.id,
+                None => return Some(self.add_tab(None, false)),
             }
         }
 
@@ -393,9 +406,78 @@ impl BrowserState {
             name: name.into(),
             icon: "globe".into(),
             accent: "#dedee3".into(),
+            private: false,
         });
         self.switch_workspace(id);
         Ok(id)
+    }
+
+    pub fn private_workspace(&self) -> Option<usize> {
+        self.workspaces.iter().find(|w| w.private).map(|w| w.id)
+    }
+
+    pub fn is_private(&self, tab_id: usize) -> bool {
+        self.tabs
+            .iter()
+            .any(|tab| tab.id == tab_id && Some(tab.workspace_id) == self.private_workspace())
+    }
+
+    /// Opens a tab in the Private profile, creating that profile on first use.
+    pub fn open_private_tab(&mut self) -> usize {
+        let id = self.private_workspace().unwrap_or_else(|| {
+            let id = self.workspaces.iter().map(|w| w.id).max().unwrap_or(0) + 1;
+            self.workspaces.push(Workspace {
+                id,
+                name: "Private".into(),
+                icon: "private".into(),
+                accent: "#dedee3".into(),
+                private: true,
+            });
+            id
+        });
+        self.active_workspace_id = id;
+        self.add_tab(None, false)
+    }
+
+    /// The state to write to disk: everything except the Private profile.
+    pub fn for_session(&self) -> std::borrow::Cow<'_, Self> {
+        let Some(private) = self.private_workspace() else {
+            return std::borrow::Cow::Borrowed(self);
+        };
+        let mut state = self.clone();
+        state.workspaces.retain(|w| w.id != private);
+        state.tabs.retain(|tab| tab.workspace_id != private);
+        state.closed_tabs.retain(|tab| tab.workspace_id != private);
+        if state.tabs.is_empty() {
+            state.active_workspace_id = state.workspaces.first().map_or(1, |w| w.id);
+            state.add_tab(None, false);
+        }
+        std::borrow::Cow::Owned(state)
+    }
+
+    pub fn is_bookmarked(&self, url: &str) -> bool {
+        self.bookmarks.iter().any(|bookmark| bookmark.url == url)
+    }
+
+    /// Adds or removes a bookmark; without a URL it toggles the active page.
+    pub fn toggle_bookmark(&mut self, url: Option<String>) {
+        if let Some(url) = url {
+            self.bookmarks.retain(|bookmark| bookmark.url != url);
+            return;
+        }
+        let Some(tab) = self.active_tab() else {
+            return;
+        };
+        if crate::profile::is_internal(&tab.url) || !crate::profile::allowed_url(&tab.url) {
+            return;
+        }
+        let url = tab.url.clone();
+        if self.is_bookmarked(&url) {
+            self.bookmarks.retain(|bookmark| bookmark.url != url);
+        } else {
+            let title = tab.title.clone();
+            self.bookmarks.push(Bookmark { url, title });
+        }
     }
 
     pub fn switch_workspace(&mut self, workspace_id: usize) -> Option<&Tab> {
@@ -489,7 +571,13 @@ impl BrowserState {
     }
 
     pub fn move_tab_to_workspace(&mut self, tab_id: usize, workspace_id: usize) {
-        if !self.workspaces.iter().any(|w| w.id == workspace_id) {
+        // A live page keeps its InPrivate or normal storage, so it can't change sides.
+        if !self
+            .workspaces
+            .iter()
+            .any(|w| w.id == workspace_id && !w.private)
+            || self.is_private(tab_id)
+        {
             return;
         }
         let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == tab_id) else {
@@ -569,10 +657,14 @@ impl BrowserState {
     }
 
     pub fn set_favicon(&mut self, id: usize, favicon: Option<String>) {
+        let private = self.is_private(id);
         let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == id) else {
             return;
         };
         tab.favicon = favicon.clone();
+        if private {
+            return;
+        }
         let (Some(favicon), Some((host, ..))) = (favicon, Self::shortcut_origin(&tab.url)) else {
             return;
         };
@@ -592,6 +684,9 @@ impl BrowserState {
     }
 
     fn record_visit(&mut self, url: &str) {
+        if self.private_workspace() == Some(self.active_workspace_id) {
+            return;
+        }
         let Some((host, root_url, label)) = Self::shortcut_origin(url) else {
             return;
         };
@@ -844,6 +939,47 @@ mod tests {
         assert_eq!(restored.active_tab_id, 1);
         assert_eq!(restored.active_workspace_id, 1);
         assert!(BrowserState::from_session("{truncated").is_none());
+    }
+
+    #[test]
+    fn private_profile_is_never_saved_or_counted() {
+        let mut state = BrowserState::new();
+        let private = state.open_private_tab();
+        state.update_active_tab("https://secret.test/".into(), None);
+        state.toggle_bookmark(None);
+        assert!(state.is_private(private));
+        assert!(state.shortcuts.iter().all(|s| s.host != "secret.test"));
+        state.close_tab(1);
+        let saved = serde_json::to_string(&*state.for_session()).unwrap();
+        assert!(!saved.contains("\"private\":true"));
+        let restored = BrowserState::from_session(&saved).unwrap();
+        assert_eq!(restored.workspaces.len(), 1);
+        assert!(
+            restored
+                .tabs
+                .iter()
+                .all(|tab| tab.url != "https://secret.test/")
+        );
+        assert!(restored.closed_tabs.iter().all(|tab| tab.workspace_id == 1));
+        assert_eq!(restored.bookmarks.len(), 1);
+        state.move_tab_to_workspace(private, 1);
+        assert!(state.is_private(private));
+    }
+
+    #[test]
+    fn bookmarks_toggle_real_pages_only() {
+        let mut state = BrowserState::new();
+        state.toggle_bookmark(None);
+        assert!(state.bookmarks.is_empty());
+        state.update_active_tab("https://example.com/".into(), Some("Example".into()));
+        state.toggle_bookmark(None);
+        assert!(state.is_bookmarked("https://example.com/"));
+        assert_eq!(state.bookmarks[0].title, "Example");
+        state.toggle_bookmark(None);
+        assert!(state.bookmarks.is_empty());
+        state.toggle_bookmark(None);
+        state.toggle_bookmark(Some("https://example.com/".into()));
+        assert!(state.bookmarks.is_empty());
     }
 
     #[test]

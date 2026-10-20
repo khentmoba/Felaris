@@ -118,16 +118,21 @@ cargo test --locked
 node tests/browser.test.cjs
 ```
 
-For the 49 DOM interaction checks, serve the repository with `python -m http.server 0` (using an ephemeral port so worktrees do not collide), then open `http://localhost:<port>/tests/ui.html`. This is a fixture with sample tabs; its IPC messages are recorded rather than sent to Rust. Test both 1380×860 and the minimum 640×480 desktop window; the compact rail can be inspected by setting `fixtureState.sidebar_collapsed = true`, `sidebar.style.width = '56px'`, and calling `sidebar.contentWindow.updateState(fixtureState)` in the test page console.
+For the DOM interaction checks, serve the repository with `python -m http.server 0` (using an ephemeral port so worktrees do not collide), then open `http://localhost:<port>/tests/ui.html`. This is a fixture with sample tabs; its IPC messages are recorded rather than sent to Rust. Test both 1380×860 and the minimum 640×480 desktop window; the compact rail can be inspected by setting `fixtureState.sidebar_collapsed = true`, `sidebar.style.width = '56px'`, and calling `sidebar.contentWindow.updateState(fixtureState)` in the test page console.
 
-To exercise actual WebView2 keyboard input and Rust IPC on Windows, build with `cargo build` and run the self-contained native smoke test with Python 3.11+ and Node 22+. The Node command delegates to the headless regression harness, which copies the executable, uses an isolated profile and dynamic debugging port, and cleans up the child process. It also runs all 49 DOM checks at 1380×860 and 640×480, including reduced motion:
+To exercise actual WebView2 keyboard input and Rust IPC on Windows, build with `cargo build` and run the self-contained native smoke test with Python 3.11+ and Node 22+. The Node command delegates to the headless regression harness, which copies the executable, uses an isolated profile and dynamic debugging port, and cleans up the child process. It also runs the DOM checks at 1380×860 and 640×480, including reduced motion:
 
 ```bash
 cargo build
 node tests/native-smoke.cjs
 ```
 
-Native results and diagnostic logs are saved under `target/native-regressions/`. The runner always launches its own hidden app; it never attaches to an existing browser on port 9223. The same suite is mandatory during packaging and Windows CI.
+Native results and diagnostic logs are saved under `target/native-regressions/`. On failure, `failure.json` and `debugger.json` record the active tab, focus, sidebar state, recent keyboard input, and isolated debugger targets. Windows CI retains the top-level native logs and JSON reports for seven days after a failure; browser profiles are excluded. The same suite is mandatory during packaging and CI.
+
+For repeatable visual captures, run `python -B tests/native_capture.py` after building. It launches its own hidden app against local fixtures, uses a separate executable, profile, and debugging ports, and stops only its owned process tree. PNGs and a target manifest are saved under `target/native-capture/`. These are WebView captures; they do not prove native window composition or animation smoothness. The regression suite separately checks native sidebar stacking order and stable width during reveal, hide, and reversal, and menu opacity throughout its opening animation.
+
+`python -B tests/native_tools.test.py` verifies that capture cleanup preserves a second running app, deliberately reintroduces the menu fade, and omits Ctrl+S input to prove both the guards and failure diagnostics. `powershell -NoProfile -File tests/version.test.ps1` builds two successive Windows resource versions without cleaning. Both checks also run in CI.
+
 
 ## Upstream Synchronization & Conflict Detection
 

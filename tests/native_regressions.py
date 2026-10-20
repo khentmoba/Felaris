@@ -5,18 +5,15 @@ import ctypes
 from ctypes import wintypes
 from http.server import ThreadingHTTPServer
 import json
-import os
 from pathlib import Path
-import shutil
-import socket
 import subprocess
 import sys
 import threading
 import time
-import uuid
 from urllib.request import urlopen
 
 from native_smoke import Fixture
+from native_app import NativeApp
 
 
 def assert_sidebar_above_content(process_id):
@@ -65,24 +62,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--exe', default='target/debug/felaris.exe')
     args = parser.parse_args()
-    artifacts = (Path('target/native-regressions') / str(uuid.uuid4())).resolve()
-    artifacts.mkdir(parents=True)
-    profile = artifacts / 'profile'
-    executable = artifacts / 'felaris.exe'
-    shutil.copy2(Path(args.exe).resolve(), executable)
-    with socket.socket() as reservation, socket.socket() as content_reservation:
-        reservation.bind(('127.0.0.1', 0))
-        content_reservation.bind(('127.0.0.1', 0))
-        port = reservation.getsockname()[1]
-        content_port = content_reservation.getsockname()[1]
+    app = NativeApp(args.exe, 'native-regressions')
+    artifacts, profile = app.artifacts, app.profile
+    port, content_port = app.port, app.content_port
     server = ThreadingHTTPServer(('127.0.0.1', 0), Fixture)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = f'http://127.0.0.1:{server.server_port}'
-    environment = {**os.environ, 'FELARIS_PROFILE_DIR': str(profile),
-                   'FELARIS_SMOKE_TEST': str(artifacts / 'disabled.json'),
-                   'FELARIS_SMOKE_BROWSER_ARGUMENTS': f'--remote-debugging-port={port} --remote-debugging-address=127.0.0.1',
-                   'FELARIS_SMOKE_CONTENT_BROWSER_ARGUMENTS': f'--remote-debugging-port={content_port} --remote-debugging-address=127.0.0.1'}
-    environment.pop('FELARIS_SMOKE_ORIGIN', None)
     checks = []
     process = None
 
@@ -141,37 +126,65 @@ def main():
 
     try:
         with (artifacts / 'app.log').open('w', encoding='utf-8') as log:
-            process = subprocess.Popen([str(executable), origin + '/'], env=environment, stdout=log, stderr=log)
+            process = app.start([origin + '/'], log)
             loaded(origin + '/')
             sidebar('document.activeElement.blur(); window.ipc.postMessage(JSON.stringify({action:"toggle_sidebar"})); true')
             sidebar('(async()=>{await new Promise(resolve=>setTimeout(resolve,400)); return true})()')
             command('new_tab', url=origin + '/second')
             loaded(origin + '/second')
             assert_sidebar_above_content(process.pid)
-            animation = sidebar('''(async()=>{
-                const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-                const widths=[];
-                const sample=async ms=>{
-                    const end=performance.now()+ms;
-                    while(performance.now()<end) { widths.push(innerWidth); await wait(16); }
-                };
-                await wait(400);
-                const closedWidth=innerWidth;
-                for(let i=0;i<3;i++) {
+            stop_monitor = threading.Event()
+            stacking_errors = []
+
+            def monitor_stacking():
+                while not stop_monitor.is_set():
+                    try:
+                        assert_sidebar_above_content(process.pid)
+                    except Exception as error:
+                        stacking_errors.append(str(error))
+                        return
+                    stop_monitor.wait(.016)
+
+            monitor = threading.Thread(target=monitor_stacking)
+            monitor.start()
+            try:
+                animation = sidebar('''(async()=>{
+                    const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+                    const widths=[];
+                    const sample=async ms=>{
+                        const end=performance.now()+ms;
+                        while(performance.now()<end) { widths.push(innerWidth); await wait(16); }
+                    };
+                    await wait(400);
+                    const closedWidth=innerWidth;
+                    for(let i=0;i<3;i++) {
+                        document.documentElement.dispatchEvent(new MouseEvent('mouseenter'));
+                        await sample(400);
+                        if(!currentState.sidebar_peek || document.body.classList.contains('collapsed')) throw Error('Sidebar did not reveal on hover');
+                        document.documentElement.dispatchEvent(new MouseEvent('mouseleave'));
+                        await sample(600);
+                        if(currentState.sidebar_peek) throw Error('Sidebar did not hide after leaving');
+                    }
+                    document.documentElement.dispatchEvent(new MouseEvent('mouseenter'));
+                    await sample(80);
+                    document.documentElement.dispatchEvent(new MouseEvent('mouseleave'));
+                    await sample(300);
                     document.documentElement.dispatchEvent(new MouseEvent('mouseenter'));
                     await sample(400);
-                    if(!currentState.sidebar_peek || document.body.classList.contains('collapsed')) throw Error('Sidebar did not reveal on hover');
+                    if(!currentState.sidebar_peek) throw Error('Reversing a hide must reveal the sidebar');
                     document.documentElement.dispatchEvent(new MouseEvent('mouseleave'));
                     await sample(600);
-                    if(currentState.sidebar_peek) throw Error('Sidebar did not hide after leaving');
-                }
-                return {closedWidth,widths};
-            })()''')
+                    return {closedWidth,widths};
+                })()''')
+            finally:
+                stop_monitor.set()
+                monitor.join(timeout=5)
+            assert not stacking_errors, stacking_errors
             assert animation['closedWidth'] >= 260, animation
             assert all(width == animation['closedWidth'] for width in animation['widths']), animation
             assert_sidebar_above_content(process.pid)
             command('toggle_sidebar')
-            checks.append('Repeated hover reveal/hide keeps the native sidebar viewport at a stable width')
+            checks.append('Hover reveal, hide, and reversal keep the native sidebar width stable and above new pages')
             command('navigate', url=origin + '/second')
             loaded(origin + '/second')
             command('navigate', url=origin)
@@ -249,8 +262,7 @@ def main():
             seed = sidebar('currentState')
             capacity = []
             for count in (100, 300, 500):
-                process.kill()
-                process.wait(timeout=10)
+                app.stop()
                 time.sleep(1)
                 snapshot = copy.deepcopy(seed)
                 template = snapshot['tabs'][0]
@@ -262,7 +274,7 @@ def main():
                 (profile / 'session.json').write_text(json.dumps(snapshot), encoding='utf-8')
                 Fixture.release_download.clear()
                 started = time.monotonic()
-                process = subprocess.Popen([str(executable)], env=environment, stdout=log, stderr=log)
+                process = app.start([], log)
                 wait(lambda _: sidebar('currentState.tabs.length') == count, 'capacity sidebar ready')
                 loaded(f'{origin}/capacity/{count}')
                 startup_ms = (time.monotonic() - started) * 1000
@@ -304,10 +316,9 @@ def main():
                 sleeper = next(tab['id'] for tab in settled['tabs'] if tab['is_sleeping'])
                 switch(sleeper)
                 wait(lambda snapshot: snapshot['active_tab_id'] == sleeper, 'latest selection reaches disk')
-                process.kill()
-                process.wait(timeout=10)
+                app.stop()
                 time.sleep(1)
-                process = subprocess.Popen([str(executable)], env=environment, stdout=log, stderr=log)
+                process = app.start([], log)
                 wait(lambda _: sidebar('currentState.tabs.length') == count, 'recovered capacity sidebar ready')
                 recovered = wait(lambda snapshot: snapshot['active_tab_id'] == sleeper and not active(snapshot)['is_loading'], 'capacity crash recovery')
                 assert sum(not tab['is_sleeping'] for tab in recovered['tabs']) == 1
@@ -326,6 +337,16 @@ def main():
                 print(json.dumps((artifacts / 'app.log').read_text(encoding='utf-8', errors='replace')), flush=True)
                 snapshot = state()
                 print(f'Saved fixture session: {json.dumps({"tabs": len(snapshot["tabs"]), "active": active(snapshot)}) if snapshot else None}', flush=True)
+                (artifacts / 'failure.json').write_text(json.dumps({
+                    'error': str(sys.exc_info()[1]), 'pid': process.pid, 'exit_code': process.poll(),
+                    'active': active(snapshot) if snapshot else None,
+                }, indent=2), encoding='utf-8')
+                if not (artifacts / 'debugger.json').exists():
+                    try:
+                        subprocess.run(['node', str(Path(__file__).with_name('native_capture.mjs')),
+                                        str(port), str(content_port), str(artifacts), '--diagnostics'], timeout=60)
+                    except (OSError, subprocess.TimeoutExpired) as error:
+                        print(f'Could not collect debugger evidence: {error}', flush=True)
                 subprocess.run(['powershell', '-NoProfile', '-Command',
                                 f'$parents = @({process.pid}); $all = @(Get-CimInstance Win32_Process); '
                                 'do { $children = @($all | Where-Object { $_.ParentProcessId -in $parents -and $_.ProcessId -notin $parents }); '
@@ -333,11 +354,10 @@ def main():
                                 '$all | Where-Object { $_.ProcessId -in $parents -and $_.CommandLine -notmatch " --type=" } | Select-Object ProcessId,ParentProcessId,Name,CommandLine | Format-List'],
                                timeout=15)
         finally:
-            if process is not None and process.poll() is None:
-                process.kill()
-                process.wait(timeout=10)
-            executable.unlink(missing_ok=True)
-            server.shutdown()
+            try:
+                app.close()
+            finally:
+                server.shutdown()
 
 
 

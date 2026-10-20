@@ -20,7 +20,7 @@ form:focus-within { box-shadow:inset 0 -1px var(--focus); }
 .results { padding:6px; overflow:auto; min-height:0; scrollbar-width:thin; scrollbar-color:#45454b transparent; }
 .option { display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:9px; cursor:pointer; }
 .option[aria-selected="true"] { background:#2d2d32; } .option:hover { background:#27272b; } .option[aria-selected="true"]:hover { background:#2d2d32; }
-.option>svg { width:18px; height:18px; } .option-text { min-width:0; flex:1; } .option-title,.option-detail { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .option-title { font-size:14px; line-height:1.5; } .option-detail { color:var(--muted); font-size:12px; line-height:1.5; }
+.option-icon { width:18px; height:18px; flex-shrink:0; display:grid; place-items:center; } .option-icon svg,.option-icon img { grid-area:1/1; width:18px; height:18px; } .option-icon img { object-fit:contain; background:#f5f5f7; border-radius:3px; padding:1px; } .option-text { min-width:0; flex:1; } .option-title,.option-detail { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .option-title { font-size:14px; line-height:1.5; } .option-detail { color:var(--muted); font-size:12px; line-height:1.5; }
 .empty { margin:0; padding:18px 16px 22px; font-size:13px; color:var(--muted); line-height:1.6; }
 footer { border-top:1px solid var(--line); display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:12px 18px; font-size:12px; color:var(--muted); flex-shrink:0; }
 kbd { font:11px "Segoe UI",system-ui,sans-serif; color:#dedee3; border:1px solid #4a4a50; padding:1px 5px; border-radius:4px; margin-right:5px; }
@@ -86,12 +86,13 @@ function render() {
  const seen=new Set();
  const norm=u=>(u||'').replace(/\/+$/,'').toLowerCase();
  if(target) {
-  options.push({title:query,detail:target===Felaris.searchUrl+encodeURIComponent(query)?'Search with '+Felaris.searchName.replace(/ Search$/,''):'Open in a new tab',url:target});
+  const search=target===Felaris.searchUrl+encodeURIComponent(query);
+  options.push({title:query,detail:search?'Search with '+Felaris.searchName.replace(/ Search$/,''):'Open in a new tab',url:target,search});
   seen.add(norm(target));
  }
  for(const tab of (state.tabs||[]).filter(tab=>tab.url!=='felaris://newtab'&&(!needle||(tab.title+' '+tab.url).toLowerCase().includes(needle))).slice(0,6)) {
   const workspace=(state.workspaces||[]).find(space=>space.id===tab.workspace_id);
-  options.push({title:tab.title||tab.url,detail:`Switch to tab${workspace?' · '+workspace.name:''} · ${tab.url}`,id:tab.id});
+  options.push({title:tab.title||tab.url,detail:`Switch to tab${workspace?' · '+workspace.name:''} · ${tab.url}`,id:tab.id,url:tab.url,favicon:tab.favicon});
   seen.add(norm(tab.url));
  }
  for(const entry of historyEntries) {
@@ -106,19 +107,33 @@ function render() {
   if(!item?.url||seen.has(norm(item.url))) continue;
   if(needle&&!((item.title||'')+' '+item.url).toLowerCase().includes(needle)) continue;
   seen.add(norm(item.url));
-  options.push({title:item.title||item.url,detail:`Shortcut · ${item.url}`,url:item.url,shortcut:true});
+  options.push({title:item.title||item.url,detail:`Shortcut · ${item.url}`,url:item.url,favicon:item.favicon,shortcut:true});
  }
  results.replaceChildren();
  options.forEach((option,index)=>{
   const row=document.createElement('div'); row.id='new-tab-option-'+index; row.className='option'; row.setAttribute('role','option');
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'); svg.setAttribute('viewBox','0 0 24 24'); svg.setAttribute('aria-hidden','true');
   const path=document.createElementNS(svg.namespaceURI,'path');
-  path.setAttribute('d',option.id?'M4 5h16v14H4zM4 9h16':option.history?'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 4v5l3 2':'M5 12h14m-6-6 6 6-6 6');
+  path.setAttribute('d',option.search?'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm5 12 6 6':option.id?'M4 5h16v14H4zM4 9h16':option.history?'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 4v5l3 2':'M5 12h14m-6-6 6 6-6 6');
   svg.append(path);
+  const icon=document.createElement('span'); icon.className='option-icon'; icon.setAttribute('aria-hidden','true'); icon.append(svg);
+  if(!option.search) {
+   try {
+    const site=new URL(option.url);
+    if(['https:','http:'].includes(site.protocol)) {
+     const known=[option,...(state.tabs||[]),...(state.shortcuts||[])].find(item=>{
+      try { return item.favicon&&new URL(item.url).hostname===site.hostname&&['https:','http:'].includes(new URL(item.favicon).protocol); } catch { return false; }
+     });
+     const img=document.createElement('img'); img.alt=''; img.referrerPolicy='no-referrer'; img.hidden=true;
+     img.onload=()=>{img.hidden=false;svg.style.visibility='hidden';}; img.onerror=()=>img.remove();
+     img.src=known?.favicon||site.origin+'/favicon.ico'; icon.append(img);
+    }
+   } catch {}
+  }
   const text=document.createElement('span'); text.className='option-text';
   const title=document.createElement('span'); title.className='option-title'; title.textContent=option.title;
   const detail=document.createElement('span'); detail.className='option-detail'; detail.textContent=option.detail;
-  text.append(title,detail); row.append(svg,text);
+  text.append(title,detail); row.append(icon,text);
   row.onmousedown=event=>event.preventDefault(); row.onclick=()=>{select(index);submit();};
   results.append(row);
  });

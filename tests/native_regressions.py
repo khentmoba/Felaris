@@ -133,7 +133,7 @@ def main():
             assert (profile / 'smoke-download.txt').read_bytes() == b'x' * 65536
             subprocess.run(['node', str(Path(__file__).with_name('native_ui.mjs')), str(port), str(content_port), origin],
                            check=True, timeout=120)
-            checks.append('Native keyboard interactions and 48 DOM checks at desktop and minimum sizes')
+            checks.append('Native keyboard interactions and 55 DOM checks at desktop and minimum sizes')
         (artifacts / 'results.json').write_text(json.dumps({'success': True, 'checks': checks}, indent=2), encoding='utf-8')
         print('\n'.join(checks))
         print(f'Headless regression tests passed. Evidence: {artifacts}')

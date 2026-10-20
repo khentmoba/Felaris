@@ -45,6 +45,12 @@ window.runChecks=async()=>{
  check('newtab tab uses Felaris logo icon',d.querySelector('.tab-main[data-tab-id="1"] use')?.getAttribute('href')==='#felaris');
  check('sidebar shortcut dock removed',!d.querySelector('.essentials,.essential'));
  const originalRow=d.querySelector('.tab');
+ const originalButton=originalRow.querySelector('.tab-main');
+ const changed=structuredClone(fixtureState);
+ changed.tabs.find(tab=>tab.id===4).title='Updated background title';
+ w.updateState(changed);
+ check('background updates preserve unchanged row children',originalRow.querySelector('.tab-main')===originalButton);
+ w.updateState(structuredClone(fixtureState));
  const originalWorkspace=d.querySelector('.space');
  w.updateState({...structuredClone(fixtureState),is_loading:true});
  check('loading keeps tab and workspace nodes stable',d.querySelector('.tab')===originalRow&&d.querySelector('.space')===originalWorkspace);

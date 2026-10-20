@@ -1,9 +1,12 @@
 use crate::{
-    desktop, extensions, history, instance::Instance, profile, settings, start_page,
-    state::BrowserState, ui, updater,
+    desktop, extensions, history, instance::Instance, profile, session::SessionWriter, settings,
+    start_page, state::BrowserState, ui, updater,
 };
 use serde::Deserialize;
-use std::{collections::HashMap, hash::BuildHasher};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::BuildHasher,
+};
 use tao::platform::windows::WindowBuilderExtWindows;
 use tao::{
     dpi::{LogicalPosition, LogicalSize, Position, Size},
@@ -97,6 +100,10 @@ struct ContentCommand {
 
 #[derive(Debug)]
 pub enum UserEvent {
+    Maintenance,
+    SessionSaved(Result<(), String>),
+    SleepChecked(usize, u64, u64, String, bool),
+    CaptureAllowed(usize, u64),
     SmokeTick,
     SmokeResult(usize, bool),
     Command(Command),
@@ -205,12 +212,9 @@ fn content(
     proxy: &EventLoopProxy<UserEvent>,
 ) -> wry::Result<WebView> {
     let generation = std::collections::hash_map::RandomState::new().hash_one(id);
-    state
-        .tabs
-        .iter_mut()
-        .find(|tab| tab.id == id)
-        .unwrap()
-        .generation = generation;
+    let tab = state.tabs.iter_mut().find(|tab| tab.id == id).unwrap();
+    tab.generation = generation;
+    tab.has_capture = false;
     let token = generation.to_string();
     let script = ui::script().replace("__SHORTCUT_TOKEN__", &token);
     let ipc = proxy.clone();
@@ -222,6 +226,7 @@ fn content(
         .with_visible(false)
         .with_focused(false)
         .with_initialization_script(&script)
+        .with_initialization_script(include_str!("sleep.js"))
         .with_document_title_changed_handler(move |text| {
             let _ = title.send_event(UserEvent::Title(id, generation, text));
         })
@@ -323,11 +328,14 @@ fn content(
         view.load_html(include_str!("error.html"))?;
     } else {
         load(&view, state, &url)?;
+        if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id) {
+            tab.is_loading = true;
+        }
     }
     Ok(view)
 }
 
-fn may_exit(state: &BrowserState) -> bool {
+fn may_exit(state: &BrowserState, session: &SessionWriter) -> bool {
     if state.active_downloads > 0
         && !desktop::message(
             "Downloads in progress",
@@ -337,7 +345,7 @@ fn may_exit(state: &BrowserState) -> bool {
     {
         return false;
     }
-    if let Err(error) = state.save_session()
+    if let Err(error) = session.flush(state)
         && !desktop::message(
             "Session could not be saved",
             &format!("{error}\n\nClose without saving this session?"),
@@ -357,6 +365,7 @@ fn start_ad_blocker_install(proxy: &EventLoopProxy<UserEvent>) {
 }
 
 pub fn run(args: &[String]) -> wry::Result<()> {
+    let _ = extensions::active_at_startup();
     let headless = std::env::var_os("FELARIS_SMOKE_TEST").is_some();
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
@@ -402,6 +411,20 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         .build(&event_loop)
         .expect("Cannot create window");
     let mut state = BrowserState::restore();
+    let saved = proxy.clone();
+    let session = SessionWriter::new(move |result| {
+        let _ = saved.send_event(UserEvent::SessionSaved(result));
+    });
+    let mut session_dirty = true;
+    let maintenance = proxy.clone();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            if maintenance.send_event(UserEvent::Maintenance).is_err() {
+                break;
+            }
+        }
+    });
     state.sidebar_collapsed = !headless;
     state.sidebar_peek = false;
     for url in urls {
@@ -525,6 +548,9 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     let mut palette_open = false;
     let mut palette_needs_open = false;
     let mut visible_id = None;
+    let mut last_content_bounds = None;
+    let mut last_sidebar_state = String::new();
+    let mut sleep_pending = HashSet::new();
     let mut focus_address = false;
     let mut downloads: HashMap<usize, usize> = HashMap::new();
     let mut check_busy = false;
@@ -573,20 +599,69 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         let tick = matches!(event, Event::UserEvent(UserEvent::Frame));
         match event {
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } | Event::UserEvent(UserEvent::Command(Command::WindowClose)) => {
-                if may_exit(&state) { *flow = ControlFlow::Exit; }
+                if may_exit(&state, &session) { *flow = ControlFlow::Exit; }
             }
             Event::NewEvents(StartCause::Init) => {},
             Event::WindowEvent { event: WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. }, .. } => {},
             Event::UserEvent(event) => {
-                let transient = matches!(&event, UserEvent::TopbarReady | UserEvent::Frame | UserEvent::Command(Command::Peek { .. } | Command::TopbarPeek { .. } | Command::DragWindow));
+                let persistent = matches!(&event,
+                    UserEvent::External(_) | UserEvent::Title(..) | UserEvent::PageLoad(..)
+                    | UserEvent::Source(..) | UserEvent::Favicon(..)
+                    | UserEvent::Command(Command::Navigate { .. } | Command::NewTab { url: Some(_) }
+                        | Command::SubmitNewTab { .. } | Command::SwitchTab { .. } | Command::CloseTab { .. }
+                        | Command::ToggleSleep { .. } | Command::SleepInactiveTabs | Command::ClearUnpinnedTabs
+                        | Command::ToggleSidebar | Command::SwitchWorkspace { .. } | Command::RestoreClosedTab
+                        | Command::TogglePin { .. } | Command::CycleTab { .. } | Command::FocusAddress
+                        | Command::OpenSettings | Command::OpenHistory));
                 match event {
+                    UserEvent::Maintenance => {
+                        if session_dirty {
+                            match session.try_save(&state) {
+                                Ok(queued) => { session_dirty = !queued; },
+                                Err(error) => { let _ = proxy.send_event(UserEvent::Status(format!("Could not save your session: {error}"))); },
+                            }
+                        }
+                        let live: HashSet<_> = views.keys().copied().collect();
+                        for tab in state.sleep_candidates(&live, &downloads, 12) {
+                            if !sleep_pending.insert((tab.id, tab.generation)) { continue; }
+                            let (id, generation, last_active, url) = (tab.id, tab.generation, tab.last_active, tab.url.clone());
+                            let checked = proxy.clone();
+                            if let Some(view) = views.get(&id) {
+                                if !desktop::quiet(view) { sleep_pending.remove(&(id, generation)); continue; }
+                                if view.evaluate_script_with_callback("window.__felarisCanSleep?.() === true", move |result| {
+                                    let _ = checked.send_event(UserEvent::SleepChecked(id, generation, last_active, url.clone(), result == "true"));
+                                }).is_err() { sleep_pending.remove(&(id, generation)); }
+                            }
+                        }
+                        return;
+                    },
+                    UserEvent::SessionSaved(result) => {
+                        if let Err(error) = result { session_dirty = true; state.update_status = Some(format!("Could not save your session: {error}")); }
+                        else { return; }
+                    },
+                    UserEvent::SleepChecked(id, generation, last_active, url, safe) => {
+                        sleep_pending.remove(&(id, generation));
+                        if safe && views.len() > 12 && id != state.active_tab_id
+                            && downloads.get(&id).copied().unwrap_or(0) == 0
+                            && views.get(&id).is_some_and(desktop::quiet)
+                            && let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id
+                                && tab.generation == generation && tab.last_active == last_active && tab.url == url
+                                && !tab.is_pinned && !tab.has_capture && !tab.is_loading && !tab.is_sleeping) {
+                            tab.is_sleeping = true;
+                            session_dirty = true;
+                        } else { return; }
+                    },
+                    UserEvent::CaptureAllowed(id, generation) => {
+                        if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) { tab.has_capture = true; }
+                        return;
+                    },
                     UserEvent::SmokeTick => {
-                        if let Some(smoke) = &mut smoke && smoke.tick(&state, &views, &sidebar, &palette, &proxy) { *flow = ControlFlow::Exit; }
+                        if let Some(smoke) = &mut smoke && smoke.tick(&state, &views, &sidebar, &palette, &proxy, &session) { *flow = ControlFlow::Exit; }
                     }
                     UserEvent::SmokeResult(phase, success) => {
                         if let Some(smoke) = &mut smoke && smoke.result(phase, success, &proxy) { *flow = ControlFlow::Exit; }
                     }
-                    UserEvent::Ready => {},
+                    UserEvent::Ready => { last_sidebar_state.clear(); },
                     UserEvent::TopbarReady => { last_loading = false; },
                     UserEvent::Frame => {},
                     UserEvent::PaletteReady => { palette_needs_open = palette_open; },
@@ -670,7 +745,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                 if view.zoom(f64::from(next) / 100.).is_ok() { zooms.insert(state.active_tab_id, next); }
                             },
                             Command::Print => if let Some(view) = views.get(&state.active_tab_id) { let _ = view.print(); },
-                            Command::Exit => if may_exit(&state) { *flow = ControlFlow::Exit; },
+                            Command::Exit => if may_exit(&state, &session) { *flow = ControlFlow::Exit; },
                             Command::DefaultBrowser => { if let Err(error) = std::process::Command::new("explorer.exe").arg("ms-settings:defaultapps").spawn() { state.update_status = Some(format!("Could not open Windows default apps: {error}")); } },
                             Command::CheckUpdates => if !check_busy {
                                 check_busy = true; state.update_status = Some("Checking for updates…".into());
@@ -678,7 +753,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             },
                             Command::ApplyUpdate => if !state.update_busy && state.active_downloads == 0 && let Some(update) = &state.update_available {
                                 let url = update.download_url.clone().unwrap_or_else(|| format!("https://github.com/{}/releases/download/v{}/felaris.exe", updater::GITHUB_REPO, update.version));
-                                if state.save_session().is_ok() {
+                                if session.flush(&state).is_ok() {
                                     state.update_busy = true; state.update_status = Some("Downloading update. Felaris will restart when it is ready.".into());
                                     let proxy = proxy.clone(); std::thread::spawn(move || { if let Err(error) = updater::download_and_apply_update(&url) { let _ = proxy.send_event(UserEvent::UpdateFailed(format!("Update failed: {error}. You can try again."))); } });
                                 } else { state.update_status = Some("Save your session successfully before updating. Check available disk space.".into()); }
@@ -720,28 +795,29 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                     } },
                     UserEvent::Status(status) => { state.update_status = Some(status); },
                     UserEvent::AdBlockerInstalled(result) => match result {
-                        Ok(()) if extensions::enabled_at_startup() && state.active_downloads == 0 => {
-                            // Rebuilding the pages makes WebView2 load the new extension.
-                            views.clear();
-                            state.update_status = Some("uBlock Origin Lite is installed and blocking ads.".into());
-                        },
                         Ok(()) => { state.update_status = Some("uBlock Origin Lite is installed. Restart Felaris to start blocking ads.".into()); },
                         Err(error) => { state.update_status = Some(format!("Ad blocker install failed: {error} Try again from Settings.")); },
                     },
                     UserEvent::UpdateFailed(status) => { state.update_busy = false; state.update_status = Some(status); },
                 }
-                if !transient && let Err(error) = state.save_session() { state.update_status = Some(format!("Could not save your session: {error}")); }
+                session_dirty |= persistent;
             }
+            Event::LoopDestroyed => { let _ = session.flush(&state); return; },
             _ => return,
         }
         state.active_downloads = downloads.values().sum();
-        views.retain(|id,_| state.tabs.iter().any(|tab| tab.id == *id && !tab.is_sleeping));
+        let awake: HashSet<_> = state.tabs.iter().filter(|tab| !tab.is_sleeping).map(|tab| tab.id).collect();
+        views.retain(|id,_| awake.contains(id));
+        downloads.retain(|id, count| *count > 0 || awake.contains(id));
+        sleep_pending.retain(|(id, _)| views.contains_key(id));
         let active_id = state.active_tab_id;
+        let mut created = false;
         if let std::collections::hash_map::Entry::Vacant(entry) = views.entry(active_id) {
             match content(&window, &mut context, &mut state, active_id, &proxy) {
                 Ok(view) => {
                     if state.active_tab().is_some_and(|tab| tab.error.is_some()) { let _ = view.load_html(include_str!("error.html")); }
                     entry.insert(view);
+                    created = true;
 
                 }
                 Err(error) => { state.update_status = Some(format!("Could not open this tab: {error}")); }
@@ -774,7 +850,15 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             }
             return;
         }
-        for (id,view) in &views { let _ = view.set_bounds(content_bounds); let _ = view.set_visible(*id == active_id); }
+        let geometry = (window.inner_size(), window.scale_factor(), state.sidebar_collapsed);
+        if last_content_bounds != Some(geometry) {
+            for view in views.values() { let _ = view.set_bounds(content_bounds); }
+            last_content_bounds = Some(geometry);
+        }
+        if visible_id != Some(active_id) || created {
+            if let Some(view) = visible_id.and_then(|id| views.get(&id)) { let _ = view.set_visible(false); }
+            if let Some(view) = views.get(&active_id) { let _ = view.set_visible(true); }
+        }
         let physical = content_bounds.size.to_physical::<u32>(window.scale_factor());
         let radius = if window.is_maximized() || window.fullscreen().is_some() { 0 } else { (ui::CONTENT_RADIUS * window.scale_factor()) as i32 };
         let shape = (physical.width, physical.height, radius);
@@ -795,7 +879,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         if state.is_loading != last_loading { last_loading = state.is_loading; let _ = topbar.evaluate_script(&format!("window.setLoading?.({last_loading})")); }
         if let Some(tab) = state.active_tab() { window.set_title(&format!("{} — Felaris", tab.title)); }
         if let Ok(json) = serde_json::to_string(&state) {
-            let _ = sidebar.evaluate_script(&format!("window.updateState?.({json})"));
+            if json != last_sidebar_state && sidebar.evaluate_script(&format!("window.updateState?.({json})")).is_ok() { last_sidebar_state = json.clone(); }
             if focus_address { if !headless { let _ = sidebar.focus(); } let _ = sidebar.evaluate_script("window.focusAddress()"); focus_address = false; }
             if palette_open && palette_needs_open { desktop::raise(&palette); let _ = palette.evaluate_script(&format!("window.openNewTab?.({json})")); if !headless { let _ = palette.focus(); } palette_needs_open = false; }
         }

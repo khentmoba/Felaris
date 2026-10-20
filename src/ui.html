@@ -155,6 +155,9 @@ function renderTabs() {
   if(query && !(tab.title+' '+tab.url).toLowerCase().includes(query)) continue;
   visible++;
   const row=oldRows.get(tab.id)||document.createElement('div');
+  const rowSignature=JSON.stringify([tab.title,tab.url,tab.is_pinned,tab.is_sleeping,tab.favicon,tab.error,tab.id===currentState.active_tab_id]);
+  if(row.dataset.signature===rowSignature) { (tab.is_pinned?pinned:normal).push(row); continue; }
+  row.dataset.signature=rowSignature;
   row.dataset.tabId=tab.id;
   row.replaceChildren();
   row.className='tab'+(tab.id===currentState.active_tab_id?' active':'')+(tab.is_sleeping?' sleeping':'')+(tab.error?' failed':'');
@@ -193,7 +196,8 @@ function renderTabs() {
 window.updateState = state => {
  const previous=currentState;
  currentState=state;
- if(previous.tabs.some(tab=>!state.tabs.some(current=>current.id===tab.id))) showToast('Tab closed',true);
+ const tabIds=new Set(state.tabs.map(tab=>tab.id));
+ if(previous.tabs.some(tab=>!tabIds.has(tab.id))) showToast('Tab closed',true);
  syncCollapsed();
  $('btn-toggle-sidebar').setAttribute('aria-expanded',String(!state.sidebar_collapsed));
  $('btn-toggle-sidebar').setAttribute('aria-label',state.sidebar_collapsed?'Expand sidebar':'Collapse sidebar');
@@ -230,6 +234,7 @@ window.updateState = state => {
  $('sleep-label').textContent=sleeping?`${sleeping} ${sleeping===1?'tab':'tabs'} sleeping`:'Sleep background tabs';
  $('btn-ram-saver').disabled=!state.tabs.some(t=>t.id!==state.active_tab_id&&!t.is_sleeping);
  $('btn-pin-tab').textContent=active?.is_pinned?'Unpin current tab':'Pin current tab';
+ $('btn-pin-tab').title='Pinned tabs stay awake during automatic tab sleeping';
  $('btn-reopen-tab').disabled=!state.can_restore_closed_tab;
  if(state.update_available) {
   $('update-banner').hidden=false;

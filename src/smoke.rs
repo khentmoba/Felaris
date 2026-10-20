@@ -120,6 +120,7 @@ impl Smoke {
         sidebar: &WebView,
         palette: &WebView,
         proxy: &EventLoopProxy<UserEvent>,
+        session: &crate::session::SessionWriter,
     ) -> bool {
         if self.done {
             return false;
@@ -156,6 +157,7 @@ impl Smoke {
             }
             2 if !tab.is_loading && tab.title == "Felaris second" => {
                 self.phase = 3;
+                let _ = proxy.send_event(UserEvent::AdBlockerInstalled(Ok(())));
                 Self::command(proxy, Command::SwitchTab { id: self.first });
             }
             3 if tab.id == self.first && !tab.is_loading => {
@@ -232,7 +234,7 @@ impl Smoke {
                 && tab.title == "Felaris second"
                 && state.active_workspace_id == 2 =>
             {
-                if let Err(error) = state.save_session() {
+                if let Err(error) = session.flush(state) {
                     return self.finish(false, &error);
                 }
                 self.phase = 16;

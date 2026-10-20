@@ -6,6 +6,7 @@ mod extensions;
 mod history;
 mod instance;
 mod profile;
+mod session;
 mod settings;
 mod smoke;
 mod start_page;

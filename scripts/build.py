@@ -47,7 +47,7 @@ def main():
         if args.dry_run:
             parser.error('--prepare and --dry-run are separate operations')
         manifest_path.write_text(json.dumps(manifest_for(version, args.summary), indent=2) + '\n', encoding='utf-8')
-        print('Prepared version.json. Commit and merge it before publishing.')
+        print('Prepared version.json. Commit and push the release metadata directly to main before publishing.')
         return
 
     manifest = json.loads(manifest_path.read_text(encoding='utf-8-sig'))

@@ -1,6 +1,6 @@
 use crate::{
-    desktop, extensions, history, instance::Instance, profile, session::SessionWriter, settings,
-    start_page, state::BrowserState, ui, updater,
+    desktop, extensions, history, instance::Instance, permission, profile, session::SessionWriter,
+    settings, start_page, state::BrowserState, ui, updater,
 };
 use serde::Deserialize;
 use std::{
@@ -120,6 +120,9 @@ pub enum UserEvent {
     SessionSaved(Result<(), String>),
     SleepChecked(usize, u64, u64, String, bool),
     CaptureAllowed(usize, u64),
+    PermissionRequested,
+    PermissionReady,
+    PermissionResponse(u64, bool),
     SmokeTick,
     SmokeResult(usize, bool),
     Command(Command),
@@ -153,11 +156,10 @@ fn bounds(window: &Window, state: &BrowserState, side: f64, top: f64) -> (Rect, 
     let hot = ui::SIDEBAR_HOT_ZONE;
     let (side_x, side_width, top_left) = if !state.sidebar_collapsed {
         (0., full, full)
-    } else if side <= 0. {
-        (0., hot, 0.)
     } else {
         let right = (full * side).max(hot);
-        (right - full, full, right)
+        // Keep WebView2 at full width so revealing it never resizes its surface.
+        (right - full, full, if side <= 0. { 0. } else { right })
     };
     let margin = if window.is_maximized() || window.fullscreen().is_some() {
         0.
@@ -703,6 +705,8 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         palette_builder = palette_builder.with_additional_browser_args(arguments);
     }
     let palette = palette_builder.build(&*window)?;
+    let mut permission_prompt =
+        permission::Prompt::new(&window, &mut chrome_context, proxy.clone(), headless)?;
     let topbar_ready = proxy.clone();
     let topbar_proxy = proxy.clone();
     let mut topbar_builder = WebViewBuilder::new_with_web_context(&mut chrome_context)
@@ -952,6 +956,11 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) { tab.has_capture = true; }
                         return;
                     },
+                    UserEvent::PermissionRequested => {},
+                    UserEvent::PermissionReady => { permission_prompt.ready(); },
+                    UserEvent::PermissionResponse(token, allow) => {
+                        if permission_prompt.respond(token, allow, &state) && !headless && let Some(view) = views.get(&state.active_tab_id) { let _ = view.focus(); }
+                    },
                     UserEvent::SmokeTick => {
                         if let Some(smoke) = &mut smoke && smoke.tick(&state, &views, &sidebar, &palette, &proxy, &session) { *flow = ControlFlow::Exit; }
                     }
@@ -1120,6 +1129,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                     UserEvent::Title(id, generation, title) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) && tab.error.is_none() && !title.is_empty() { history::retitle(&tab.url, &title); tab.title = title; },
                     UserEvent::PageLoad(id, generation, loading, url) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) {
                         if loading {
+                            permission_prompt.cancel_tab(id);
                             if tab.pending_url.as_ref().is_some_and(|expected| expected != &url && !(profile::is_internal(expected) && url == "about:blank")) { return; }
                             tab.pending_url = None;
                             if let Some(url) = profile::normalize_url(&url) { tab.url = url; tab.error = None; }
@@ -1199,12 +1209,6 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         let _ = sidebar.set_bounds(sidebar_bounds);
         if tick {
             let _ = topbar.set_bounds(topbar_bounds);
-            if !palette_open {
-                if state.sidebar_collapsed && side_progress > 0. {
-                    desktop::raise(&sidebar);
-                }
-                desktop::raise(&topbar);
-            }
             return;
         }
         let geometry = (window.inner_size(), window.scale_factor(), state.sidebar_collapsed);
@@ -1223,7 +1227,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         for (id, view) in &views { if rounded.get(id) != Some(&shape) { desktop::round(view, shape.0 as i32, shape.1 as i32, radius); rounded.insert(*id, shape); } }
         let _ = topbar.set_bounds(topbar_bounds);
         if !palette_open {
-            if state.sidebar_collapsed && side_progress > 0. { desktop::raise(&sidebar); }
+            if state.sidebar_collapsed { desktop::raise(&sidebar); }
             desktop::raise(&topbar);
         }
         let _ = palette.set_bounds(overlay_bounds);
@@ -1255,5 +1259,6 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                 palette_needs_open = false;
             }
         }
+        permission_prompt.sync(&state, overlay_bounds, palette_open, headless);
     });
 }

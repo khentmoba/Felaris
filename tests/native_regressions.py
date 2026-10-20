@@ -1,6 +1,8 @@
 """Drive the real sidebar IPC with WebView2 debugging in an isolated hidden app."""
 import argparse
 import copy
+import ctypes
+from ctypes import wintypes
 from http.server import ThreadingHTTPServer
 import json
 import os
@@ -15,6 +17,48 @@ import uuid
 from urllib.request import urlopen
 
 from native_smoke import Fixture
+
+
+def assert_sidebar_above_content(process_id):
+    user32 = ctypes.WinDLL('user32', use_last_error=True)
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user32.GetParent.argtypes = [wintypes.HWND]
+    user32.GetParent.restype = wintypes.HWND
+    user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.EnumChildWindows.argtypes = [wintypes.HWND, callback_type, wintypes.LPARAM]
+    user32.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+    roots = []
+
+    @callback_type
+    def root(hwnd, _):
+        pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value == process_id:
+            rect = wintypes.RECT()
+            user32.GetClientRect(hwnd, ctypes.byref(rect))
+            roots.append((rect.right, hwnd))
+        return True
+
+    user32.EnumWindows(root, 0)
+    parent = max(roots)[1]
+    children = []
+
+    @callback_type
+    def child(hwnd, _):
+        if user32.GetParent(hwnd) == parent and user32.GetWindowLongW(hwnd, -16) & 0x10000000:
+            rect = wintypes.RECT()
+            user32.GetClientRect(hwnd, ctypes.byref(rect))
+            children.append((rect.right, rect.bottom))
+        return True
+
+    user32.EnumChildWindows(parent, child, 0)
+    panels = [(i, width, height) for i, (width, height) in enumerate(children) if height > 100]
+    assert len(panels) == 2, children
+    sidebar = min(panels, key=lambda panel: panel[1])[0]
+    content = max(panels, key=lambda panel: panel[1])[0]
+    assert sidebar < content, f'Sidebar hover area is behind page content: {children}'
 
 
 def main():
@@ -98,6 +142,36 @@ def main():
     try:
         with (artifacts / 'app.log').open('w', encoding='utf-8') as log:
             process = subprocess.Popen([str(executable), origin + '/'], env=environment, stdout=log, stderr=log)
+            loaded(origin + '/')
+            sidebar('document.activeElement.blur(); window.ipc.postMessage(JSON.stringify({action:"toggle_sidebar"})); true')
+            sidebar('(async()=>{await new Promise(resolve=>setTimeout(resolve,400)); return true})()')
+            command('new_tab', url=origin + '/second')
+            loaded(origin + '/second')
+            assert_sidebar_above_content(process.pid)
+            animation = sidebar('''(async()=>{
+                const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+                const widths=[];
+                const sample=async ms=>{
+                    const end=performance.now()+ms;
+                    while(performance.now()<end) { widths.push(innerWidth); await wait(16); }
+                };
+                await wait(400);
+                const closedWidth=innerWidth;
+                for(let i=0;i<3;i++) {
+                    document.documentElement.dispatchEvent(new MouseEvent('mouseenter'));
+                    await sample(400);
+                    if(!currentState.sidebar_peek || document.body.classList.contains('collapsed')) throw Error('Sidebar did not reveal on hover');
+                    document.documentElement.dispatchEvent(new MouseEvent('mouseleave'));
+                    await sample(600);
+                    if(currentState.sidebar_peek) throw Error('Sidebar did not hide after leaving');
+                }
+                return {closedWidth,widths};
+            })()''')
+            assert animation['closedWidth'] >= 260, animation
+            assert all(width == animation['closedWidth'] for width in animation['widths']), animation
+            assert_sidebar_above_content(process.pid)
+            command('toggle_sidebar')
+            checks.append('Repeated hover reveal/hide keeps the native sidebar viewport at a stable width')
             command('navigate', url=origin + '/second')
             loaded(origin + '/second')
             command('navigate', url=origin)
@@ -153,9 +227,9 @@ def main():
             Fixture.release_download.set()
             wait(lambda _: sidebar('currentState.active_downloads') == 0, 'download completion')
             assert (profile / 'smoke-download.txt').read_bytes() == b'x' * 65536
-            subprocess.run(['node', str(Path(__file__).with_name('native_ui.mjs')), str(port), str(content_port), origin],
+            subprocess.run(['node', str(Path(__file__).with_name('native_ui.mjs')), str(port), str(content_port), origin, str(artifacts)],
                            check=True, timeout=120)
-            checks.append('Native keyboard interactions and 56 DOM checks at desktop and minimum sizes')
+            checks.append('Native keyboard, pointer selection, site permission decisions, and 60 DOM checks at desktop and minimum sizes')
 
             source = next(tab['id'] for tab in sidebar('currentState.tabs') if tab['url'] == origin + '/next')
             command('duplicate_tab', id=source)

@@ -71,10 +71,14 @@ try {
   await until(() => sidebar.evaluate('currentState.sidebar_collapsed'), 'Ctrl+S collapses sidebar');
   await press(restored, 'l', 2);
   await until(() => sidebar.evaluate('!currentState.sidebar_collapsed && document.activeElement.id === "url-input"'), 'Ctrl+L expands and selects address');
+  if (await sidebar.evaluate('currentState.workspaces.length < 2')) await command('create_profile', { name: 'School' });
+  await until(() => sidebar.evaluate('currentState.workspaces.length >= 2'), 'Profile exists');
+  await press(restored, '1', 1);
+  await until(() => sidebar.evaluate('currentState.active_workspace_id === 1'), 'Alt+1 switches profile');
   await press(restored, '2', 1);
-  await until(() => sidebar.evaluate('currentState.active_workspace_id === 2'), 'Alt+2 switches workspace');
+  await until(() => sidebar.evaluate('currentState.active_workspace_id === 2'), 'Alt+2 switches profile');
   await press(sidebar, '1', 1);
-  await until(() => sidebar.evaluate('currentState.active_workspace_id === 1'), 'Alt+1 returns to workspace');
+  await until(() => sidebar.evaluate('currentState.active_workspace_id === 1'), 'Alt+1 returns to profile');
   const pins = await sidebar.evaluate('document.querySelectorAll("#pinned-tabs .tab").length');
   const pinChange = await sidebar.evaluate('currentState.tabs.find(tab => tab.id === currentState.active_tab_id).is_pinned ? -1 : 1');
   await sidebar.evaluate('document.getElementById("btn-pin-tab").click()');

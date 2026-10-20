@@ -234,7 +234,7 @@ def main():
 
             pinned = replacement['active_tab_id']
             command('toggle_pin', id=pinned)
-            command('switch_workspace', id=2)
+            command('create_profile', name='School')
             other = wait(lambda snapshot: snapshot['active_workspace_id'] == 2, 'second workspace')['active_tab_id']
             command('switch_tab', id=pinned)
             command('new_tab', url=origin + '/slow')

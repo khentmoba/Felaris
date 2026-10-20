@@ -27,7 +27,7 @@ svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7;
 .tab-main { min-width:0; display:flex; gap:10px; align-items:center; flex:1; text-align:left; height:40px; padding:0 9px; border-radius:9px; } .tab-main:hover { background:transparent; } .favicon { width:16px; height:16px; flex-shrink:0; display:grid; place-items:center; color:var(--accent); font-size:11px; font-weight:600; } .favicon svg { width:14px; height:14px; } .favicon { position:relative; } .favicon img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; } .tab-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .tab.sleeping:not(.active) .tab-title { color:var(--muted); } .sleep-icon { color:var(--muted); width:13px; height:13px; }
 .close-tab { width:28px; height:28px; display:grid; place-items:center; opacity:0; margin-right:5px; flex-shrink:0; } .close-tab svg { width:14px; } .tab:hover .close-tab,.tab:focus-within .close-tab,.tab.active .close-tab { opacity:1; } .close-tab:hover { background:#45454b; color:var(--text); }
 .empty { text-align:center; color:var(--muted); line-height:1.6; padding:24px 10px; }
-.footer { border-top:1px solid var(--line); padding-top:10px; display:flex; flex-direction:column; gap:10px; } .workspace-switcher { display:flex; align-items:center; gap:6px; } #spaces { display:flex; gap:6px; flex:1; } .space { width:34px; height:32px; display:grid; place-items:center; color:var(--muted); } .space[aria-pressed="true"] { background:var(--active); color:var(--accent); } .space svg { width:17px; }
+.footer { border-top:1px solid var(--line); padding-top:10px; display:flex; flex-direction:column; gap:10px; } .workspace-switcher { display:flex; align-items:center; gap:6px; } #profiles { flex:1; min-width:0; } #profiles summary { display:flex; align-items:center; gap:8px; min-height:34px; padding:6px 8px; border-radius:8px; } #profile-current { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } #profiles .menu { left:0; right:auto; width:236px; } #spaces { display:flex; flex-direction:column; gap:4px; max-height:180px; overflow:auto; scrollbar-width:thin; } .space { min-height:36px; color:var(--muted); overflow-wrap:anywhere; } #profile-form { display:flex; flex-direction:column; gap:8px; padding:10px; border-top:1px solid var(--line); margin-top:8px; } #profile-name { width:100%; padding:9px; background:var(--bg); border:1px solid var(--line); border-radius:8px; } #profile-form button { background:var(--active); justify-content:center; } #profile-form small { color:var(--muted); line-height:1.5; } #profile-error { color:var(--text); margin:0; } .space[aria-pressed="true"] { background:var(--active); color:var(--accent); } .space svg { width:17px; }
 .sleep-control { display:flex; align-items:center; gap:8px; padding:8px; color:var(--muted); font-size:11px; text-align:left; } .sleep-control svg { width:14px; height:14px; } .sleep-control span { flex:1; }
 details { position:relative; } summary { list-style:none; cursor:pointer; } summary::-webkit-details-marker { display:none; } .menu { max-height:min(440px,calc(100vh - 64px)); overflow:auto; scrollbar-width:thin; scrollbar-color:var(--line) transparent; position:absolute; bottom:42px; right:0; width:244px; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:6px; box-shadow:0 12px 30px #0005; z-index:10; } .menu button { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; padding:10px; text-align:left; font-size:12px; } .menu hr { border:0; border-top:1px solid var(--line); margin:5px; } .menu p { margin:8px 10px; font-size:11px; color:var(--muted); line-height:1.5; }
 .app-menu .menu { top:38px; bottom:auto; left:0; right:auto; width:236px; } #tab-context-menu { bottom:auto; right:auto; left:12px; width:220px; z-index:30; } .menu .item { display:flex; align-items:center; gap:10px; } .menu .item svg { width:16px; height:16px; color:var(--muted); } .menu kbd { white-space:nowrap; }
@@ -90,8 +90,8 @@ button:active:not(:disabled),summary:active { transform:scale(.96); }
 </form>
 <div class="workspace-heading"><svg aria-hidden="true"><use id="workspace-icon" href="#home"/></svg><span id="workspace-name">General</span><span class="count" id="tab-count">1 tab</span></div>
 <div class="tab-tools"><button class="new-tab" id="btn-add-tab" title="New tab (Ctrl+T)" aria-label="New tab"><svg><use href="#plus"/></svg><span>New tab</span><kbd>Ctrl T</kbd></button><button class="icon" id="btn-search-tabs" title="Search tabs" aria-label="Search tabs" aria-expanded="false"><svg><use href="#search"/></svg></button></div>
-<input id="tab-search" type="search" aria-label="Filter tabs in this workspace" placeholder="Find a tab…" hidden>
-<section class="tabs" aria-label="Tabs in this workspace"><div id="pinned-tabs" class="tab-group" aria-label="Pinned tabs"></div><div id="tabs-container" class="tab-group" aria-label="Open tabs"></div><p class="empty" id="empty-tabs" hidden>No matching tabs.<br>Try a different title or address.</p></section>
+<input id="tab-search" type="search" aria-label="Filter tabs in this profile" placeholder="Find a tab…" hidden>
+<section class="tabs" aria-label="Tabs in this profile"><div id="pinned-tabs" class="tab-group" aria-label="Pinned tabs"></div><div id="tabs-container" class="tab-group" aria-label="Open tabs"></div><p class="empty" id="empty-tabs" hidden>No matching tabs.<br>Try a different title or address.</p></section>
 <div class="update-banner" id="update-banner" hidden>
 <div class="update-header"><svg aria-hidden="true"><use href="#felaris"/></svg><span id="update-text">Update available</span></div>
 <button id="btn-apply-update" class="update-btn">Update now</button>
@@ -100,7 +100,7 @@ button:active:not(:disabled),summary:active { transform:scale(.96); }
 <footer class="footer">
 <button class="download-control" id="btn-downloads" title="Downloads (Ctrl+J)" aria-label="Downloads"><svg><use href="#download"/></svg><span>Downloads</span><small id="download-count"></small></button>
 <button class="sleep-control" id="btn-ram-saver" title="Unload background tabs to free memory (Ctrl+Shift+S)"><svg><use href="#moon"/></svg><span id="sleep-label">Sleep background tabs</span><svg><use href="#forward"/></svg></button>
-<div class="workspace-switcher"><div id="spaces" aria-label="Workspaces"></div><details id="browser-menu"><summary class="icon" title="Tab actions" aria-label="Tab actions"><svg><use href="#more"/></svg></summary><div class="menu"><button id="btn-pin-tab">Pin current tab</button><button id="btn-reopen-tab">Reopen closed tab <kbd>Ctrl Shift T</kbd></button><button id="btn-clear-tabs">Close other unpinned tabs</button><hr><button id="btn-check-update">Check for updates</button><button id="btn-default-browser">Set default browser?</button><hr><p>Workspaces: Alt + 1 / 2 / 3<br>Address bar: Ctrl + L<br>Toggle sidebar: Ctrl + S</p></div></details></div>
+<div class="workspace-switcher"><details id="profiles"><summary aria-label="Switch profile"><svg aria-hidden="true"><use href="#globe"/></svg><span id="profile-current">General</span></summary><div class="menu"><p>Profiles</p><div id="spaces" aria-label="Profiles"></div><form id="profile-form"><label for="profile-name">New profile</label><input id="profile-name" placeholder="e.g. School" maxlength="40" required autocomplete="off"><small>Each profile keeps its own tabs and pins. Website logins are shared.</small><p id="profile-error" role="alert" hidden></p><button type="submit">Create profile</button></form></div></details><details id="browser-menu"><summary class="icon" title="Tab actions" aria-label="Tab actions"><svg><use href="#more"/></svg></summary><div class="menu"><button id="btn-pin-tab">Pin current tab</button><button id="btn-reopen-tab">Reopen closed tab <kbd>Ctrl Shift T</kbd></button><button id="btn-clear-tabs">Close other unpinned tabs</button><hr><button id="btn-check-update">Check for updates</button><button id="btn-default-browser">Set default browser?</button><hr><p>Profiles: Alt + 1-9<br>Address bar: Ctrl + L<br>Toggle sidebar: Ctrl + S</p></div></details></div>
 </footer>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-message"></span><button id="toast-undo" hidden>Reopen tab</button></div>
 <div class="menu" id="tab-context-menu" role="menu" aria-label="Tab options" hidden></div>
@@ -218,13 +218,14 @@ window.updateState = state => {
  if(state.sidebar_collapsed) { $('tab-search').hidden=true; $('tab-search').value=''; $('btn-search-tabs').setAttribute('aria-expanded','false'); }
  const workspace=state.workspaces.find(w=>w.id===state.active_workspace_id);
  $('workspace-name').textContent=workspace?.name||'General';
- $('workspace-icon').setAttribute('href','#'+({1:'home',2:'code',3:'book'}[state.active_workspace_id]||'globe'));
+ $('workspace-icon').setAttribute('href','#globe');
+ $('profile-current').textContent=workspace?.name||'General';
  if(previous.active_workspace_id!==state.active_workspace_id) $('tab-search').value='';
  const spacesSignature=JSON.stringify(state.workspaces);
  if($('spaces').dataset.signature!==spacesSignature) {
   $('spaces').dataset.signature=spacesSignature;
   $('spaces').replaceChildren();
-  for(const space of state.workspaces) { const button=document.createElement('button'); button.className='space'; button.dataset.spaceId=space.id; button.title=`${space.name} (Alt+${space.id})`; button.setAttribute('aria-label',space.name); button.append(icon({1:'home',2:'code',3:'book'}[space.id]||'globe')); button.onclick=()=>Felaris.send('switch_workspace',{id:space.id}); $('spaces').append(button); }
+  for(const [index,space] of state.workspaces.entries()) { const button=document.createElement('button'); button.className='space'; button.dataset.spaceId=space.id; button.title=space.name+(index<9?` (Alt+${index+1})`:''); button.setAttribute('aria-label',space.name); button.textContent=space.name; button.onclick=()=>Felaris.send('switch_workspace',{id:space.id}); $('spaces').append(button); }
  }
  for(const button of $('spaces').children) button.setAttribute('aria-pressed',String(Number(button.dataset.spaceId)===state.active_workspace_id));
  renderTabs();
@@ -311,9 +312,20 @@ const peek=open=>{ if(currentState.sidebar_collapsed&&currentState.sidebar_peek!
 const scheduleHide=()=>{ clearTimeout(hideTimer); hideTimer=setTimeout(()=>{ if(!inside&&tabMenu.hidden&&!menus.some(menu=>menu.open)&&document.activeElement!==$('url-input')&&document.activeElement!==$('tab-search')) peek(false); },250); };
 document.documentElement.addEventListener('mouseenter',()=>{ inside=true; clearTimeout(hideTimer); peek(true); });
 document.documentElement.addEventListener('mouseleave',()=>{ inside=false; scheduleHide(); });
+$('profile-form').onsubmit=e=>{
+ e.preventDefault();
+ const input=$('profile-name'),name=input.value.trim();
+ const error=$('profile-error');
+ const duplicate=currentState.workspaces.some(space=>space.name.toLowerCase()===name.toLowerCase());
+ error.textContent=duplicate?'A profile with that name already exists.':!name?'Enter a profile name.':'';
+ error.hidden=!error.textContent;
+ if(error.textContent) { input.focus(); return; }
+ Felaris.send('create_profile',{name});
+ input.value=''; $('profiles').open=false; document.querySelector('#profiles summary')?.focus();
+};
 $('url-input').addEventListener('blur',scheduleHide); $('tab-search').addEventListener('blur',scheduleHide);
 for(const menu of menus) {
- menu.addEventListener('click',e=>{ if(e.target.closest('button')&&!e.target.closest('.zoom')) menu.open=false; });
+ menu.addEventListener('click',e=>{ if(e.target.closest('button')&&!e.target.closest('.zoom,#profile-form')) menu.open=false; });
  menu.addEventListener('toggle',()=>{ if(menu.open) { closeTabMenu(); for(const other of menus) if(other!==menu) other.open=false; } scheduleHide(); });
  menu.addEventListener('keydown',e=>{ if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key)||!menu.open)return; e.preventDefault(); const items=[...menu.querySelectorAll('button:not(:disabled)')]; const index=items.indexOf(document.activeElement); items[e.key==='Home'?0:e.key==='End'?items.length-1:(index+(e.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus(); });
 }

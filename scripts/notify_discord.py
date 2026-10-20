@@ -9,7 +9,9 @@ import sys
 import json
 import argparse
 import mimetypes
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -52,6 +54,10 @@ def get_cargo_version():
 
 
 def send_webhook(webhook_url, payload, file_path=None):
+    parts = urlsplit(webhook_url)
+    query = dict(parse_qsl(parts.query))
+    query['wait'] = 'true'
+    webhook_url = urlunsplit(parts._replace(query=urlencode(query)))
     if not file_path:
         req = Request(
             webhook_url,
@@ -59,7 +65,7 @@ def send_webhook(webhook_url, payload, file_path=None):
             headers={"Content-Type": "application/json", "User-Agent": "FelarisReleaseBot/1.0"},
         )
         with urlopen(req) as resp:
-            return resp.status
+            return json.load(resp)
     else:
         boundary = "----WebKitFormBoundaryFelarisRelease7MA4YWxkTrZu0gW"
         file_bytes = file_path.read_bytes()
@@ -90,7 +96,7 @@ def send_webhook(webhook_url, payload, file_path=None):
             },
         )
         with urlopen(req) as resp:
-            return resp.status
+            return json.load(resp)
 
 
 def main():
@@ -139,46 +145,51 @@ def main():
         return
 
     ver = args.version or get_cargo_version()
-    summary = args.summary or "New release of Felaris browser with performance improvements and features."
+    summary = args.summary or json.loads((PROJECT_ROOT / 'version.json').read_text(encoding='utf-8-sig'))['summary']
+    bullets = '\n'.join('- ' + line.strip().lstrip('-* ').strip() for line in summary.splitlines() if line.strip())
+    if not bullets or len(bullets) > 1024:
+        parser.error("Release notes must fit the 1024-character What's New field")
 
     exe_file = None
     if not args.no_upload:
-        candidate_exe = Path(args.exe) if args.exe else (PROJECT_ROOT / "target" / "release" / "felaris.exe")
-        if candidate_exe.is_file():
-            exe_file = candidate_exe
-
-    size_mb = f"{exe_file.stat().st_size / (1024 * 1024):.2f} MB" if exe_file else "N/A"
-
+        candidate = Path(args.exe) if args.exe else PROJECT_ROOT / 'target/release/felaris.exe'
+        # Larger binaries use the public release asset to fit the default upload budget.
+        if candidate.is_file() and candidate.stat().st_size <= 10 * 1024 * 1024:
+            exe_file = candidate
+    download_url = f'https://github.com/khentmoba/Felaris/releases/download/v{ver}/felaris.exe'
+    delivery = ({"name": "Attached File", "value": f'{exe_file.name} ({exe_file.stat().st_size / (1024 * 1024):.2f} MB)', "inline": True}
+                if exe_file else {"name": "Download", "value": f'[felaris.exe]({download_url})', "inline": True})
     payload = {
         "username": "Felaris Release Bot",
         "avatar_url": DEFAULT_AVATAR,
-        "content": f"**Felaris v{ver} is now available!**",
-        "embeds": [
-            {
-                "title": f"Felaris Browser — Release v{ver}",
-                "description": summary,
-                "color": 959977,
-                "fields": [
-                    {"name": "Version", "value": f"`v{ver}`", "inline": True},
-                    {"name": "Binary Size", "value": size_mb, "inline": True},
-                    {"name": "Architecture", "value": "Windows x64", "inline": True},
-                    {"name": "Application Core", "value": "100% Rust / Native WebView2", "inline": False},
-                ],
-                "footer": {"text": "Felaris — Lightweight, Modern Browser"},
-            }
-        ],
+        "content": f"New Release: **Felaris v{ver}** is now available! " + ('Download the attached file.' if exe_file else 'Download felaris.exe using the link below.'),
+        "allowed_mentions": {"parse": []},
+        "embeds": [{
+            "title": f"Release: Felaris v{ver}",
+            "description": "Run felaris.exe on Windows to start browsing.",
+            "color": 4363994,
+            "fields": [
+                {"name": "Version", "value": f"v{ver}", "inline": True},
+                {"name": "Configuration", "value": "Windows x64 / Release", "inline": True},
+                delivery,
+                {"name": "What's New", "value": bullets, "inline": False},
+            ],
+            "footer": {"text": "Felaris Automated Release System"},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }],
     }
 
     if args.dry_run:
         print("[DryRun] Release payload:", json.dumps(payload, indent=2))
         if exe_file:
-            print(f"[DryRun] Attaching binary: {exe_file} ({size_mb})")
+            print(f"[DryRun] Attaching binary: {exe_file}")
         return
 
     print(f"[Felaris] Publishing v{ver} release to Discord...")
     if exe_file:
-        print(f"[Felaris] Attaching binary: {exe_file.name} ({size_mb})")
-    send_webhook(webhook_url, payload, file_path=exe_file)
+        print(f"[Felaris] Attaching binary: {exe_file.name}")
+    message = send_webhook(webhook_url, payload, file_path=exe_file)
+    print(f"[Felaris] Discord message ID: {message['id']}")
     print(f"[Felaris] Successfully published v{ver} to #felaris-releases!")
 
 

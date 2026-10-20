@@ -16,7 +16,40 @@ ROOT = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location('release', ROOT / 'scripts/build.py')
 release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
+notify_spec = importlib.util.spec_from_file_location('notify', ROOT / 'scripts/notify_discord.py')
+notify = importlib.util.module_from_spec(notify_spec)
+notify_spec.loader.exec_module(notify)
 SHA = 'a' * 40
+
+
+class NotificationTests(unittest.TestCase):
+    def test_payload_matches_delivery_and_normalizes_bullets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / 'felaris.exe'
+            binary.write_bytes(b'fixture')
+            for upload in (True, False):
+                arguments = ['notify', '--version', '1.2.3', '--summary', '* Fixed hover\n- Added prompts', '--exe', str(binary)]
+                if not upload:
+                    arguments.append('--no-upload')
+                with patch('sys.argv', arguments), patch.object(notify, 'get_webhook_url', return_value='https://example.test/webhook'), \
+                        patch.object(notify, 'send_webhook', return_value={'id': '123'}) as send, \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    notify.main()
+                payload = send.call_args.args[1]
+                self.assertEqual(payload['allowed_mentions'], {'parse': []})
+                embed = payload['embeds'][0]
+                self.assertEqual(embed['color'], 4363994)
+                self.assertEqual(embed['title'], 'Release: Felaris v1.2.3')
+                self.assertEqual(embed['fields'][-1]['value'], '- Fixed hover\n- Added prompts')
+                self.assertEqual(embed['fields'][2]['name'], 'Attached File' if upload else 'Download')
+                self.assertEqual(send.call_args.kwargs['file_path'], binary if upload else None)
+                self.assertIn('attached' if upload else 'link below', payload['content'])
+
+    def test_webhook_requests_message_receipt(self):
+        response = io.BytesIO(b'{"id":"123"}')
+        with patch.object(notify, 'urlopen', return_value=response) as post:
+            self.assertEqual(notify.send_webhook('https://example.test/webhook?wait=false', {'content': 'test'}), {'id': '123'})
+        self.assertEqual(post.call_args.args[0].full_url, 'https://example.test/webhook?wait=true')
 
 
 class ReleaseTests(unittest.TestCase):

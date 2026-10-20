@@ -1,6 +1,6 @@
 ---
 name: felaris-pr
-description: Open or update Felaris pull requests with Windows/WebView2 evidence and checks for the current commit. Use for Felaris PR creation and release PR preparation; publication uses discord-release.
+description: Open or update requested Felaris pull requests with Windows/WebView2 evidence and checks for the current commit. Use for release PR preparation only when the user explicitly requests a release PR; releases use discord-release.
 ---
 
 # Felaris pull requests
@@ -114,15 +114,11 @@ it remains unfinished.
 Done when the PR is linked and current-head CI is passed, failed, pending, or
 explicitly blocked. Return its URL, check state, and material merge risks.
 
-## Release PRs
+## Explicitly requested release PRs
 
-Read [discord-release](../discord-release/SKILL.md) for Felaris's supported release
-path. Prepare `Cargo.toml`, `Cargo.lock`, and `version.json` before committing or
-running a version-dependent build. Use `python scripts/build.py --prepare` for
-metadata preparation; publication is a separate command and authorization.
-Include the target version and post-merge steps in the PR.
-
-When release publication is authorized, the release skill requires a clean checkout
-of the current remote `main` commit and successful Windows CI for that exact SHA.
-Follow that skill to package, publish, and verify assets. Verify installation or
-updates separately from upload success.
+Release and Discord announcement requests follow
+[discord-release](../discord-release/SKILL.md), which pushes release metadata
+directly to `main`. Use this PR workflow for a release only when the user explicitly
+requests a release PR. In that case, prepare `Cargo.toml`, `Cargo.lock`, and
+`version.json` before committing or running a version-dependent build, and include
+the target version and post-merge publication steps in the PR.

@@ -268,7 +268,7 @@ Felaris automates releases to both GitHub Releases and Discord (`#felaris-releas
 # Test Discord webhook connectivity
 python scripts/notify_discord.py --test
 
-# Prepare metadata before committing and merging the release change
+# Prepare metadata before committing and pushing it directly to main
 python scripts/build.py --prepare -s "Release summary"
 
 # From a clean checkout of the checked commit on origin/main
@@ -277,8 +277,11 @@ python scripts/build.py
 ```
 
 Python 3.11+ is required. Set the release version in `Cargo.toml` and update
-`Cargo.lock` before preparation. Commit and merge `version.json` with that change,
-then wait for CI. Publication checks the checkout against the current remote
+`Cargo.lock` before preparation. Starting from the latest `origin/main`, commit
+only `Cargo.toml`, `Cargo.lock`, and `version.json`, then push directly with
+`git push origin HEAD:main` and wait for Windows push CI. Releases use this direct
+path; a release PR is used only when explicitly requested.
+Publication checks the checkout against the current remote
 `main`, requires successful Windows CI for that exact SHA, verifies the release
 package, and pins the GitHub tag to the built SHA.
 An existing tag, dirty checkout, mismatched metadata, or failed GitHub publication

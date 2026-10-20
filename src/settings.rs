@@ -49,7 +49,10 @@ fn path() -> std::path::PathBuf {
 }
 
 pub fn get() -> Settings {
-    current().lock().unwrap().clone()
+    current()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
 }
 
 pub fn engine() -> (&'static str, &'static str) {
@@ -74,7 +77,9 @@ pub fn set(key: &str, value: &Value) -> Result<Settings, String> {
     }
     let bytes = serde_json::to_vec_pretty(&settings).map_err(|error| error.to_string())?;
     crate::profile::write_atomic(&path(), &bytes).map_err(|error| error.to_string())?;
-    *current().lock().unwrap() = settings.clone();
+    *current()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = settings.clone();
     Ok(settings)
 }
 

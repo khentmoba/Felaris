@@ -111,6 +111,37 @@ pub fn attach(
     let mut token = 0;
     let history = proxy.clone();
     unsafe {
+        let keys = proxy.clone();
+        view.controller().add_AcceleratorKeyPressed(
+            &AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
+                use windows::Win32::UI::Input::KeyboardAndMouse::{
+                    GetKeyState, VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT,
+                };
+                let Some(args) = args else { return Ok(()) };
+                let mut kind = COREWEBVIEW2_KEY_EVENT_KIND::default();
+                args.KeyEventKind(&mut kind)?;
+                if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
+                    && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN
+                {
+                    return Ok(());
+                }
+                let mut key = 0;
+                args.VirtualKey(&mut key)?;
+                let down = |key: VIRTUAL_KEY| GetKeyState(i32::from(key.0)) < 0;
+                if let Some(command) =
+                    crate::app::shortcut(key, down(VK_CONTROL), down(VK_SHIFT), down(VK_MENU))
+                {
+                    args.SetHandled(true)?;
+                    let mut status = COREWEBVIEW2_PHYSICAL_KEY_STATUS::default();
+                    args.PhysicalKeyStatus(&mut status)?;
+                    if !status.WasKeyDown.as_bool() {
+                        let _ = keys.send_event(UserEvent::Command(command));
+                    }
+                }
+                Ok(())
+            })),
+            &mut token,
+        )?;
         webview.add_HistoryChanged(
             &HistoryChangedEventHandler::create(Box::new(move |view, _| {
                 if let Some(view) = view {

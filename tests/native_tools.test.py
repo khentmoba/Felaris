@@ -47,7 +47,7 @@ def main():
             source = (tests / 'native_ui.mjs').read_text(encoding='utf-8')
             source = source.replace("from './native_cdp.mjs'", f'from {json.dumps((tests / "native_cdp.mjs").as_uri())}')
             menu_marker = '  const menuOpacity = await sidebar.evaluate('
-            key_marker = "  await press(restored, 's', 2);"
+            key_marker = "  await press(restored, 'B', 10);"
             command_marker = '  const command = '
             sidebar_marker = "  const sidebar = await connect(page => page.title === 'Felaris');"
             assert source.count(menu_marker) == source.count(key_marker) == source.count(command_marker) == source.count(sidebar_marker) == 1
@@ -60,7 +60,7 @@ def main():
     document.head.append(style); return true;
   })()`);
 ''' + menu_marker), 'App menu must stay opaque'),
-                ('keyboard', source.replace(key_marker, ''), 'Timed out: Ctrl+S collapses sidebar'),
+                ('keyboard', source.replace(key_marker, ''), 'Timed out: Ctrl+Shift+B collapses sidebar'),
             ]
             for name, driver, expected in faults:
                 probe = app.artifacts / f'{name}.mjs'

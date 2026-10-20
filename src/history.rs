@@ -1,6 +1,9 @@
 use crate::{profile, settings};
 use serde::{Deserialize, Serialize};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{
+    Mutex, MutexGuard, OnceLock, PoisonError,
+    atomic::{AtomicBool, Ordering},
+};
 
 const MAX_ENTRIES: usize = 2000;
 
@@ -11,7 +14,9 @@ pub struct Entry {
     pub time: u64,
 }
 
-fn log() -> &'static Mutex<Vec<Entry>> {
+static DIRTY: AtomicBool = AtomicBool::new(false);
+
+fn log() -> MutexGuard<'static, Vec<Entry>> {
     static LOG: OnceLock<Mutex<Vec<Entry>>> = OnceLock::new();
     LOG.get_or_init(|| {
         let loaded = std::fs::read_to_string(path())
@@ -20,6 +25,8 @@ fn log() -> &'static Mutex<Vec<Entry>> {
             .unwrap_or_default();
         Mutex::new(loaded)
     })
+    .lock()
+    .unwrap_or_else(PoisonError::into_inner)
 }
 
 fn path() -> std::path::PathBuf {
@@ -32,10 +39,22 @@ fn now() -> u64 {
         .map_or(0, |elapsed| elapsed.as_millis() as u64)
 }
 
-fn save(entries: &[Entry]) {
-    if let Ok(bytes) = serde_json::to_vec(entries) {
-        let _ = profile::write_atomic(&path(), &bytes);
+/// Writes the log if it changed; the maintenance thread calls this so visits never block on disk.
+pub fn flush() {
+    static WRITING: Mutex<()> = Mutex::new(());
+    let _writing = WRITING.lock().unwrap_or_else(PoisonError::into_inner);
+    if !DIRTY.swap(false, Ordering::AcqRel) {
+        return;
     }
+    if let Ok(bytes) = serde_json::to_vec(&*log())
+        && profile::write_atomic(&path(), &bytes).is_err()
+    {
+        DIRTY.store(true, Ordering::Release);
+    }
+}
+
+fn changed() {
+    DIRTY.store(true, Ordering::Release);
 }
 
 /// Newest first; reloading the page at the top of the list only refreshes it.
@@ -70,36 +89,36 @@ pub fn visit(url: &str, title: &str) {
     {
         return;
     }
-    let mut entries = log().lock().unwrap();
+    let mut entries = log();
     record(&mut entries, url, title, now());
-    save(&entries);
+    changed();
 }
 
 /// The page title usually arrives after the visit is recorded.
 pub fn retitle(url: &str, title: &str) {
-    let mut entries = log().lock().unwrap();
+    let mut entries = log();
     if let Some(latest) = entries.first_mut().filter(|latest| latest.url == url)
         && latest.title != title
     {
         latest.title = title.into();
-        save(&entries);
+        changed();
     }
 }
 
 pub fn all() -> Vec<Entry> {
-    log().lock().unwrap().clone()
+    log().clone()
 }
 
 pub fn remove(url: &str) {
-    let mut entries = log().lock().unwrap();
+    let mut entries = log();
     entries.retain(|entry| entry.url != url);
-    save(&entries);
+    changed();
 }
 
 pub fn clear() {
-    let mut entries = log().lock().unwrap();
+    let mut entries = log();
     entries.clear();
-    save(&entries);
+    changed();
 }
 
 #[cfg(test)]

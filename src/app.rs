@@ -904,6 +904,9 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                 return;
             }
             Event::UserEvent(event) => {
+                if headless && matches!(&event, UserEvent::Title(..) | UserEvent::PageLoad(..) | UserEvent::Source(..)) {
+                    eprintln!("{event:?}");
+                }
                 let persistent = matches!(&event,
                     UserEvent::External(_) | UserEvent::Title(..) | UserEvent::PageLoad(..)
                     | UserEvent::Source(..) | UserEvent::Favicon(..)

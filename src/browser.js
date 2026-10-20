@@ -23,7 +23,10 @@
     let payload = {};
     if (event.ctrlKey && !event.altKey && !event.metaKey) {
       if (key === 't') action = event.shiftKey ? 'restore_closed_tab' : 'new_tab';
-      else if (key === 's') action = event.shiftKey ? 'sleep_inactive_tabs' : 'toggle_sidebar';
+      else if (key === 's' && event.shiftKey) action = 'sleep_inactive_tabs';
+      else if (key === 'b' && event.shiftKey) action = 'toggle_sidebar';
+      else if (key === 'n' && event.shiftKey) action = 'new_private_tab';
+      else if (key === 'd' && !event.shiftKey) action = 'toggle_bookmark';
       else if (key === 'w' && !event.shiftKey) action = 'close_active_tab';
       else if (key === 'l' && !event.shiftKey) action = 'focus_address';
       else if (key === 'j' && !event.shiftKey) action = 'open_downloads';

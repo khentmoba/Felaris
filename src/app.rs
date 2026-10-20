@@ -111,6 +111,50 @@ pub enum Command {
         url: String,
     },
     Retry,
+    ToggleBookmark {
+        url: Option<String>,
+    },
+    NewPrivateTab,
+}
+
+/// Browser shortcuts by Windows virtual-key code, matched before the page sees the key.
+pub fn shortcut(key: u32, ctrl: bool, shift: bool, alt: bool) -> Option<Command> {
+    let letter = char::from_u32(key).filter(char::is_ascii_alphanumeric);
+    Some(match (ctrl, alt) {
+        (true, false) => match (letter, key, shift) {
+            (Some('T'), ..) if shift => Command::RestoreClosedTab,
+            (Some('T'), ..) => Command::NewTab { url: None },
+            (Some('B'), _, true) => Command::ToggleSidebar,
+            (Some('S'), _, true) => Command::SleepInactiveTabs,
+            (Some('N'), _, true) => Command::NewPrivateTab,
+            (Some('W'), _, false) => Command::CloseActiveTab,
+            (Some('L'), _, false) => Command::FocusAddress,
+            (Some('J'), _, false) => Command::OpenDownloads,
+            (Some('H'), _, false) => Command::OpenHistory,
+            (Some('R'), _, false) => Command::Reload,
+            (Some('D'), _, false) => Command::ToggleBookmark { url: None },
+            (_, 0x09, _) => Command::CycleTab { backwards: shift },
+            (_, 0xBB | 0x6B, _) => Command::Zoom { delta: 10 },
+            (_, 0xBD | 0x6D, _) => Command::Zoom { delta: -10 },
+            (Some('0'), _, false) | (_, 0x60, false) => Command::Zoom { delta: 0 },
+            _ => return None,
+        },
+        (false, true) if !shift => match (letter, key) {
+            (_, 0x25) => Command::Back,
+            (_, 0x27) => Command::Forward,
+            (Some('D'), _) => Command::FocusAddress,
+            (Some(digit @ '1'..='9'), _) => Command::SwitchProfile {
+                index: digit as usize - '0' as usize,
+            },
+            _ => return None,
+        },
+        (false, false) if !shift => match key {
+            0x74 => Command::Reload,
+            0x7A => Command::ToggleFullscreen,
+            _ => return None,
+        },
+        _ => return None,
+    })
 }
 
 #[derive(Deserialize)]
@@ -298,6 +342,7 @@ fn open_popup(
     host: &PopupHost,
     url: &str,
     features: &wry::NewWindowFeatures,
+    private: bool,
     proxy: &EventLoopProxy<UserEvent>,
 ) -> Option<NewWindowResponse> {
     use wry::{WebViewBuilderExtWindows, WebViewExtWindows};
@@ -330,6 +375,7 @@ fn open_popup(
     let (_, content_rect) = popup_bounds(&host.window);
     let mut builder = WebViewBuilder::new()
         .with_environment(features.opener.environment.clone())
+        .with_incognito(private)
         .with_bounds(content_rect)
         .with_focused(!host.headless)
         .with_clipboard(true)
@@ -372,6 +418,7 @@ fn open_popup(
     _: &PopupHost,
     _: &str,
     _: &wry::NewWindowFeatures,
+    _: bool,
     _: &EventLoopProxy<UserEvent>,
 ) -> Option<NewWindowResponse> {
     None
@@ -383,7 +430,7 @@ fn load(view: &WebView, state: &BrowserState, url: &str) -> wry::Result<()> {
     } else if url == "felaris://settings" {
         view.load_html(&ui::get_settings_html())
     } else if url == "felaris://history" {
-        view.load_html(&ui::get_history_html())
+        view.load_html(&ui::get_history_html(&state.bookmarks))
     } else {
         view.load_url(url)
     }
@@ -399,7 +446,14 @@ fn content(
     fresh: bool,
 ) -> wry::Result<WebView> {
     let generation = std::collections::hash_map::RandomState::new().hash_one(id);
-    let tab = state.tabs.iter_mut().find(|tab| tab.id == id).unwrap();
+    let private = state.is_private(id);
+    let tab = state
+        .tabs
+        .iter_mut()
+        .find(|tab| tab.id == id)
+        .ok_or_else(|| std::io::Error::other("This tab no longer exists."))?;
+    let url = tab.url.clone();
+    let failed = tab.error.is_some();
     tab.generation = generation;
     tab.has_capture = false;
     let token = generation.to_string();
@@ -413,6 +467,7 @@ fn content(
         .with_bounds(bounds(window, state, 0., 0.).1)
         .with_visible(false)
         .with_focused(false)
+        .with_incognito(private)
         .with_initialization_script(&script)
         .with_initialization_script(include_str!("sleep.js"))
         .with_document_title_changed_handler(move |text| {
@@ -435,7 +490,7 @@ fn content(
                 || profile::is_auth_url(&url);
             if is_popup
                 && (url == "about:blank" || profile::allowed_url(&url))
-                && let Some(response) = open_popup(&popup_host, &url, &features, &popup)
+                && let Some(response) = open_popup(&popup_host, &url, &features, private, &popup)
             {
                 return response;
             }
@@ -464,6 +519,7 @@ fn content(
                             | Command::OpenExtensionsFolder
                             | Command::DefaultBrowser
                             | Command::CheckUpdates
+                            | Command::ToggleBookmark { url: Some(_) }
                     ))
                     || (trusted
                         && matches!(
@@ -484,6 +540,8 @@ fn content(
                                 | Command::OpenHistory
                                 | Command::Zoom { .. }
                                 | Command::ToggleFullscreen
+                                | Command::ToggleBookmark { url: None }
+                                | Command::NewPrivateTab
                         ))
                 {
                     let _ = ipc.send_event(UserEvent::Command(message.command));
@@ -511,19 +569,7 @@ fn content(
     }
     let view = builder.build(window)?;
     desktop::attach(&view, id, generation, proxy.clone())?;
-    let url = state
-        .tabs
-        .iter()
-        .find(|tab| tab.id == id)
-        .unwrap()
-        .url
-        .clone();
-    if state
-        .tabs
-        .iter()
-        .find(|tab| tab.id == id)
-        .is_some_and(|tab| tab.error.is_some())
-    {
+    if failed {
         view.load_html(include_str!("error.html"))?;
     } else {
         if fresh && (url.starts_with("https://") || url.starts_with("http://")) {
@@ -543,7 +589,116 @@ fn content(
     Ok(view)
 }
 
+/// Applies a page event from one tab's WebView, ignoring events from a replaced WebView.
+fn tab_event(
+    state: &mut BrowserState,
+    views: &mut HashMap<usize, WebView>,
+    prompt: &mut permission::Prompt,
+    event: UserEvent,
+) {
+    let current = |state: &BrowserState, id, generation| {
+        state
+            .tabs
+            .iter()
+            .position(|tab| tab.id == id && tab.generation == generation)
+    };
+    match event {
+        UserEvent::Title(id, generation, title) => {
+            let private = state.is_private(id);
+            if let Some(index) = current(state, id, generation)
+                && state.tabs[index].error.is_none()
+                && !title.is_empty()
+            {
+                if !private {
+                    history::retitle(&state.tabs[index].url, &title);
+                }
+                state.tabs[index].title = title;
+            }
+        }
+        UserEvent::PageLoad(id, generation, loading, url) => {
+            let private = state.is_private(id);
+            let Some(index) = current(state, id, generation) else {
+                return;
+            };
+            let tab = &mut state.tabs[index];
+            if loading {
+                prompt.cancel_tab(id);
+                if tab.pending_url.as_ref().is_some_and(|expected| {
+                    expected != &url && !(profile::is_internal(expected) && url == "about:blank")
+                }) {
+                    return;
+                }
+                tab.pending_url = None;
+                if let Some(url) = profile::normalize_url(&url) {
+                    tab.url = url;
+                    tab.error = None;
+                } else if tab.error.is_none()
+                    && (url == "about:blank" || url.starts_with("data:text/html;"))
+                    && !profile::is_internal(&tab.url)
+                {
+                    tab.url = "felaris://newtab".into();
+                }
+                tab.is_loading = true;
+            } else {
+                let failed = tab.error.is_some();
+                tab.is_loading = false;
+                if tab.url == url && profile::allowed_url(&url) {
+                    tab.error = None;
+                }
+                if tab.url == url && !failed && !private {
+                    history::visit(&tab.url, &tab.title);
+                }
+            }
+        }
+        UserEvent::Source(id, generation, url) => {
+            if let Some(index) = current(state, id, generation)
+                && state.tabs[index].pending_url.is_none()
+                && let Some(url) = profile::normalize_url(&url)
+            {
+                state.tabs[index].url = url;
+            }
+        }
+        UserEvent::History(id, generation, back, forward) => {
+            if let Some(index) = current(state, id, generation) {
+                state.tabs[index].can_go_back = back;
+                state.tabs[index].can_go_forward = forward;
+            }
+        }
+        UserEvent::Failed(id, generation, url, message) => {
+            if let Some(index) = current(state, id, generation) {
+                let tab = &mut state.tabs[index];
+                if tab
+                    .pending_url
+                    .as_ref()
+                    .is_none_or(|pending| pending == &url)
+                    && tab.url == url
+                {
+                    tab.error = Some(message);
+                    tab.pending_url = None;
+                    tab.is_loading = false;
+                }
+            }
+        }
+        UserEvent::Favicon(id, generation, uri) => {
+            if current(state, id, generation).is_some() {
+                let web = uri.starts_with("https://") || uri.starts_with("http://");
+                state.set_favicon(id, web.then_some(uri));
+            }
+        }
+        UserEvent::Crashed(id, generation) => {
+            if let Some(index) = current(state, id, generation) {
+                views.remove(&id);
+                let tab = &mut state.tabs[index];
+                tab.error = Some("This tab stopped responding. Reload it to continue.".into());
+                tab.is_loading = false;
+            }
+        }
+        _ => {}
+    }
+}
+
 fn may_exit(state: &BrowserState, session: &SessionWriter) -> bool {
+    history::flush();
     if state.active_downloads > 0
         && !desktop::message(
             "Downloads in progress",
@@ -658,6 +813,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     std::thread::spawn(move || {
         loop {
             std::thread::sleep(std::time::Duration::from_millis(500));
+            history::flush();
             if maintenance.send_event(UserEvent::Maintenance).is_err() {
                 break;
             }
@@ -936,7 +1092,8 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         | Command::ToggleSidebar | Command::SwitchWorkspace { .. } | Command::SwitchProfile { .. } | Command::CreateProfile { .. } | Command::RestoreClosedTab
                         | Command::TogglePin { .. } | Command::CycleTab { .. } | Command::FocusAddress
                         | Command::OpenSettings | Command::OpenHistory | Command::DuplicateTab { .. }
-                        | Command::MoveTabToWorkspace { .. } | Command::ExpandPopup { .. }));
+                        | Command::MoveTabToWorkspace { .. } | Command::ExpandPopup { .. }
+                        | Command::ToggleBookmark { .. } | Command::NewPrivateTab));
                 match event {
                     UserEvent::Maintenance => {
                         if session_dirty {
@@ -1106,6 +1263,8 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             },
                             Command::SwitchWorkspace { id } => { state.switch_workspace(id); },
                             Command::RestoreClosedTab => { state.restore_closed_tab(); },
+                            Command::NewPrivateTab => { state.open_private_tab(); palette_open = false; },
+                            Command::ToggleBookmark { url } => state.toggle_bookmark(url),
                             Command::TogglePin { id } => state.toggle_pin(id),
                             Command::DuplicateTab { id } => { state.duplicate_tab(id); },
                             Command::MoveTabToWorkspace { id, workspace_id } => {
@@ -1161,33 +1320,9 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             },
                         }
                     }
-                    UserEvent::Title(id, generation, title) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) && tab.error.is_none() && !title.is_empty() { history::retitle(&tab.url, &title); tab.title = title; },
-                    UserEvent::PageLoad(id, generation, loading, url) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) {
-                        if loading {
-                            permission_prompt.cancel_tab(id);
-                            if tab.pending_url.as_ref().is_some_and(|expected| expected != &url && !(profile::is_internal(expected) && url == "about:blank")) { return; }
-                            tab.pending_url = None;
-                            if let Some(url) = profile::normalize_url(&url) { tab.url = url; tab.error = None; }
-                            else if tab.error.is_none() && (url == "about:blank" || url.starts_with("data:text/html;")) && !profile::is_internal(&tab.url) { tab.url = "felaris://newtab".into(); }
-                            tab.is_loading = true;
-                        } else {
-                            let failed = tab.error.is_some();
-                            tab.is_loading = false;
-                            if tab.url == url && profile::allowed_url(&url) { tab.error = None; }
-                            if tab.url == url && !failed { history::visit(&tab.url, &tab.title); }
-                        }
-                    },
-                    UserEvent::Source(id, generation, url) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation && tab.pending_url.is_none())
-                        && let Some(url) = profile::normalize_url(&url) { tab.url = url; },
-                    UserEvent::History(id, generation, back, forward) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) { tab.can_go_back = back; tab.can_go_forward = forward; },
-                    UserEvent::Failed(id, generation, url, message) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation && tab.pending_url.as_ref().is_none_or(|pending| pending == &url) && tab.url == url) {
-                        tab.error = Some(message); tab.pending_url = None; tab.is_loading = false;
-                    },
-                    UserEvent::Favicon(id, generation, uri) => if state.tabs.iter().any(|tab| tab.id == id && tab.generation == generation) { state.set_favicon(id, (uri.starts_with("https://") || uri.starts_with("http://")).then_some(uri)); },
-                    UserEvent::Crashed(id, generation) => {
-                        if state.tabs.iter().any(|tab| tab.id == id && tab.generation == generation) { views.remove(&id); }
-                        if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) { tab.error = Some("This tab stopped responding. Reload it to continue.".into()); tab.is_loading = false; }
-                    },
+                    event @ (UserEvent::Title(..) | UserEvent::PageLoad(..) | UserEvent::Source(..)
+                        | UserEvent::History(..) | UserEvent::Failed(..) | UserEvent::Favicon(..)
+                        | UserEvent::Crashed(..)) => tab_event(&mut state, &mut views, &mut permission_prompt, event),
                     UserEvent::DownloadStarted(id) => { *downloads.entry(id).or_default() += 1; },
                     UserEvent::DownloadFinished(id, success) => { let count = downloads.entry(id).or_default(); *count = count.saturating_sub(1); state.update_status = Some(if success { "Download complete. Open Downloads to view the file." } else { "Download interrupted. Open Downloads to retry or choose another location." }.into()); },
                     UserEvent::UpdateChecked(result) => { check_busy = false; match result {
@@ -1204,7 +1339,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                 }
                 session_dirty |= persistent;
             }
-            Event::LoopDestroyed => { let _ = session.flush(&state); return; },
+            Event::LoopDestroyed => { history::flush(); let _ = session.flush(&state); return; },
             _ => return,
         }
         state.active_downloads = downloads.values().sum();
@@ -1298,4 +1433,44 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         }
         permission_prompt.sync(&state, overlay_bounds, palette_open, headless);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn action(key: u32, ctrl: bool, shift: bool, alt: bool) -> String {
+        format!("{:?}", shortcut(key, ctrl, shift, alt))
+    }
+
+    #[test]
+    fn shortcuts_map_virtual_keys_and_leave_page_keys_alone() {
+        assert_eq!(
+            action(0x54, true, false, false),
+            "Some(NewTab { url: None })"
+        );
+        assert_eq!(action(0x54, true, true, false), "Some(RestoreClosedTab)");
+        assert_eq!(action(0x42, true, true, false), "Some(ToggleSidebar)");
+        assert_eq!(
+            action(0x09, true, true, false),
+            "Some(CycleTab { backwards: true })"
+        );
+        assert_eq!(action(0xBB, true, true, false), "Some(Zoom { delta: 10 })");
+        assert_eq!(
+            action(0x32, false, false, true),
+            "Some(SwitchProfile { index: 2 })"
+        );
+        assert_eq!(action(0x25, false, false, true), "Some(Back)");
+        assert_eq!(action(0x7A, false, false, false), "Some(ToggleFullscreen)");
+        // Save, find, copy, plain typing, and AltGr (Ctrl+Alt) belong to the page.
+        for (key, ctrl, shift, alt) in [
+            (0x53, true, false, false),
+            (0x46, true, false, false),
+            (0x43, true, false, false),
+            (0x54, false, false, false),
+            (0x54, true, false, true),
+        ] {
+            assert_eq!(action(key, ctrl, shift, alt), "None");
+        }
+    }
 }

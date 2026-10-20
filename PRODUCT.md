@@ -30,4 +30,4 @@ Keep the Felaris name. The user explicitly requested Zen Browser's sidebar and f
 
 ## Open Decisions
 
-Primary audience beyond desktop browser users, bookmarks, and private browsing remain open decisions.
+Primary audience beyond desktop browser users remains an open decision. Bookmarks are a flat list (no folders). Private browsing is a Private profile backed by InPrivate WebViews that is never saved.

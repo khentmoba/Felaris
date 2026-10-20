@@ -1,4 +1,4 @@
-use crate::{extensions, history, settings, updater};
+use crate::{extensions, history, settings, state::Bookmark, updater};
 
 pub const SIDEBAR_WIDTH_EXPANDED: f64 = 260.0;
 pub const SIDEBAR_HOT_ZONE: f64 = 6.0;
@@ -29,16 +29,16 @@ pub fn get_new_tab_html() -> String {
     include_str!("new_tab.html").replace("__COMMON_SCRIPT__", &script())
 }
 
-pub fn get_history_html() -> String {
+pub fn get_history_html(bookmarks: &[Bookmark]) -> String {
+    // One placeholder, filled last, so page titles can't collide with another one.
+    let data = serde_json::json!({
+        "history": history::all(),
+        "bookmarks": bookmarks,
+        "saving": settings::get().save_history,
+    });
     include_str!("history.html")
         .replace("__COMMON_SCRIPT__", &script())
-        .replace(
-            "__HISTORY__",
-            &serde_json::to_string(&history::all())
-                .unwrap_or_else(|_| "[]".into())
-                .replace('<', "\\u003c"),
-        )
-        .replace("__SAVING__", &settings::get().save_history.to_string())
+        .replace("__HISTORY__", &data.to_string().replace('<', "\\u003c"))
 }
 
 pub fn get_settings_html() -> String {

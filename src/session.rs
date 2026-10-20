@@ -47,7 +47,7 @@ impl SessionWriter {
     }
 
     pub fn try_save(&self, state: &BrowserState) -> Result<bool, String> {
-        let bytes = serde_json::to_vec(state).map_err(|error| error.to_string())?;
+        let bytes = serde_json::to_vec(&*state.for_session()).map_err(|error| error.to_string())?;
         match self.0.try_send(Write::Save(bytes)) {
             Ok(()) => Ok(true),
             Err(TrySendError::Full(_)) => Ok(false),
@@ -56,7 +56,7 @@ impl SessionWriter {
     }
 
     pub fn flush(&self, state: &BrowserState) -> Result<(), String> {
-        let bytes = serde_json::to_vec(state).map_err(|error| error.to_string())?;
+        let bytes = serde_json::to_vec(&*state.for_session()).map_err(|error| error.to_string())?;
         let (sender, receiver) = mpsc::channel();
         self.0
             .send(Write::Flush(bytes, sender))

@@ -27,6 +27,9 @@ function press(key, modifiers = {}) {
 assert.deepEqual(press('T', { ctrlKey: true, shiftKey: true }), { action: 'restore_closed_tab' });
 assert.deepEqual(press('S', { ctrlKey: true, shiftKey: true }), { action: 'sleep_inactive_tabs' });
 assert.deepEqual(press('t', { ctrlKey: true }), { action: 'new_tab' });
+assert.deepEqual(press('B', { ctrlKey: true, shiftKey: true }), { action: 'toggle_sidebar' });
+assert.deepEqual(press('N', { ctrlKey: true, shiftKey: true }), { action: 'new_private_tab' });
+assert.deepEqual(press('d', { ctrlKey: true }), { action: 'toggle_bookmark' });
 assert.deepEqual(press('l', { ctrlKey: true }), { action: 'focus_address' });
 assert.deepEqual(press('j', { ctrlKey: true }), { action: 'open_downloads' });
 assert.deepEqual(press('w', { ctrlKey: true }), { action: 'close_active_tab' });
@@ -41,6 +44,7 @@ vm.runInContext("Object.prototype.toJSON = function () { throw Error('page seria
 assert.deepEqual(press('t', { ctrlKey: true }), { action: 'new_tab' });
 keydown({ key: 't', ctrlKey: true, isTrusted: true, isComposing: true });
 keydown({ key: 't', ctrlKey: true, isTrusted: false });
+keydown({ key: 's', ctrlKey: true, isTrusted: true, preventDefault() { throw Error('Ctrl+S belongs to the page'); } });
 assert.equal(messages.length, 0);
 for (const file of ['src/ui.html', 'src/start_page.html', 'src/new_tab.html', 'src/topbar.html', 'src/popup.html', 'src/permission.html']) {
   const html = fs.readFileSync(file, 'utf8').replace('__COMMON_SCRIPT__', fs.readFileSync('src/browser.js', 'utf8')).replace('__SHORTCUTS__', '[]');

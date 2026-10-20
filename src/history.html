@@ -19,6 +19,7 @@ ul { list-style:none; margin:0; padding:0; background:var(--surface); border:1px
 li { display:flex; align-items:center; border-bottom:1px solid var(--line); } li:last-child { border:0; } li:hover,li:focus-within { background:var(--hover); }
 .visit { flex:1; min-width:0; display:flex; align-items:center; gap:12px; height:46px; padding:0 14px; text-align:left; border-radius:0; } .time { width:62px; color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; flex-shrink:0; }
 .visit .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .visit .host { color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:2; }
+.site-icon { width:16px; height:16px; flex-shrink:0; display:grid; place-items:center; color:var(--muted); } .site-icon>* { grid-area:1/1; } .site-icon img { width:16px; height:16px; object-fit:contain; }
 .remove { width:32px; height:32px; margin-right:8px; display:grid; place-items:center; color:var(--muted); opacity:0; flex-shrink:0; } li:hover .remove,li:focus-within .remove { opacity:1; } .remove:hover { background:#45454b; color:var(--text); }
 .empty { color:var(--muted); text-align:center; padding:56px 0; line-height:1.6; }
 .btn,li,.remove { transition:background-color 140ms ease,border-color 140ms ease,color 140ms ease,opacity 120ms ease; }
@@ -50,7 +51,23 @@ function row(entry,label,removeLabel,onRemove) {
  const time=document.createElement('span'); time.className='time'; time.textContent=label;
  const name=document.createElement('span'); name.className='name'; name.textContent=entry.title||entry.url;
  const host=document.createElement('span'); host.className='host'; host.textContent=hostOf(entry.url);
- open.append(time,name,host); open.onclick=()=>Felaris.navigate(entry.url);
+ const icon=document.createElement('span'); icon.className='site-icon'; icon.setAttribute('aria-hidden','true');
+ icon.innerHTML='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a16 16 0 0 1 0 18 16 16 0 0 1 0-18"/></svg>';
+ const fallback=icon.firstElementChild;
+ try {
+  const site=new URL(entry.url);
+  if(['https:','http:'].includes(site.protocol)) {
+   const root=site.origin+'/favicon.ico';
+   const known=(data.shortcuts||[]).find(item=>{
+    try { return item.favicon&&new URL(item.url).hostname===site.hostname&&['https:','http:'].includes(new URL(item.favicon).protocol); } catch { return false; }
+   });
+   const img=document.createElement('img'); img.alt=''; img.referrerPolicy='no-referrer'; img.loading='lazy'; img.style.opacity='0';
+   img.onload=()=>{ img.style.opacity='1'; fallback.style.visibility='hidden'; };
+   img.onerror=()=>{ if(img.src!==root) img.src=root; else img.remove(); };
+   img.src=known?.favicon||root; icon.append(img);
+  }
+ } catch {}
+ open.append(time,icon,name,host); open.onclick=()=>Felaris.navigate(entry.url);
  const remove=document.createElement('button'); remove.className='remove'; remove.title=removeLabel; remove.setAttribute('aria-label',removeLabel+': '+(entry.title||entry.url));
  remove.innerHTML='<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></svg>';
  remove.onclick=onRemove;

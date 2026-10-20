@@ -192,8 +192,8 @@ pub enum UserEvent {
     Failed(usize, u64, String, String),
     Crashed(usize, u64),
     Favicon(usize, u64, String),
-    DownloadStarted(usize),
-    DownloadFinished(usize, bool),
+    DownloadsChanged,
+    DownloadFinished(bool),
     UpdateChecked(Result<Option<updater::UpdateManifest>, String>),
     Status(String),
     UpdateFailed(String),
@@ -405,7 +405,7 @@ fn open_popup(
     {
         builder = builder.with_additional_browser_args(arguments);
     }
-    let view = builder.build(&*host.window).ok()?;
+    let view = builder.build_as_child(&*host.window).ok()?;
     let _ = desktop::attach_popup(&view, proxy.clone());
     let raw = view.webview();
     *host.view.borrow_mut() = Some(view);
@@ -430,7 +430,7 @@ fn load(view: &WebView, state: &BrowserState, url: &str) -> wry::Result<()> {
     } else if url == "felaris://settings" {
         view.load_html(&ui::get_settings_html())
     } else if url == "felaris://history" {
-        view.load_html(&ui::get_history_html(&state.bookmarks))
+        view.load_html(&ui::get_history_html(&state.bookmarks, &state.shortcuts))
     } else {
         view.load_url(url)
     }
@@ -567,7 +567,7 @@ fn content(
             .with_browser_extensions_enabled(true)
             .with_extensions_path(extensions::directory());
     }
-    let view = builder.build(window)?;
+    let view = builder.build_as_child(window)?;
     desktop::attach(&view, id, generation, proxy.clone())?;
     if failed {
         view.load_html(include_str!("error.html"))?;
@@ -821,6 +821,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     });
     state.sidebar_collapsed = !headless;
     state.sidebar_peek = false;
+    state.is_default_browser = desktop::is_default_browser();
     for url in urls {
         state.add_tab(Some(url), false);
     }
@@ -849,7 +850,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         use wry::WebViewBuilderExtWindows;
         sidebar_builder = sidebar_builder.with_additional_browser_args(arguments);
     }
-    let sidebar = sidebar_builder.build(&*window)?;
+    let sidebar = sidebar_builder.build_as_child(&*window)?;
     let palette_proxy = proxy.clone();
     let palette_ready = proxy.clone();
     let mut palette_builder = WebViewBuilder::new_with_web_context(&mut chrome_context)
@@ -880,7 +881,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         use wry::WebViewBuilderExtWindows;
         palette_builder = palette_builder.with_additional_browser_args(arguments);
     }
-    let palette = palette_builder.build(&*window)?;
+    let palette = palette_builder.build_as_child(&*window)?;
     let mut permission_prompt =
         permission::Prompt::new(&window, &mut chrome_context, proxy.clone(), headless)?;
     let topbar_ready = proxy.clone();
@@ -913,7 +914,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         use wry::WebViewBuilderExtWindows;
         topbar_builder = topbar_builder.with_additional_browser_args(arguments);
     }
-    let topbar = topbar_builder.build(&*window)?;
+    let topbar = topbar_builder.build_as_child(&*window)?;
     let popup_ready = proxy.clone();
     let popup_bar_proxy = proxy.clone();
     let mut popup_bar_builder = WebViewBuilder::new_with_web_context(&mut chrome_context)
@@ -938,7 +939,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         use wry::WebViewBuilderExtWindows;
         popup_bar_builder = popup_bar_builder.with_additional_browser_args(arguments);
     }
-    let popup_bar = popup_bar_builder.build(&*popup_window)?;
+    let popup_bar = popup_bar_builder.build_as_child(&*popup_window)?;
     let mut last_loading = false;
     let mut cursor_pos = (100., 100.);
     let mut popup_loading = false;
@@ -1030,6 +1031,14 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         *flow = ControlFlow::Wait;
         let tick = matches!(event, Event::UserEvent(UserEvent::Frame));
         match event {
+            Event::WindowEvent { window_id, event: WindowEvent::Focused(true), .. } if window_id == window.id() => {
+                state.is_default_browser = desktop::is_default_browser();
+                for tab in state.tabs.iter().filter(|tab| tab.url == "felaris://settings") {
+                    if let Some(view) = views.get(&tab.id) {
+                        let _ = view.evaluate_script(&format!("window.setDefaultBrowser?.({})", state.is_default_browser));
+                    }
+                }
+            }
             Event::WindowEvent { window_id, event: WindowEvent::CloseRequested, .. } => {
                 if window_id == popup_host.window.id() {
                     *popup_host.view.borrow_mut() = None;
@@ -1096,6 +1105,9 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         | Command::ToggleBookmark { .. } | Command::NewPrivateTab));
                 match event {
                     UserEvent::Maintenance => {
+                        let current_downloads = desktop::download_counts(&views);
+                        let downloads_changed = current_downloads != downloads;
+                        downloads = current_downloads;
                         if session_dirty {
                             match session.try_save(&state) {
                                 Ok(queued) => { session_dirty = !queued; },
@@ -1114,7 +1126,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                 }).is_err() { sleep_pending.remove(&(id, generation)); }
                             }
                         }
-                        return;
+                        if !downloads_changed { return; }
                     },
                     UserEvent::SessionSaved(result) => {
                         if let Err(error) = result { session_dirty = true; state.update_status = Some(format!("Could not save your session: {error}")); }
@@ -1323,8 +1335,8 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                     event @ (UserEvent::Title(..) | UserEvent::PageLoad(..) | UserEvent::Source(..)
                         | UserEvent::History(..) | UserEvent::Failed(..) | UserEvent::Favicon(..)
                         | UserEvent::Crashed(..)) => tab_event(&mut state, &mut views, &mut permission_prompt, event),
-                    UserEvent::DownloadStarted(id) => { *downloads.entry(id).or_default() += 1; },
-                    UserEvent::DownloadFinished(id, success) => { let count = downloads.entry(id).or_default(); *count = count.saturating_sub(1); state.update_status = Some(if success { "Download complete. Open Downloads to view the file." } else { "Download interrupted. Open Downloads to retry or choose another location." }.into()); },
+                    UserEvent::DownloadsChanged => {},
+                    UserEvent::DownloadFinished(success) => { state.update_status = Some(if success { "Download complete. Open Downloads to view the file." } else { "Download interrupted. Open Downloads to retry or choose another location." }.into()); },
                     UserEvent::UpdateChecked(result) => { check_busy = false; match result {
                         Ok(Some(update)) => { state.update_available = Some(update); state.update_status = None; },
                         Ok(None) => { state.update_status = Some(format!("Felaris is up to date (v{}).", updater::CURRENT_VERSION)); },
@@ -1342,6 +1354,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             Event::LoopDestroyed => { history::flush(); let _ = session.flush(&state); return; },
             _ => return,
         }
+        downloads = desktop::download_counts(&views);
         state.active_downloads = downloads.values().sum();
         let awake: HashSet<_> = state.tabs.iter().filter(|tab| !tab.is_sleeping).map(|tab| tab.id).collect();
         views.retain(|id,_| awake.contains(id));

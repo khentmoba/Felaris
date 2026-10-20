@@ -1,0 +1,15 @@
+{
+  "success": true,
+  "checks": [
+    "New tab search leaves the hovered sidebar above its overlay and hides it only after pointer leave",
+    "Hover reveal, hide, and reversal keep the native sidebar width stable and above new pages",
+    "An address without a trailing slash finishes loading",
+    "pushState updates the saved URL and native Back and Forward still work",
+    "Back leaves a failed navigation and clears its error",
+    "Closing the active tab wakes its sleeping replacement",
+    "Close Other Tabs preserves pins, other workspaces, the active tab and a real download, with undo",
+    "Native keyboard, pointer selection, site permission decisions, default browser state, and 68 DOM checks at desktop and minimum sizes",
+    "Duplicated tabs, workspace moves, and popup expansion persist through the session writer",
+    "100/300/500-tab sessions restore lazily, bound actual WebViews, protect drafts/media/pins/downloads, wake sleepers, and recover after forced exit"
+  ]
+}

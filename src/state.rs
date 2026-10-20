@@ -88,6 +88,8 @@ pub struct BrowserState {
     pub update_status: Option<String>,
     #[serde(default)]
     pub active_downloads: usize,
+    #[serde(default, skip_deserializing)]
+    pub is_default_browser: bool,
     #[serde(default)]
     pub update_busy: bool,
     #[serde(default)]
@@ -142,6 +144,7 @@ impl BrowserState {
             update_available: None,
             update_status: None,
             active_downloads: 0,
+            is_default_browser: false,
             update_busy: false,
             zoom: 100,
         }

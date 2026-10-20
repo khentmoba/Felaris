@@ -45,7 +45,7 @@ pub fn get_settings_html() -> String {
         "settings": settings::get(),
         "engines": settings::ENGINES.iter().map(|(id, name, _)| [id, name]).collect::<Vec<_>>(),
         "ublock": extensions::status(),
-        "ublock_active": extensions::enabled_at_startup(),
+        "ublock_active": extensions::active_at_startup(),
         "extensions_folder": extensions::directory(),
         "version": updater::CURRENT_VERSION,
     });

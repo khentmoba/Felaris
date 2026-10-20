@@ -41,6 +41,11 @@ pub fn enabled_at_startup() -> bool {
     *ENABLED.get_or_init(|| crate::settings::get().ad_blocker)
 }
 
+pub fn active_at_startup() -> bool {
+    static ACTIVE: OnceLock<bool> = OnceLock::new();
+    *ACTIVE.get_or_init(|| enabled_at_startup() && ublock_installed())
+}
+
 pub fn status() -> &'static str {
     if ublock_installed() {
         "installed"

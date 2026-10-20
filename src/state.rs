@@ -63,6 +63,8 @@ pub struct BrowserState {
     pub active_downloads: usize,
     #[serde(default)]
     pub update_busy: bool,
+    #[serde(default)]
+    pub zoom: u32,
 }
 
 impl BrowserState {
@@ -119,6 +121,7 @@ impl BrowserState {
             update_status: None,
             active_downloads: 0,
             update_busy: false,
+            zoom: 100,
         }
     }
 
@@ -182,6 +185,7 @@ impl BrowserState {
         state.is_loading = false;
         state.active_downloads = 0;
         state.update_busy = false;
+        state.zoom = 100;
         state.update_status = None;
         state.update_available = None;
         state.homepage = "felaris://newtab".into();
@@ -212,10 +216,10 @@ impl BrowserState {
         let new_tab = Tab {
             id,
             workspace_id: self.active_workspace_id,
-            title: if target_url == "felaris://newtab" {
-                "New Tab".to_string()
-            } else {
-                target_url.clone()
+            title: match target_url.as_str() {
+                "felaris://newtab" => "New Tab".to_string(),
+                "felaris://settings" => "Settings".to_string(),
+                _ => target_url.clone(),
             },
             url: target_url.clone(),
             is_pinned,

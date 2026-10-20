@@ -17,6 +17,8 @@
 - **Windows integration:** Setup wizard with uninstaller, Start menu and desktop shortcuts, Installed apps registration, default-browser eligibility, and link handoff to the running instance.
 - **Native downloads:** WebView2 provides download progress and file actions; Felaris reports completion and warns before closing active downloads.
 - **Explicit tab sleeping:** Unloads inactive pages. Selecting a sleeping tab reloads its saved URL; unsaved form state and page history do not survive sleeping or an app restart.
+- **Ad blocking built in:** uBlock Origin Lite is downloaded on first launch (SHA-256 checked) and loaded into every tab as a WebView2 extension. Turn it off in **Settings > Privacy and security**.
+- **App menu and Settings:** The button at the top-left of the sidebar opens the app menu (new tab, downloads, print, zoom, settings, updates, exit). Settings (`felaris://settings`) covers search engine, ad blocker, updates, extensions, and shortcuts.
 - **Built-in Upstream Sync & Conflict Inspector:** Includes an automated local tool and agent skill to fetch upstream sources, compare local changes, and simulate pre-merge conflict status in memory before applying.
 
 ---
@@ -62,6 +64,7 @@
 | `Alt + 1` / `2` / `3` | Switch workspace |
 | `Ctrl + S` | Expand / collapse sidebar |
 | `Ctrl + Shift + S` | Unload background tabs (except active downloads) |
+| `Ctrl + H` | Open History |
 | `Ctrl + J` | Open Downloads |
 | `Enter` (in URL bar) | Smart navigate (detects URLs vs. web search) |
 
@@ -69,7 +72,7 @@
 
 The sidebar has no fixed shortcut-tile dock. Search opens/closes with short, interruptible motion, and tab/workspace changes retain visual continuity. Reduced-motion preferences skip spatial effects. Home-page shortcuts rank your most-visited sites (such as YouTube or X) first and fill any remaining slots from the default 8 shortcuts.
 
-Web searches use **Brave Search** throughout the sidebar, Home page, and floating search bar. Suggestions are local open tabs; no remote autocomplete requests are sent while typing.
+Web searches use **Brave Search** by default (Settings can switch to DuckDuckGo, Google, or Bing) throughout the sidebar, Home page, and floating search bar. Suggestions are local open tabs; no remote autocomplete requests are sent while typing.
 
 Shortcuts work while browser chrome or page content has focus. The bottom sidebar menu contains pin/unpin, reopen, and close-other-tabs actions. Close Others keeps pinned tabs, affects only the current workspace, and can be undone one tab at a time with Reopen.
 
@@ -112,9 +115,9 @@ cargo test --locked
 node tests/browser.test.cjs
 ```
 
-For the 44 DOM interaction checks, serve the repository with `python -m http.server 0` (using an ephemeral port so worktrees do not collide), then open `http://localhost:<port>/tests/ui.html`. This is a fixture with sample tabs; its IPC messages are recorded rather than sent to Rust. Test both 1380×860 and the minimum 640×480 desktop window; the compact rail can be inspected by setting `fixtureState.sidebar_collapsed = true`, `sidebar.style.width = '56px'`, and calling `sidebar.contentWindow.updateState(fixtureState)` in the test page console.
+For the 48 DOM interaction checks, serve the repository with `python -m http.server 0` (using an ephemeral port so worktrees do not collide), then open `http://localhost:<port>/tests/ui.html`. This is a fixture with sample tabs; its IPC messages are recorded rather than sent to Rust. Test both 1380×860 and the minimum 640×480 desktop window; the compact rail can be inspected by setting `fixtureState.sidebar_collapsed = true`, `sidebar.style.width = '56px'`, and calling `sidebar.contentWindow.updateState(fixtureState)` in the test page console.
 
-To exercise actual WebView2 keyboard input and Rust IPC on Windows, build with `cargo build` and run the self-contained native smoke test with Python 3.11+ and Node 22+. The Node command delegates to the headless regression harness, which copies the executable, uses an isolated profile and dynamic debugging port, and cleans up the child process. It also runs all 44 DOM checks at 1380×860 and 640×480, including reduced motion:
+To exercise actual WebView2 keyboard input and Rust IPC on Windows, build with `cargo build` and run the self-contained native smoke test with Python 3.11+ and Node 22+. The Node command delegates to the headless regression harness, which copies the executable, uses an isolated profile and dynamic debugging port, and cleans up the child process. It also runs all 48 DOM checks at 1380×860 and 640×480, including reduced motion:
 
 ```bash
 cargo build
@@ -186,6 +189,10 @@ To sign with an existing certificate in your Windows user certificate store:
 Without a signing certificate, the package remains unsigned. Checksums detect
 file changes; they do not establish publisher identity. Packaging does not
 publish a GitHub release or send a Discord message.
+
+### Extensions and ad blocking
+
+Felaris stores unpacked extensions in `%LOCALAPPDATA%\Felaris\extensions` and loads every folder there at startup. On first launch it downloads the latest uBlock Origin Lite (the Manifest V3 build; WebView2 no longer runs the Manifest V2 uBlock Origin) from `uBlockOrigin/uBOL-home`, checks the release's SHA-256, and unpacks it to `extensions\ublock-origin-lite`. If the first launch is offline, it retries on the next start or from **Settings > Extensions**. Preferences live in `settings.json` beside `session.json`.
 
 ### Browser data and recovery
 

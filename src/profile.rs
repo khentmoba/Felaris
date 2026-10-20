@@ -27,8 +27,15 @@ pub fn allowed_url(value: &str) -> bool {
     normalize_url(value).is_some()
 }
 
+pub fn is_internal(value: &str) -> bool {
+    matches!(
+        value,
+        "felaris://newtab" | "felaris://settings" | "felaris://history"
+    )
+}
+
 pub fn normalize_url(value: &str) -> Option<String> {
-    if value == "felaris://newtab" {
+    if is_internal(value) {
         return Some(value.into());
     }
     let url = url::Url::parse(value).ok()?;
@@ -88,5 +95,10 @@ mod tests {
             normalize_url("felaris://newtab").as_deref(),
             Some("felaris://newtab")
         );
+        assert_eq!(
+            normalize_url("felaris://settings").as_deref(),
+            Some("felaris://settings")
+        );
+        assert!(normalize_url("felaris://other").is_none());
     }
 }

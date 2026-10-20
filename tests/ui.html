@@ -91,6 +91,13 @@ window.runChecks=async()=>{
  w.updateState({...structuredClone(fixtureState),sidebar_collapsed:true,sidebar_peek:true});
  check('hidden sidebar reveals on peek',!d.body.classList.contains('collapsed'));
  d.getElementById('browser-menu').open=false;
+ w.updateState({...structuredClone(fixtureState),sidebar_collapsed:true,sidebar_peek:true});
+ d.querySelector('#app-menu summary').click();check('app menu opens while the sidebar is peeking',d.getElementById('app-menu').open&&messages.at(-1).action!=='toggle_sidebar');
+ w.updateState({...structuredClone(fixtureState),zoom:120});
+ check('app menu opens and shows zoom',d.getElementById('app-menu').open&&d.getElementById('zoom-level').textContent==='120%');
+ d.querySelector('#app-menu [data-action="open_history"]').click();check('app menu opens History',messages.at(-1).action==='open_history');
+ d.getElementById('app-menu').open=true;
+ d.querySelector('#app-menu [data-action="open_settings"]').click();check('app menu opens Settings and closes',messages.at(-1).action==='open_settings'&&!d.getElementById('app-menu').open);
  w.updateState(structuredClone(fixtureState));
  palette.hidden=false;
  const n=palette.contentWindow,nd=n.document,ni=nd.getElementById('new-tab-input');

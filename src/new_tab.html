@@ -81,7 +81,7 @@ function render() {
  const query=input.value.trim();
  const target=Felaris.resolveAddress(query);
  options=[];
- if(target) options.push({title:query,detail:target==='https://search.brave.com/search?q='+encodeURIComponent(query)?'Search with Brave':'Open in a new tab',url:target});
+ if(target) options.push({title:query,detail:target===Felaris.searchUrl+encodeURIComponent(query)?'Search with '+Felaris.searchName.replace(/ Search$/,''):'Open in a new tab',url:target});
  for(const tab of state.tabs.filter(tab=>tab.url!=='felaris://newtab'&&(!query||(tab.title+' '+tab.url).toLowerCase().includes(query.toLowerCase()))).slice(0,6)) {
   const workspace=state.workspaces.find(space=>space.id===tab.workspace_id);
   options.push({title:tab.title||tab.url,detail:`Switch to tab${workspace?' · '+workspace.name:''} · ${tab.url}`,id:tab.id});

@@ -54,6 +54,8 @@ section { display:flex; flex-direction:column; gap:12px; } section>h2 { font-siz
 
 <section data-section="privacy" data-label="Privacy and security" data-icon="M6 11V8a6 6 0 0 1 12 0v3M5 11h14v10H5z">
 <div class="row"><div><h2>Block ads and trackers</h2><p>Runs uBlock Origin Lite in every tab. Turning this on or off applies after you restart Felaris.</p></div><button class="switch" role="switch" id="ad-blocker" aria-label="Block ads and trackers"></button></div>
+<div class="row"><div><h2>Save browsing history</h2><p>Keeps the pages you visit so you can find them again. Open it from the menu or with Ctrl + H.</p></div><button class="switch" role="switch" id="save-history" aria-label="Save browsing history"></button></div>
+<div class="row"><div><h2>Clear history</h2><p>Removes every saved page from History.</p></div><button class="btn" data-send="clear_history">Clear history</button></div>
 <div class="row"><div><h2>Site permissions</h2><p>Camera, microphone, location, notifications, and clipboard-read requests always ask first and name the site. Other requests are denied.</p></div><span class="pill ok">Always on</span></div>
 </section>
 
@@ -78,7 +80,7 @@ section { display:flex; flex-direction:column; gap:12px; } section>h2 { font-siz
 const data=__SETTINGS__;
 const $=id=>document.getElementById(id);
 const sections=[...document.querySelectorAll('section')];
-const shortcuts=[['New tab','Ctrl + T'],['Close tab','Ctrl + W'],['Address bar','Ctrl + L'],['Reload','Ctrl + R / F5'],['Back / forward','Alt + Left / Right'],['Reopen closed tab','Ctrl + Shift + T'],['Next / previous tab','Ctrl + Tab / Ctrl + Shift + Tab'],['Switch workspace','Alt + 1 / 2 / 3'],['Collapse sidebar','Ctrl + S'],['Sleep background tabs','Ctrl + Shift + S'],['Downloads','Ctrl + J']];
+const shortcuts=[['New tab','Ctrl + T'],['Close tab','Ctrl + W'],['Address bar','Ctrl + L'],['Reload','Ctrl + R / F5'],['Back / forward','Alt + Left / Right'],['Reopen closed tab','Ctrl + Shift + T'],['Next / previous tab','Ctrl + Tab / Ctrl + Shift + Tab'],['Switch workspace','Alt + 1 / 2 / 3'],['Collapse sidebar','Ctrl + S'],['Sleep background tabs','Ctrl + Shift + S'],['History','Ctrl + H'],['Downloads','Ctrl + J']];
 $('keys').replaceChildren(...shortcuts.map(([name,keys])=>{ const row=document.createElement('tr'); const a=document.createElement('td'); a.textContent=name; const b=document.createElement('td'); for(const [index,part] of keys.split(' / ').entries()) { if(index) b.append(' / '); const kbd=document.createElement('kbd'); kbd.textContent=part.replace(/ \+ /g,' '); b.append(kbd); } row.append(a,b); return row; }));
 $('version').textContent='Version '+data.version;
 $('extensions-folder').textContent=data.extensions_folder;
@@ -120,7 +122,7 @@ function toggle(id,key) {
  const button=$(id); button.setAttribute('aria-checked',String(!!data.settings[key]));
  button.onclick=()=>{ setting(key,!data.settings[key]); button.setAttribute('aria-checked',String(data.settings[key])); renderExtension(); };
 }
-toggle('auto-update','auto_update'); toggle('ad-blocker','ad_blocker');
+toggle('auto-update','auto_update'); toggle('ad-blocker','ad_blocker'); toggle('save-history','save_history');
 function renderEngines() {
  $('engines').replaceChildren(...data.engines.map(([id,name])=>{
   const button=document.createElement('button'); button.className='choice'; button.setAttribute('role','radio'); button.setAttribute('aria-checked',String(data.settings.search_engine===id));

@@ -1,6 +1,6 @@
 use crate::{
-    desktop, extensions, instance::Instance, profile, settings, start_page, state::BrowserState,
-    ui, updater,
+    desktop, extensions, history, instance::Instance, profile, settings, start_page,
+    state::BrowserState, ui, updater,
 };
 use serde::Deserialize;
 use std::{collections::HashMap, hash::BuildHasher};
@@ -54,6 +54,11 @@ pub enum Command {
     OpenDownloads,
     DefaultBrowser,
     OpenSettings,
+    OpenHistory,
+    DeleteHistory {
+        url: String,
+    },
+    ClearHistory,
     SetSetting {
         key: String,
         value: serde_json::Value,
@@ -132,6 +137,8 @@ fn load(view: &WebView, state: &BrowserState, url: &str) -> wry::Result<()> {
         view.load_html(&start_page::get_start_page_html(&state.top_shortcuts()))
     } else if url == "felaris://settings" {
         view.load_html(&ui::get_settings_html())
+    } else if url == "felaris://history" {
+        view.load_html(&ui::get_history_html())
     } else {
         view.load_url(url)
     }
@@ -196,6 +203,8 @@ fn content(
                         Command::Navigate { .. }
                             | Command::Retry
                             | Command::SetSetting { .. }
+                            | Command::DeleteHistory { .. }
+                            | Command::ClearHistory
                             | Command::InstallAdBlocker
                             | Command::OpenExtensionsFolder
                             | Command::DefaultBrowser
@@ -217,6 +226,7 @@ fn content(
                                 | Command::CycleTab { .. }
                                 | Command::SwitchWorkspace { .. }
                                 | Command::OpenDownloads
+                                | Command::OpenHistory
                         ))
                 {
                     let _ = ipc.send_event(UserEvent::Command(message.command));
@@ -512,10 +522,10 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                 let id = downloads.iter().find(|(_, count)| **count > 0).map(|(id,_)| *id).unwrap_or(state.active_tab_id);
                                 if let Some(view) = views.get(&id) && let Err(error) = desktop::downloads(view) { state.update_status = Some(error); }
                             },
-                            Command::OpenSettings => {
-                                if let Some(id) = state.tabs.iter().find(|tab| tab.url == "felaris://settings").map(|tab| tab.id) { state.switch_tab(id); } else { state.add_tab(Some("felaris://settings".into()), false); }
-                                palette_open = false;
-                            },
+                            Command::OpenSettings => { state.open_internal("felaris://settings"); palette_open = false; },
+                            Command::OpenHistory => { state.open_internal("felaris://history"); palette_open = false; },
+                            Command::DeleteHistory { url } => history::remove(&url),
+                            Command::ClearHistory => history::clear(),
                             Command::SetSetting { key, value } => match settings::set(&key, &value) {
                                 Ok(current) => {
                                     if key == "search_engine" {
@@ -556,7 +566,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             },
                         }
                     }
-                    UserEvent::Title(id, generation, title) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) && tab.error.is_none() && !title.is_empty() { tab.title = title; },
+                    UserEvent::Title(id, generation, title) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) && tab.error.is_none() && !title.is_empty() { history::retitle(&tab.url, &title); tab.title = title; },
                     UserEvent::PageLoad(id, generation, loading, url) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) {
                         if loading {
                             if tab.pending_url.as_ref().is_some_and(|expected| expected != &url && !(profile::is_internal(expected) && url == "about:blank")) { return; }
@@ -564,7 +574,12 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             if let Some(url) = profile::normalize_url(&url) { tab.url = url; tab.error = None; }
                             else if tab.error.is_none() && (url == "about:blank" || url.starts_with("data:text/html;")) && !profile::is_internal(&tab.url) { tab.url = "felaris://newtab".into(); }
                             tab.is_loading = true;
-                        } else if tab.url == url || url == "about:blank" || url.starts_with("data:text/html;") { tab.is_loading = false; if profile::allowed_url(&url) { tab.error = None; } }
+                        } else if tab.url == url || url == "about:blank" || url.starts_with("data:text/html;") {
+                            let failed = tab.error.is_some();
+                            tab.is_loading = false;
+                            if profile::allowed_url(&url) { tab.error = None; }
+                            if tab.url == url && !failed { history::visit(&tab.url, &tab.title); }
+                        }
                     },
                     UserEvent::Source(id, generation, url) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation && tab.pending_url.is_none())
                         && let Some(url) = profile::normalize_url(&url) { tab.url = url; },

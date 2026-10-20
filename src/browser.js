@@ -27,6 +27,7 @@
       else if (key === 'w' && !event.shiftKey) action = 'close_active_tab';
       else if (key === 'l' && !event.shiftKey) action = 'focus_address';
       else if (key === 'j' && !event.shiftKey) action = 'open_downloads';
+      else if (key === 'h' && !event.shiftKey) action = 'open_history';
       else if (key === 'r' && !event.shiftKey) action = 'reload';
       else if (key === 'tab') { action = 'cycle_tab'; payload = { backwards: event.shiftKey }; }
     } else if (event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey) {

@@ -64,6 +64,7 @@
 | `Alt + 1` / `2` / `3` | Switch workspace |
 | `Ctrl + S` | Expand / collapse sidebar |
 | `Ctrl + Shift + S` | Unload background tabs (except active downloads) |
+| `Ctrl + H` | Open History |
 | `Ctrl + J` | Open Downloads |
 | `Enter` (in URL bar) | Smart navigate (detects URLs vs. web search) |
 
@@ -114,9 +115,9 @@ cargo test --locked
 node tests/browser.test.cjs
 ```
 
-For the 47 DOM interaction checks, serve the repository with `python -m http.server 0` (using an ephemeral port so worktrees do not collide), then open `http://localhost:<port>/tests/ui.html`. This is a fixture with sample tabs; its IPC messages are recorded rather than sent to Rust. Test both 1380×860 and the minimum 640×480 desktop window; the compact rail can be inspected by setting `fixtureState.sidebar_collapsed = true`, `sidebar.style.width = '56px'`, and calling `sidebar.contentWindow.updateState(fixtureState)` in the test page console.
+For the 48 DOM interaction checks, serve the repository with `python -m http.server 0` (using an ephemeral port so worktrees do not collide), then open `http://localhost:<port>/tests/ui.html`. This is a fixture with sample tabs; its IPC messages are recorded rather than sent to Rust. Test both 1380×860 and the minimum 640×480 desktop window; the compact rail can be inspected by setting `fixtureState.sidebar_collapsed = true`, `sidebar.style.width = '56px'`, and calling `sidebar.contentWindow.updateState(fixtureState)` in the test page console.
 
-To exercise actual WebView2 keyboard input and Rust IPC on Windows, build with `cargo build` and run the self-contained native smoke test with Python 3.11+ and Node 22+. The Node command delegates to the headless regression harness, which copies the executable, uses an isolated profile and dynamic debugging port, and cleans up the child process. It also runs all 47 DOM checks at 1380×860 and 640×480, including reduced motion:
+To exercise actual WebView2 keyboard input and Rust IPC on Windows, build with `cargo build` and run the self-contained native smoke test with Python 3.11+ and Node 22+. The Node command delegates to the headless regression harness, which copies the executable, uses an isolated profile and dynamic debugging port, and cleans up the child process. It also runs all 48 DOM checks at 1380×860 and 640×480, including reduced motion:
 
 ```bash
 cargo build

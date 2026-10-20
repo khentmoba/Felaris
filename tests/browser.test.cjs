@@ -34,7 +34,7 @@ assert.deepEqual(press('Tab', { ctrlKey: true, shiftKey: true }), { action: 'cyc
 assert.deepEqual(press('=', { ctrlKey: true }), { action: 'zoom', delta: 10 });
 assert.deepEqual(press('-', { ctrlKey: true }), { action: 'zoom', delta: -10 });
 assert.deepEqual(press('0', { ctrlKey: true }), { action: 'zoom', delta: 0 });
-assert.deepEqual(press('2', { altKey: true }), { action: 'switch_workspace', id: 2 });
+assert.deepEqual(press('2', { altKey: true }), { action: 'switch_profile', index: 2 });
 assert.deepEqual(press('F5'), { action: 'reload' });
 assert.deepEqual(press('F11'), { action: 'toggle_fullscreen' });
 vm.runInContext("Object.prototype.toJSON = function () { throw Error('page serialization hook'); }", context);

@@ -54,6 +54,8 @@ pub struct BrowserState {
     pub active_tab_id: usize,
     pub active_workspace_id: usize,
     pub workspaces: Vec<Workspace>,
+    #[serde(default)]
+    profiles_version: u8,
     pub sidebar_collapsed: bool,
     #[serde(default)]
     pub sidebar_peek: bool,
@@ -83,26 +85,12 @@ pub struct BrowserState {
 
 impl BrowserState {
     pub fn new() -> Self {
-        let workspaces = vec![
-            Workspace {
-                id: 1,
-                name: "General".to_string(),
-                icon: "🪐".to_string(),
-                accent: "#38bdf8".to_string(),
-            },
-            Workspace {
-                id: 2,
-                name: "Dev & Code".to_string(),
-                icon: "⚡".to_string(),
-                accent: "#a855f7".to_string(),
-            },
-            Workspace {
-                id: 3,
-                name: "Deep Dive".to_string(),
-                icon: "📖".to_string(),
-                accent: "#34d399".to_string(),
-            },
-        ];
+        let workspaces = vec![Workspace {
+            id: 1,
+            name: "General".into(),
+            icon: "home".into(),
+            accent: "#dedee3".into(),
+        }];
 
         let initial_tab = Tab {
             id: 1,
@@ -127,6 +115,7 @@ impl BrowserState {
             active_tab_id: 1,
             active_workspace_id: 1,
             workspaces,
+            profiles_version: 1,
             sidebar_collapsed: false,
             sidebar_peek: false,
             topbar_peek: false,
@@ -168,12 +157,37 @@ impl BrowserState {
 
     pub(crate) fn from_session(json: &str) -> Option<Self> {
         let mut state: Self = serde_json::from_str(json).ok()?;
-        state.workspaces = Self::new().workspaces;
+        // Fold the old preset spaces into General without losing their tabs or pins.
+        if state.profiles_version == 0
+            && state.workspaces.len() == 3
+            && state
+                .workspaces
+                .iter()
+                .map(|w| (w.id, w.name.as_str()))
+                .eq([(1, "General"), (2, "Dev & Code"), (3, "Deep Dive")])
+        {
+            state.workspaces = Self::new().workspaces;
+            for tab in state.tabs.iter_mut().chain(state.closed_tabs.iter_mut()) {
+                tab.workspace_id = 1;
+            }
+        }
+        state.profiles_version = 1;
+        let mut workspace_ids = std::collections::HashSet::new();
+        state.workspaces.retain(|w| {
+            w.id > 0
+                && w.id < usize::MAX - 1
+                && !w.name.trim().is_empty()
+                && workspace_ids.insert(w.id)
+        });
+        if state.workspaces.is_empty() {
+            state.workspaces = Self::new().workspaces;
+            workspace_ids.insert(1);
+        }
         let mut ids = std::collections::HashSet::new();
         state.tabs.retain(|tab| {
             tab.id > 0
                 && tab.id < usize::MAX - 1
-                && (1..=3).contains(&tab.workspace_id)
+                && workspace_ids.contains(&tab.workspace_id)
                 && crate::profile::allowed_url(&tab.url)
                 && ids.insert(tab.id)
         });
@@ -198,7 +212,7 @@ impl BrowserState {
             .is_sleeping = false;
         state.next_tab_id = state.tabs.iter().map(|tab| tab.id).max()?.checked_add(1)?;
         state.closed_tabs.retain(|tab| {
-            crate::profile::allowed_url(&tab.url) && (1..=3).contains(&tab.workspace_id)
+            crate::profile::allowed_url(&tab.url) && workspace_ids.contains(&tab.workspace_id)
         });
         state.closed_tabs.truncate(30);
         state.can_restore_closed_tab = !state.closed_tabs.is_empty();
@@ -285,8 +299,7 @@ impl BrowserState {
             if !same_workspace.is_empty() {
                 self.active_tab_id = *same_workspace.last().unwrap();
             } else {
-                self.active_tab_id = self.tabs.last().unwrap().id;
-                self.active_workspace_id = self.active_tab().unwrap().workspace_id;
+                return Some(self.add_tab(None, false));
             }
         }
 
@@ -354,6 +367,37 @@ impl BrowserState {
         candidates
     }
 
+    pub fn create_profile(&mut self, name: &str) -> Result<usize, String> {
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 40 || name.chars().any(char::is_control) {
+            return Err("Use a profile name between 1 and 40 characters.".into());
+        }
+        if self
+            .workspaces
+            .iter()
+            .any(|w| w.name.to_lowercase() == name.to_lowercase())
+        {
+            return Err("A profile with that name already exists.".into());
+        }
+        let id = self
+            .workspaces
+            .iter()
+            .map(|w| w.id)
+            .max()
+            .unwrap_or(0)
+            .checked_add(1)
+            .filter(|id| *id < usize::MAX - 1)
+            .ok_or("Could not create another profile.")?;
+        self.workspaces.push(Workspace {
+            id,
+            name: name.into(),
+            icon: "globe".into(),
+            accent: "#dedee3".into(),
+        });
+        self.switch_workspace(id);
+        Ok(id)
+    }
+
     pub fn switch_workspace(&mut self, workspace_id: usize) -> Option<&Tab> {
         if !self
             .workspaces
@@ -375,7 +419,8 @@ impl BrowserState {
         let existing = self
             .tabs
             .iter()
-            .find(|t| t.workspace_id == workspace_id)
+            .filter(|t| t.workspace_id == workspace_id)
+            .max_by_key(|t| t.last_active)
             .map(|t| t.id);
 
         let target_id = if let Some(id) = existing {
@@ -745,10 +790,32 @@ mod tests {
     }
 
     #[test]
+    fn legacy_preset_spaces_fold_into_general_keeping_tabs() {
+        let mut state = BrowserState::new();
+        state.create_profile("Dev & Code").unwrap();
+        let tab = state.add_tab(Some("https://example.com".into()), false);
+        let mut json: serde_json::Value = serde_json::to_value(&state).unwrap();
+        json["profiles_version"] = 0.into();
+        json["workspaces"] = serde_json::json!([
+            {"id":1,"name":"General","icon":"","accent":""},
+            {"id":2,"name":"Dev & Code","icon":"","accent":""},
+            {"id":3,"name":"Deep Dive","icon":"","accent":""}
+        ]);
+        let restored = BrowserState::from_session(&json.to_string()).unwrap();
+        assert_eq!(restored.workspaces.len(), 1);
+        assert!(
+            restored
+                .tabs
+                .iter()
+                .any(|t| t.id == tab && t.workspace_id == 1)
+        );
+    }
+
+    #[test]
     fn saved_session_restores_pins_workspaces_and_unique_ids() {
         let mut state = BrowserState::new();
         state.toggle_pin(1);
-        state.switch_workspace(2);
+        state.create_profile("School").unwrap();
         let active = state.add_tab(Some("https://example.com/draft".into()), false);
         state.is_loading = true;
         state.active_downloads = 2;
@@ -801,7 +868,7 @@ mod tests {
     #[test]
     fn restoration_selects_original_workspace_and_wakes_tab() {
         let mut state = BrowserState::new();
-        state.switch_workspace(2);
+        state.create_profile("School").unwrap();
         let id = state.add_tab(Some("https://example.com".into()), false);
         state.close_tab(id);
         state.switch_workspace(1);
@@ -817,7 +884,7 @@ mod tests {
     fn cycling_wraps_within_workspace_and_wakes_tab() {
         let mut state = BrowserState::new();
         let second = state.add_tab(None, false);
-        state.switch_workspace(2);
+        state.create_profile("School").unwrap();
         state.switch_tab(second);
         state.sleep_inactive_tabs();
         assert_eq!(state.cycle_tab(false).unwrap().id, 1);
@@ -881,6 +948,8 @@ mod tests {
         assert!(!state.active_tab().unwrap().has_capture);
         assert!(state.active_tab().unwrap().last_active > state.tabs[0].last_active);
 
+        state.create_profile("School").unwrap();
+        state.switch_workspace(1);
         state.move_tab_to_workspace(copy, 2);
         assert_eq!(state.active_workspace_id, 1);
         assert_eq!(state.active_tab_id, 1);
@@ -894,6 +963,8 @@ mod tests {
             2
         );
 
+        state.create_profile("Personal").unwrap();
+        state.switch_workspace(1);
         state.move_tab_to_workspace(1, 3);
         assert_eq!(state.active_workspace_id, 3);
         assert_eq!(state.active_tab_id, 1);

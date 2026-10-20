@@ -121,6 +121,24 @@ pub fn round(view: &WebView, width: i32, height: i32, radius: i32) {
     }
 }
 
+/// Asks WebView2 to trim a hidden tab's renderer; visible tabs go back to normal.
+pub fn show(view: &WebView, visible: bool) {
+    let _ = view.set_visible(visible);
+    #[cfg(windows)]
+    unsafe {
+        use webview2_com::Microsoft::Web::WebView2::Win32::*;
+        use windows::core::Interface;
+        use wry::WebViewExtWindows;
+        if let Ok(view) = view.webview().cast::<ICoreWebView2_19>() {
+            let _ = view.SetMemoryUsageTargetLevel(if visible {
+                COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
+            } else {
+                COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+            });
+        }
+    }
+}
+
 pub fn quiet(view: &WebView) -> bool {
     use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_8;
     use windows::core::{BOOL, Interface};

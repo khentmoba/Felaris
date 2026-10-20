@@ -1,6 +1,6 @@
 {
-  "version": "0.2.0",
-  "release_url": "https://github.com/khentmoba/Felaris/releases/tag/v0.2.0",
-  "download_url": "https://github.com/khentmoba/Felaris/releases/download/v0.2.0/felaris.exe",
-  "summary": "Felaris now installs with a proper Windows setup wizard: Start menu and optional desktop shortcuts, an entry in Installed apps with a working uninstaller, and no administrator prompt. Installed copies update themselves through the setup after verifying the download, and Felaris now checks for updates every 6 hours while it is open. Running the new setup over an earlier install replaces it. The old Install to Start Menu button and the --install/--uninstall options are gone."
+  "version": "0.2.1",
+  "release_url": "https://github.com/khentmoba/Felaris/releases/tag/v0.2.1",
+  "download_url": "https://github.com/khentmoba/Felaris/releases/download/v0.2.1/felaris.exe",
+  "summary": "Felaris now has a sidebar and top controls that slide into view on hover, site favicons, History, Settings, and built-in uBlock Origin Lite. Sign-in popups open in their own window. Tabs have a context menu with duplicate and workspace actions, and the search palette includes history suggestions. This release also adds window-edge resizing, fullscreen and zoom shortcuts, improves large tab sessions, and protects pinned tabs and active downloads when closing other tabs."
 }

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { connect as connectView, closeConnections, writeDiagnostics } from './native_cdp.mjs';
 
-const [chromePort, contentPort, origin] = process.argv.slice(2);
-const sockets = [];
+const [chromePort, contentPort, origin, artifacts] = process.argv.slice(2);
+const connect = (matches, port = chromePort) => connectView(matches, port);
 async function until(probe, label) {
   const deadline = Date.now() + 15000;
   while (Date.now() < deadline) {
@@ -10,39 +11,6 @@ async function until(probe, label) {
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   throw Error('Timed out: ' + label);
-}
-async function connect(matches, port = chromePort) {
-  const target = await until(async () => {
-    const pages = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-    return pages.find(matches);
-  }, 'WebView target');
-  const socket = new WebSocket(target.webSocketDebuggerUrl);
-  sockets.push(socket);
-  await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
-  let id = 0;
-  const pending = new Map();
-  socket.onmessage = event => {
-    const response = JSON.parse(event.data);
-    pending.get(response.id)?.(response);
-    pending.delete(response.id);
-  };
-  const call = (method, params = {}) => new Promise((resolve, reject) => {
-    const request = ++id;
-    const timer = setTimeout(() => { pending.delete(request); reject(Error('CDP timed out: ' + method)); }, 10000);
-    pending.set(request, response => {
-      clearTimeout(timer);
-      response.error ? reject(Error(JSON.stringify(response.error))) : resolve(response.result);
-    });
-    socket.send(JSON.stringify({ id: request, method, params }));
-  });
-  return {
-    call,
-    evaluate: async expression => {
-      const result = await call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-      if (result.exceptionDetails) throw Error(JSON.stringify(result.exceptionDetails));
-      return result.result.value;
-    },
-  };
 }
 async function press(view, key, modifiers = 0) {
   const params = { key, modifiers, windowsVirtualKeyCode: key === 'Escape' ? 27 : key === 'Enter' ? 13 : key.toUpperCase().charCodeAt(0) };
@@ -53,12 +21,26 @@ async function press(view, key, modifiers = 0) {
 
 try {
   const sidebar = await connect(page => page.title === 'Felaris');
+  const menuOpacity = await sidebar.evaluate(`(() => {
+    const menu = document.getElementById('app-menu');
+    menu.open = true;
+    const panel = menu.querySelector('.menu');
+    const animation = panel.getAnimations()[0];
+    const opacity = [0, 0.25, 0.75, 1].map(progress => {
+      if (animation) { animation.pause(); animation.currentTime = progress * animation.effect.getTiming().duration; }
+      return getComputedStyle(panel).opacity;
+    });
+    animation?.finish();
+    menu.open = false;
+    return opacity;
+  })()`);
+  assert.deepEqual(menuOpacity, ['1', '1', '1', '1'], 'App menu must stay opaque throughout its opening animation');
   const command = (action, payload = {}) => sidebar.evaluate(`window.ipc.postMessage(${JSON.stringify(JSON.stringify({ action, ...payload }))});true`);
   const palette = await connect(page => page.title.includes('New tab search'));
   const count = await sidebar.evaluate('currentState.tabs.length');
   await command('new_tab', { url: origin + '/keyboard' });
   const content = await connect(page => page.url === origin + '/keyboard', contentPort);
-  await until(() => content.evaluate('document.readyState === "complete"'), 'keyboard fixture');
+  await until(() => content.evaluate(`location.href === ${JSON.stringify(origin + '/keyboard')} && document.readyState === 'complete' && !!window.Felaris`), 'keyboard fixture');
   await content.evaluate('window.pageMarker = "kept"');
   await press(content, 't', 2);
   await until(() => palette.evaluate('document.activeElement.id === "new-tab-input" && !input.readOnly'), 'Ctrl+T opens palette');
@@ -73,13 +55,14 @@ try {
   await press(palette, 'Enter');
   await until(() => sidebar.evaluate(`currentState.tabs.length === ${count + 2}`), 'Enter creates one tab');
   const submitted = await connect(page => page.url === origin + '/submitted', contentPort);
-  await until(() => submitted.evaluate('document.readyState === "complete" && !!window.Felaris'), 'submitted page ready for keyboard input');
-  await press(submitted, 'w', 2);
+  await until(() => submitted.evaluate(`location.href === ${JSON.stringify(origin + '/submitted')} && document.readyState === 'complete' && !!window.Felaris`), 'submitted page ready for keyboard input');
+  await submitted.call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'w', modifiers: 2, windowsVirtualKeyCode: 87 }, { allowTargetClose: true });
   await until(() => sidebar.evaluate(`currentState.tabs.length === ${count + 1}`), 'Ctrl+W closes tab');
+  await content.call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'w', modifiers: 2, windowsVirtualKeyCode: 87 });
   await press(content, 'T', 10);
   await until(() => sidebar.evaluate(`currentState.tabs.length === ${count + 2}`), 'Ctrl+Shift+T restores tab');
   const restored = await connect(page => page.url === origin + '/submitted', contentPort);
-  await until(() => restored.evaluate('document.readyState === "complete" && !!window.Felaris'), 'restored page ready for keyboard input');
+  await until(() => restored.evaluate(`location.href === ${JSON.stringify(origin + '/submitted')} && document.readyState === 'complete' && !!window.Felaris`), 'restored page ready for keyboard input');
   await press(restored, 's', 2);
   await until(() => sidebar.evaluate('currentState.sidebar_collapsed'), 'Ctrl+S collapses sidebar');
   await press(restored, 'l', 2);
@@ -131,6 +114,12 @@ try {
     assert.equal(await fixture.evaluate('window.checkResults.length'), 56);
     console.log(`${result}: ${width}x${height}, ${motion}`);
   }
+} catch (error) {
+  if (artifacts) {
+    try { await writeDiagnostics([chromePort, contentPort], artifacts, error); }
+    catch (failure) { console.error('Could not save native diagnostics:', failure); }
+  }
+  throw error;
 } finally {
-  for (const socket of sockets) socket.close();
+  closeConnections();
 }

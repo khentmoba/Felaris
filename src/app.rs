@@ -153,11 +153,10 @@ fn bounds(window: &Window, state: &BrowserState, side: f64, top: f64) -> (Rect, 
     let hot = ui::SIDEBAR_HOT_ZONE;
     let (side_x, side_width, top_left) = if !state.sidebar_collapsed {
         (0., full, full)
-    } else if side <= 0. {
-        (0., hot, 0.)
     } else {
         let right = (full * side).max(hot);
-        (right - full, full, right)
+        // Keep WebView2 at full width so revealing it never resizes its surface.
+        (right - full, full, if side <= 0. { 0. } else { right })
     };
     let margin = if window.is_maximized() || window.fullscreen().is_some() {
         0.
@@ -900,6 +899,9 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                 return;
             }
             Event::UserEvent(event) => {
+                if headless && matches!(&event, UserEvent::Title(..) | UserEvent::PageLoad(..) | UserEvent::Source(..)) {
+                    eprintln!("{event:?}");
+                }
                 let persistent = matches!(&event,
                     UserEvent::External(_) | UserEvent::Title(..) | UserEvent::PageLoad(..)
                     | UserEvent::Source(..) | UserEvent::Favicon(..)
@@ -1199,12 +1201,6 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         let _ = sidebar.set_bounds(sidebar_bounds);
         if tick {
             let _ = topbar.set_bounds(topbar_bounds);
-            if !palette_open {
-                if state.sidebar_collapsed && side_progress > 0. {
-                    desktop::raise(&sidebar);
-                }
-                desktop::raise(&topbar);
-            }
             return;
         }
         let geometry = (window.inner_size(), window.scale_factor(), state.sidebar_collapsed);
@@ -1223,7 +1219,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         for (id, view) in &views { if rounded.get(id) != Some(&shape) { desktop::round(view, shape.0 as i32, shape.1 as i32, radius); rounded.insert(*id, shape); } }
         let _ = topbar.set_bounds(topbar_bounds);
         if !palette_open {
-            if state.sidebar_collapsed && side_progress > 0. { desktop::raise(&sidebar); }
+            if state.sidebar_collapsed { desktop::raise(&sidebar); }
             desktop::raise(&topbar);
         }
         let _ = palette.set_bounds(overlay_bounds);

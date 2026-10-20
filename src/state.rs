@@ -219,6 +219,7 @@ impl BrowserState {
             title: match target_url.as_str() {
                 "felaris://newtab" => "New Tab".to_string(),
                 "felaris://settings" => "Settings".to_string(),
+                "felaris://history" => "History".to_string(),
                 _ => target_url.clone(),
             },
             url: target_url.clone(),
@@ -235,6 +236,19 @@ impl BrowserState {
         self.active_tab_id = id;
         self.record_visit(&target_url);
         id
+    }
+
+    pub fn open_internal(&mut self, url: &str) {
+        if let Some(id) = self
+            .tabs
+            .iter()
+            .find(|tab| tab.url == url)
+            .map(|tab| tab.id)
+        {
+            self.switch_tab(id);
+        } else {
+            self.add_tab(Some(url.into()), false);
+        }
     }
 
     pub fn close_tab(&mut self, tab_id: usize) -> Option<usize> {

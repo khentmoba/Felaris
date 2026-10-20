@@ -28,7 +28,10 @@ pub fn allowed_url(value: &str) -> bool {
 }
 
 pub fn is_internal(value: &str) -> bool {
-    matches!(value, "felaris://newtab" | "felaris://settings")
+    matches!(
+        value,
+        "felaris://newtab" | "felaris://settings" | "felaris://history"
+    )
 }
 
 pub fn normalize_url(value: &str) -> Option<String> {

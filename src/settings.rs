@@ -19,6 +19,7 @@ pub struct Settings {
     pub search_engine: String,
     pub ad_blocker: bool,
     pub auto_update: bool,
+    pub save_history: bool,
 }
 
 impl Default for Settings {
@@ -27,6 +28,7 @@ impl Default for Settings {
             search_engine: "brave".into(),
             ad_blocker: true,
             auto_update: true,
+            save_history: true,
         }
     }
 }
@@ -67,6 +69,7 @@ pub fn set(key: &str, value: &Value) -> Result<Settings, String> {
         }
         ("ad_blocker", Value::Bool(on)) => settings.ad_blocker = *on,
         ("auto_update", Value::Bool(on)) => settings.auto_update = *on,
+        ("save_history", Value::Bool(on)) => settings.save_history = *on,
         _ => return Err(format!("Unknown setting: {key}")),
     }
     let bytes = serde_json::to_vec_pretty(&settings).map_err(|error| error.to_string())?;
@@ -83,7 +86,7 @@ mod tests {
     fn missing_fields_fall_back_to_defaults() {
         let settings: Settings = serde_json::from_str(r#"{"search_engine":"google"}"#).unwrap();
         assert_eq!(settings.search_engine, "google");
-        assert!(settings.ad_blocker && settings.auto_update);
+        assert!(settings.ad_blocker && settings.auto_update && settings.save_history);
     }
 
     #[test]

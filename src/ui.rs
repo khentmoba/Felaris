@@ -1,4 +1,4 @@
-use crate::{extensions, settings, updater};
+use crate::{extensions, history, settings, updater};
 
 pub const SIDEBAR_WIDTH_EXPANDED: f64 = 260.0;
 pub const SIDEBAR_WIDTH_COLLAPSED: f64 = 56.0;
@@ -22,6 +22,18 @@ pub fn get_ui_html() -> String {
 
 pub fn get_new_tab_html() -> String {
     include_str!("new_tab.html").replace("__COMMON_SCRIPT__", &script())
+}
+
+pub fn get_history_html() -> String {
+    include_str!("history.html")
+        .replace("__COMMON_SCRIPT__", &script())
+        .replace(
+            "__HISTORY__",
+            &serde_json::to_string(&history::all())
+                .unwrap_or_else(|_| "[]".into())
+                .replace('<', "\\u003c"),
+        )
+        .replace("__SAVING__", &settings::get().save_history.to_string())
 }
 
 pub fn get_settings_html() -> String {

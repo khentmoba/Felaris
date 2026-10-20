@@ -37,7 +37,7 @@ details { position:relative; } summary { list-style:none; cursor:pointer; } summ
 .update-header svg { width:15px; height:15px; color:var(--accent); }
 .update-btn { background:var(--active); color:var(--text); border:1px solid var(--line); padding:6px 10px; border-radius:6px; font-size:11px; font-weight:600; text-align:center; }
 .update-btn:hover { background:var(--accent); color:#101011; }
-.toast { position:absolute; bottom:110px; left:12px; right:12px; border:1px solid var(--line); padding:12px; background:var(--surface); border-radius:10px; font-size:12px; box-shadow:0 8px 24px #0004; z-index:20; } .toast button { color:var(--accent); padding:4px 0; display:block; margin-top:4px; }
+.toast { flex-shrink:0; border:1px solid var(--line); padding:12px; background:var(--surface); border-radius:10px; font-size:12px; box-shadow:0 8px 24px #0004; } .toast button { color:var(--accent); padding:4px 0; display:block; margin-top:4px; }
 body.floating { min-width:0; margin:6px; height:calc(100vh - 12px); border-radius:14px; border:1px solid var(--line); box-shadow:0 8px 24px #0008; }
 body.collapsed { visibility:hidden; pointer-events:none; transition:visibility 0s linear 340ms; }
 button,summary { transition:background-color 140ms ease,color 140ms ease,transform 100ms ease; }
@@ -99,12 +99,12 @@ button:active:not(:disabled),summary:active { transform:scale(.96); }
 <button id="btn-apply-update" class="update-btn">Update now</button>
 </div>
 <div class="activity" id="activity" role="status" aria-live="polite" hidden><span id="activity-message"></span><button class="icon" id="dismiss-status" aria-label="Dismiss message" title="Dismiss message"><svg><use href="#close"/></svg></button></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-message"></span><button id="toast-undo" hidden>Reopen tab</button></div>
 <footer class="footer">
 <button class="download-control" id="btn-downloads" title="Downloads (Ctrl+J)" aria-label="Downloads"><svg><use href="#download"/></svg><span>Downloads</span><small id="download-count"></small></button>
 <button class="sleep-control" id="btn-ram-saver" title="Unload background tabs to free memory (Ctrl+Shift+S)"><svg><use href="#moon"/></svg><span id="sleep-label">Sleep background tabs</span><svg><use href="#forward"/></svg></button>
 <div class="workspace-switcher"><details id="profiles"><summary aria-label="Switch profile"><svg aria-hidden="true"><use href="#globe"/></svg><span id="profile-current">General</span></summary><div class="menu"><p>Profiles</p><div id="spaces" aria-label="Profiles"></div><form id="profile-form"><label for="profile-name">New profile</label><input id="profile-name" placeholder="e.g. School" maxlength="40" required autocomplete="off"><small>Each profile keeps its own tabs and pins. Website logins are shared.</small><p id="profile-error" role="alert" hidden></p><button type="submit">Create profile</button></form></div></details><details id="browser-menu"><summary class="icon" title="Tab actions" aria-label="Tab actions"><svg><use href="#more"/></svg></summary><div class="menu"><button id="btn-pin-tab">Pin current tab</button><button id="btn-reopen-tab">Reopen closed tab <kbd>Ctrl Shift T</kbd></button><button id="btn-clear-tabs">Close other unpinned tabs</button><hr><button id="btn-check-update">Check for updates</button><button id="btn-default-browser">Set default browser?</button><hr><p>Profiles: Alt + 1-9<br>Address bar: Ctrl + L<br>Toggle sidebar: Ctrl + Shift + B<br>Bookmark page: Ctrl + D<br>Find in page: Ctrl + F</p></div></details></div>
 </footer>
-<div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-message"></span><button id="toast-undo" hidden>Reopen tab</button></div>
 <div class="menu" id="tab-context-menu" role="menu" aria-label="Tab options" hidden></div>
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg"><defs>
 <symbol id="download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></symbol><symbol id="back" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6M8 12h12"/></symbol><symbol id="forward" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6M4 12h12"/></symbol>
@@ -187,7 +187,10 @@ function renderTabs() {
   select.onkeydown=event=>{ if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)) { event.preventDefault(); const items=[...document.querySelectorAll('.tab-main')]; const index=items.indexOf(select); items[event.key==='Home'?0:event.key==='End'?items.length-1:(index+(event.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus(); } };
   select.append(favicon,label); select.onclick=()=>Felaris.send('switch_tab',{id:tab.id});
   row.append(select);
-  if(tab.is_sleeping) { const moon=icon('moon'); moon.classList.add('sleep-icon'); row.append(moon); }
+  if(tab.is_sleeping) {
+   const sleep=document.createElement('span'); sleep.title='This tab is sleeping to save memory. Select the tab to wake it.'; sleep.style.display='flex';
+   const moon=icon('moon'); moon.classList.add('sleep-icon'); sleep.append(moon); row.append(sleep);
+  }
   const close=document.createElement('button'); close.className='close-tab'; close.dataset.tabId=tab.id; close.title='Close tab'; close.setAttribute('aria-label','Close '+(tab.title||'tab')); close.append(icon('close')); close.onclick=()=>Felaris.send('close_tab',{id:tab.id}); row.append(close);
   row.onauxclick=e=>{ if(e.button===1) { e.preventDefault(); close.click(); } };
   row.oncontextmenu=e=>{ e.preventDefault(); openTabContextMenu(tab,e.clientY); };
@@ -253,6 +256,7 @@ window.updateState = state => {
  $('btn-forward').disabled=!active?.can_go_forward;
  $('btn-downloads').setAttribute('aria-label',state.active_downloads?`Downloads, ${state.active_downloads} active`:'Downloads');
  $('download-count').textContent=state.active_downloads?`${state.active_downloads} active`:'';
+ $('btn-default-browser').hidden=!!state.is_default_browser;
  $('btn-apply-update').disabled=!!state.update_busy||state.active_downloads>0;
  $('btn-apply-update').textContent=state.update_busy?'Updating?':state.active_downloads>0?'Finish downloads to update':'Update now';
  $('url-input').title=active?.url||'Search or enter address';

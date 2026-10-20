@@ -46,7 +46,7 @@ keydown({ key: 't', ctrlKey: true, isTrusted: true, isComposing: true });
 keydown({ key: 't', ctrlKey: true, isTrusted: false });
 keydown({ key: 's', ctrlKey: true, isTrusted: true, preventDefault() { throw Error('Ctrl+S belongs to the page'); } });
 assert.equal(messages.length, 0);
-for (const file of ['src/ui.html', 'src/start_page.html', 'src/new_tab.html', 'src/topbar.html', 'src/popup.html', 'src/permission.html']) {
+for (const file of ['src/ui.html', 'src/start_page.html', 'src/new_tab.html', 'src/topbar.html', 'src/popup.html', 'src/permission.html', 'src/history.html', 'src/settings.html']) {
   const html = fs.readFileSync(file, 'utf8').replace('__COMMON_SCRIPT__', fs.readFileSync('src/browser.js', 'utf8')).replace('__SHORTCUTS__', '[]');
   for (const script of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new vm.Script(script[1], { filename: file });
   assert.ok(!html.includes('__COMMON_SCRIPT__'));

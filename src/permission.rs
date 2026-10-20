@@ -141,7 +141,7 @@ impl Prompt {
             builder = builder.with_additional_browser_args(arguments);
         }
         Ok(Self {
-            view: builder.build(window)?,
+            view: builder.build_as_child(window)?,
             pending: None,
             ready: false,
             dirty: false,

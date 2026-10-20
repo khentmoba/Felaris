@@ -2,6 +2,73 @@ use crate::app::UserEvent;
 use tao::event_loop::EventLoopProxy;
 use wry::WebView;
 
+#[cfg(windows)]
+thread_local! {
+    // Keep operations alive and reconcile state even if a completion event is missed.
+    static DOWNLOADS: std::cell::RefCell<Vec<(usize, webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadOperation)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+pub fn download_counts(
+    views: &std::collections::HashMap<usize, WebView>,
+) -> std::collections::HashMap<usize, usize> {
+    let mut counts = std::collections::HashMap::new();
+    #[cfg(windows)]
+    DOWNLOADS.with_borrow_mut(|downloads| {
+        use webview2_com::Microsoft::Web::WebView2::Win32::*;
+        downloads.retain(|(id, operation)| unsafe {
+            if !views.contains_key(id) {
+                return false;
+            }
+            let mut state = COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS;
+            let _ = operation.State(&mut state);
+            if state == COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED {
+                return false;
+            }
+            if state == COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS {
+                *counts.entry(*id).or_default() += 1;
+            } else if state == COREWEBVIEW2_DOWNLOAD_STATE_INTERRUPTED {
+                let mut resumable = windows::core::BOOL::default();
+                if operation.CanResume(&mut resumable).is_ok() && !resumable.as_bool() {
+                    return false;
+                }
+            }
+            true
+        });
+    });
+    counts
+}
+
+pub fn is_default_browser() -> bool {
+    #[cfg(windows)]
+    {
+        use windows::{
+            Win32::UI::Shell::{ASSOCF_IS_PROTOCOL, ASSOCSTR_PROGID, AssocQueryStringW},
+            core::{PCWSTR, PWSTR, w},
+        };
+        [w!("http"), w!("https")]
+            .into_iter()
+            .all(|protocol| unsafe {
+                let mut value = [0u16; 256];
+                let mut length = value.len() as u32;
+                AssocQueryStringW(
+                    ASSOCF_IS_PROTOCOL,
+                    ASSOCSTR_PROGID,
+                    protocol,
+                    PCWSTR::null(),
+                    Some(PWSTR(value.as_mut_ptr())),
+                    &mut length,
+                )
+                .is_ok()
+                    && String::from_utf16_lossy(
+                        &value[..value.iter().position(|c| *c == 0).unwrap_or(value.len())],
+                    )
+                    .eq_ignore_ascii_case("FelarisHTML")
+            })
+    }
+    #[cfg(not(windows))]
+    false
+}
+
 pub fn raise(view: &WebView) {
     #[cfg(windows)]
     {
@@ -278,19 +345,15 @@ pub fn attach(
             &DownloadStartingEventHandler::create(Box::new(move |_, args| {
                 if let Some(args) = args {
                     let operation = args.DownloadOperation()?;
-                    let _ = download_proxy.send_event(UserEvent::DownloadStarted(id));
                     let complete = download_proxy.clone();
-                    let done = std::rc::Rc::new(std::cell::Cell::new(false));
                     operation.add_StateChanged(
                         &StateChangedEventHandler::create(Box::new(move |operation, _| {
                             if let Some(operation) = operation {
                                 let mut state = COREWEBVIEW2_DOWNLOAD_STATE::default();
                                 operation.State(&mut state)?;
-                                if state != COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS
-                                    && !done.replace(true)
-                                {
+                                let _ = complete.send_event(UserEvent::DownloadsChanged);
+                                if state != COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS {
                                     let _ = complete.send_event(UserEvent::DownloadFinished(
-                                        id,
                                         state == COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED,
                                     ));
                                 }
@@ -299,6 +362,8 @@ pub fn attach(
                         })),
                         &mut 0,
                     )?;
+                    DOWNLOADS.with_borrow_mut(|downloads| downloads.push((id, operation)));
+                    let _ = download_proxy.send_event(UserEvent::DownloadsChanged);
                 }
                 Ok(())
             })),
@@ -417,5 +482,138 @@ pub fn navigate(view: &WebView, backwards: bool) {
         } else {
             "history.forward()"
         });
+    }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+    use std::{
+        collections::HashMap,
+        io::{BufRead, BufReader, Write},
+        net::TcpListener,
+        sync::mpsc,
+        time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    };
+    use tao::{
+        event_loop::{ControlFlow, EventLoopBuilder},
+        platform::{run_return::EventLoopExtRunReturn, windows::EventLoopBuilderExtWindows},
+        window::WindowBuilder,
+    };
+    use webview2_com::{
+        DownloadStartingEventHandler, Microsoft::Web::WebView2::Win32::ICoreWebView2_4,
+    };
+    use windows::core::Interface;
+    use wry::{WebContext, WebViewBuilder, WebViewExtWindows};
+
+    #[test]
+    fn completed_download_clears_without_completion_notifications() {
+        let directory = std::env::temp_dir().join(format!(
+            "felaris-download-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let destination = directory.join("download.txt");
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (release, wait) = mpsc::channel();
+        let server = std::thread::spawn(move || {
+            loop {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_write_timeout(Some(Duration::from_secs(10)))
+                    .unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut request = BufReader::new(&stream);
+                let mut first = String::new();
+                // Chromium can open and close a speculative connection without a request.
+                if !matches!(request.read_line(&mut first), Ok(1..)) {
+                    continue;
+                }
+                loop {
+                    let mut line = String::new();
+                    assert!(request.read_line(&mut line).unwrap() > 0);
+                    if line == "\r\n" {
+                        break;
+                    }
+                }
+                stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=download.txt\r\nContent-Length: 65536\r\nConnection: close\r\n\r\n").unwrap();
+                stream.write_all(&[b'x'; 32768]).unwrap();
+                wait.recv_timeout(Duration::from_secs(15)).unwrap();
+                stream.write_all(&[b'x'; 32768]).unwrap();
+                break;
+            }
+        });
+        let mut event_loop = EventLoopBuilder::<UserEvent>::with_user_event()
+            .with_any_thread(true)
+            .build();
+        let window = WindowBuilder::new()
+            .with_visible(false)
+            .build(&event_loop)
+            .unwrap();
+        let mut context = WebContext::new(Some(directory.join("webview")));
+        let file = destination.clone();
+        let view = WebViewBuilder::new_with_web_context(&mut context)
+            .with_download_started_handler(move |_, path| {
+                *path = file.clone();
+                true
+            })
+            .build(&window)
+            .unwrap();
+        unsafe {
+            view.webview()
+                .cast::<ICoreWebView2_4>()
+                .unwrap()
+                .add_DownloadStarting(
+                    &DownloadStartingEventHandler::create(Box::new(|_, args| {
+                        if let Some(args) = args {
+                            let operation = args.DownloadOperation()?;
+                            // Deliberately omit StateChanged to exercise missed notifications.
+                            DOWNLOADS.with_borrow_mut(|downloads| downloads.push((7, operation)));
+                        }
+                        Ok(())
+                    })),
+                    &mut 0,
+                )
+                .unwrap();
+        }
+        view.load_url(&format!("http://{address}/download"))
+            .unwrap();
+        let views = HashMap::from([(7, view)]);
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let mut started = false;
+        let mut completed = false;
+        event_loop.run_return(|_, _, flow| {
+            *flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(10));
+            let counts = download_counts(&views);
+            if !started && counts.get(&7) == Some(&1) {
+                started = true;
+                release.send(()).unwrap();
+            }
+            if started && counts.is_empty() {
+                completed = true;
+            }
+            if completed || Instant::now() >= deadline {
+                *flow = ControlFlow::Exit;
+            }
+        });
+        let _ = release.send(());
+        assert!(started, "Download never became active");
+        assert!(
+            completed,
+            "Completed download stayed active without a notification"
+        );
+        assert_eq!(std::fs::read(destination).unwrap(), vec![b'x'; 65536]);
+        server.join().unwrap();
+        DOWNLOADS.with_borrow(|downloads| assert!(downloads.is_empty()));
+        drop(views);
+        drop(context);
+        // WebView2 may still hold profile files while its child processes exit.
+        let _ = std::fs::remove_dir_all(directory);
     }
 }

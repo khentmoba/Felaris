@@ -27,6 +27,16 @@ pub fn raise(view: &WebView) {
     }
 }
 
+pub fn vsync() {
+    #[cfg(windows)]
+    unsafe {
+        if windows::Win32::Graphics::Dwm::DwmFlush().is_ok() {
+            return;
+        }
+    }
+    std::thread::sleep(std::time::Duration::from_millis(16));
+}
+
 pub fn round(view: &WebView, width: i32, height: i32, radius: i32) {
     #[cfg(windows)]
     {

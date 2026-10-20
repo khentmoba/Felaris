@@ -103,6 +103,7 @@ pub enum UserEvent {
     Ready,
     PaletteReady,
     TopbarReady,
+    Frame,
     External(Vec<String>),
     Title(usize, u64, String),
     PageLoad(usize, u64, bool, String),
@@ -497,6 +498,22 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     let mut side_progress = if state.sidebar_collapsed { 0. } else { 1. };
     let mut top_progress = 0.;
     let mut animating = false;
+    let animating_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let frame_thread = {
+        let flag = animating_flag.clone();
+        let frames = proxy.clone();
+        std::thread::spawn(move || {
+            loop {
+                while !flag.load(std::sync::atomic::Ordering::Relaxed) {
+                    std::thread::park();
+                }
+                desktop::vsync();
+                if frames.send_event(UserEvent::Frame).is_err() {
+                    break;
+                }
+            }
+        })
+    };
     let mut last_frame = std::time::Instant::now();
     let mut rounded: HashMap<usize, (u32, u32, i32)> = HashMap::new();
     let mut views = HashMap::new();
@@ -552,16 +569,16 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     event_loop.run(move |event, _, flow| {
         let _keep_instance = &instance;
         let _keep_chrome_context = &chrome_context;
-        *flow = if animating { ControlFlow::WaitUntil(last_frame + std::time::Duration::from_millis(16)) } else { ControlFlow::Wait };
-        let tick = matches!(event, Event::NewEvents(StartCause::ResumeTimeReached { .. }));
+        *flow = ControlFlow::Wait;
+        let tick = matches!(event, Event::UserEvent(UserEvent::Frame));
         match event {
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } | Event::UserEvent(UserEvent::Command(Command::WindowClose)) => {
                 if may_exit(&state) { *flow = ControlFlow::Exit; }
             }
-            Event::NewEvents(StartCause::Init | StartCause::ResumeTimeReached { .. }) => {},
+            Event::NewEvents(StartCause::Init) => {},
             Event::WindowEvent { event: WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. }, .. } => {},
             Event::UserEvent(event) => {
-                let transient = matches!(&event, UserEvent::TopbarReady | UserEvent::Command(Command::Peek { .. } | Command::TopbarPeek { .. } | Command::DragWindow));
+                let transient = matches!(&event, UserEvent::TopbarReady | UserEvent::Frame | UserEvent::Command(Command::Peek { .. } | Command::TopbarPeek { .. } | Command::DragWindow));
                 match event {
                     UserEvent::SmokeTick => {
                         if let Some(smoke) = &mut smoke && smoke.tick(&state, &views, &sidebar, &palette, &proxy) { *flow = ControlFlow::Exit; }
@@ -571,6 +588,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                     }
                     UserEvent::Ready => {},
                     UserEvent::TopbarReady => { last_loading = false; },
+                    UserEvent::Frame => {},
                     UserEvent::PaletteReady => { palette_needs_open = palette_open; },
                     UserEvent::External(urls) => {
                         if !headless { window.set_minimized(false); window.set_focus(); }
@@ -738,10 +756,24 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         let top_target = if state.topbar_peek { 1. } else { 0. };
         side_progress = step(side_progress, side_target, dt, !state.sidebar_collapsed);
         top_progress = step(top_progress, top_target, dt, false);
+        let was_animating = animating;
         animating = side_progress != side_target || top_progress != top_target;
-        if animating { *flow = ControlFlow::WaitUntil(now + std::time::Duration::from_millis(16)); }
+        if animating != was_animating {
+            animating_flag.store(animating, std::sync::atomic::Ordering::Relaxed);
+            if animating { frame_thread.thread().unpark(); }
+        }
         let (sidebar_bounds, content_bounds, overlay_bounds, topbar_bounds) = bounds(&window, &state, ease(side_progress), ease(top_progress));
         let _ = sidebar.set_bounds(sidebar_bounds);
+        if tick {
+            let _ = topbar.set_bounds(topbar_bounds);
+            if !palette_open {
+                if state.sidebar_collapsed && side_progress > 0. {
+                    desktop::raise(&sidebar);
+                }
+                desktop::raise(&topbar);
+            }
+            return;
+        }
         for (id,view) in &views { let _ = view.set_bounds(content_bounds); let _ = view.set_visible(*id == active_id); }
         let physical = content_bounds.size.to_physical::<u32>(window.scale_factor());
         let radius = if window.is_maximized() || window.fullscreen().is_some() { 0 } else { (ui::CONTENT_RADIUS * window.scale_factor()) as i32 };
@@ -759,7 +791,6 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             if !headless && let Some(view) = views.get(&active_id) { let _ = view.focus(); }
             visible_id = Some(active_id);
         }
-        if tick { return; }
         state.is_loading = state.active_tab().is_some_and(|tab| tab.is_loading);
         if state.is_loading != last_loading { last_loading = state.is_loading; let _ = topbar.evaluate_script(&format!("window.setLoading?.({last_loading})")); }
         if let Some(tab) = state.active_tab() { window.set_title(&format!("{} — Felaris", tab.title)); }

@@ -70,6 +70,14 @@ window.runChecks=async()=>{
  const originalWorkspace=d.querySelector('.space');
  w.updateState({...structuredClone(fixtureState),is_loading:true});
  check('loading keeps tab and workspace nodes stable',d.querySelector('.tab')===originalRow&&d.querySelector('.space')===originalWorkspace);
+ const tabLoading=structuredClone(fixtureState);
+ tabLoading.tabs[0].is_loading=true;
+ tabLoading.tabs[0].can_go_back=true;
+ tabLoading.is_loading=true;
+ const movingTab=w.matchMedia('(prefers-reduced-motion: reduce)').matches?null:originalRow.animate([{transform:'translateY(1px)'},{transform:'translateY(0)'}],{duration:60000,id:'tab-layout'});
+ w.updateState(tabLoading);
+ check('page loading updates navigation controls without cancelling tab movement',d.getElementById('btn-back').disabled===false&&d.getElementById('btn-reload').getAttribute('aria-label')==='Stop loading'&&(!movingTab||movingTab.playState!=='idle'));
+ movingTab?.cancel();
  w.updateState({...structuredClone(fixtureState),active_tab_id:3});
  check('active selection reuses tab rows',d.querySelector('.tab')===originalRow&&d.querySelector('.tab.active .tab-main').dataset.tabId==='3');
  w.updateState(structuredClone(fixtureState));

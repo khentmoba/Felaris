@@ -87,9 +87,16 @@ window.runChecks=async()=>{
  check('frequent sites lead shortcuts',[...p.querySelectorAll('.shortcut-label')].slice(0,2).map(el=>el.textContent).join(',')==='YouTube,X'&&p.getElementById('shortcuts-heading').textContent==='Most visited');
  p.querySelector('.shortcut').click();check('ranked shortcut IPC',messages.at(-1).url==='https://youtube.com/');
  w.updateState({...structuredClone(fixtureState),sidebar_collapsed:true});
- d.querySelector('summary').click();check('collapsed menu requests expansion',messages.at(-1).action==='toggle_sidebar');
+ d.querySelector('#browser-menu summary').click();check('collapsed menu requests expansion',messages.at(-1).action==='toggle_sidebar');
  w.updateState(structuredClone(fixtureState));check('expanded menu opens',d.getElementById('browser-menu').open);
  d.getElementById('browser-menu').open=false;
+ w.updateState({...structuredClone(fixtureState),sidebar_collapsed:true});
+ d.querySelector('#app-menu summary').click();check('collapsed app menu requests expansion',messages.at(-1).action==='toggle_sidebar');
+ w.updateState({...structuredClone(fixtureState),zoom:120});
+ check('app menu opens and shows zoom',d.getElementById('app-menu').open&&d.getElementById('zoom-level').textContent==='120%');
+ d.querySelector('#app-menu [data-action="open_history"]').click();check('app menu opens History',messages.at(-1).action==='open_history');
+ d.getElementById('app-menu').open=true;
+ d.querySelector('#app-menu [data-action="open_settings"]').click();check('app menu opens Settings and closes',messages.at(-1).action==='open_settings'&&!d.getElementById('app-menu').open);
  w.updateState(structuredClone(fixtureState));
  palette.hidden=false;
  const n=palette.contentWindow,nd=n.document,ni=nd.getElementById('new-tab-input');

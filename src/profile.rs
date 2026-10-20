@@ -14,7 +14,9 @@ pub fn directory() -> PathBuf {
 
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
-    std::fs::create_dir_all(path.parent().unwrap())?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     let temporary = path.with_extension("tmp");
     let mut file = std::fs::File::create(&temporary)?;
     file.write_all(bytes)?;

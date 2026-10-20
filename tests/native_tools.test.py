@@ -48,9 +48,13 @@ def main():
             source = source.replace("from './native_cdp.mjs'", f'from {json.dumps((tests / "native_cdp.mjs").as_uri())}')
             menu_marker = '  const menuOpacity = await sidebar.evaluate('
             key_marker = "  await press(restored, 's', 2);"
-            assert source.count(menu_marker) == source.count(key_marker) == 1
+            command_marker = '  const command = '
+            sidebar_marker = "  const sidebar = await connect(page => page.title === 'Felaris');"
+            assert source.count(menu_marker) == source.count(key_marker) == source.count(command_marker) == source.count(sidebar_marker) == 1
+            menu_source = source.replace(sidebar_marker, sidebar_marker + "\n  await sidebar.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });")
+            menu_source = menu_source.replace(command_marker, "  throw Error('Injected menu fade was not rejected');\n" + command_marker)
             faults = [
-                ('menu', source.replace(menu_marker, '''  await sidebar.evaluate(`(() => {
+                ('menu', menu_source.replace(menu_marker, '''  await sidebar.evaluate(`(() => {
     const style = document.createElement('style'); style.id = 'retro-fault';
     style.textContent = '@keyframes menu-in { from { opacity:.6; } to { opacity:1; } }';
     document.head.append(style); return true;
@@ -69,6 +73,8 @@ def main():
                 assert expected in report['error'], report
                 sidebar = next(target for target in report['targets'] if target.get('title') == 'Felaris')
                 assert sidebar['state']['ready'] == 'complete', report
+                if name == 'menu':
+                    assert sidebar['state']['reducedMotion'] is False, report
                 if name == 'keyboard':
                     assert report['inputs'] and sidebar['state']['sidebarCollapsed'] is False, report
                 (app.artifacts / f'{name}-failure.json').write_text(json.dumps(report, indent=2), encoding='utf-8')

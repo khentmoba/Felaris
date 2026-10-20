@@ -71,7 +71,8 @@ export async function writeDiagnostics(ports, directory, error, screenshots = fa
             const state = typeof currentState === 'object' ? currentState : null;
             const tab = state?.tabs?.find(tab => tab.id === state.active_tab_id);
             return { ready: document.readyState, focused: document.hasFocus(), activeElement: document.activeElement?.id || document.activeElement?.tagName,
-              width: innerWidth, height: innerHeight, sidebarCollapsed: state?.sidebar_collapsed, sidebarPeek: state?.sidebar_peek,
+              width: innerWidth, height: innerHeight, reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+              sidebarCollapsed: state?.sidebar_collapsed, sidebarPeek: state?.sidebar_peek,
               activeTab: tab && { id: tab.id, title: tab.title, url: tab.url, loading: tab.is_loading, sleeping: tab.is_sleeping },
               shortcutBridge: !!window.Felaris, inputReadOnly: document.querySelector('input')?.readOnly };
           })()`);

@@ -289,7 +289,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         .build(&event_loop)
         .expect("Cannot create window");
     let mut state = BrowserState::restore();
-    state.sidebar_collapsed = true;
+    state.sidebar_collapsed = !headless;
     state.sidebar_peek = false;
     for url in urls {
         state.add_tab(Some(url), false);
@@ -439,6 +439,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             Event::NewEvents(StartCause::Init) => {},
             Event::WindowEvent { event: WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. }, .. } => {},
             Event::UserEvent(event) => {
+                let transient = matches!(&event, UserEvent::TopbarReady | UserEvent::Command(Command::Peek { .. } | Command::TopbarPeek { .. } | Command::DragWindow));
                 match event {
                     UserEvent::SmokeTick => {
                         if let Some(smoke) = &mut smoke && smoke.tick(&state, &views, &sidebar, &palette, &proxy) { *flow = ControlFlow::Exit; }
@@ -545,7 +546,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                     UserEvent::Status(status) => { state.update_status = Some(status); },
                     UserEvent::UpdateFailed(status) => { state.update_busy = false; state.update_status = Some(status); },
                 }
-                if let Err(error) = state.save_session() { state.update_status = Some(format!("Could not save your session: {error}")); }
+                if !transient && let Err(error) = state.save_session() { state.update_status = Some(format!("Could not save your session: {error}")); }
             }
             _ => return,
         }

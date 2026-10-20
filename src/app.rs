@@ -119,13 +119,17 @@ pub enum UserEvent {
     AdBlockerInstalled(Result<(), String>),
 }
 
-fn bounds(window: &Window, state: &BrowserState) -> (Rect, Rect, Rect, Rect) {
+fn bounds(window: &Window, state: &BrowserState, side: f64, top: f64) -> (Rect, Rect, Rect, Rect) {
     let size = window.inner_size().to_logical::<f64>(window.scale_factor());
-    let shown = !state.sidebar_collapsed || state.sidebar_peek;
-    let width = if shown {
-        ui::SIDEBAR_WIDTH_EXPANDED
+    let full = ui::SIDEBAR_WIDTH_EXPANDED;
+    let hot = ui::SIDEBAR_HOT_ZONE;
+    let (side_x, side_width, top_left) = if !state.sidebar_collapsed {
+        (0., full, full)
+    } else if side <= 0. {
+        (0., hot, 0.)
     } else {
-        ui::SIDEBAR_HOT_ZONE
+        let right = (full * side).max(hot);
+        (right - full, full, right)
     };
     let margin = if window.is_maximized() || window.fullscreen().is_some() {
         0.
@@ -135,18 +139,13 @@ fn bounds(window: &Window, state: &BrowserState) -> (Rect, Rect, Rect, Rect) {
     let content_left = if state.sidebar_collapsed {
         margin
     } else {
-        width + margin
+        full + margin
     };
-    let top_left = if shown { width } else { 0. };
-    let top_height = if state.topbar_peek {
-        ui::TOPBAR_EXPANDED
-    } else {
-        ui::TOPBAR_HOT_ZONE
-    };
+    let top_height = ui::TOPBAR_HOT_ZONE + (ui::TOPBAR_EXPANDED - ui::TOPBAR_HOT_ZONE) * top;
     (
         Rect {
-            position: Position::Logical(LogicalPosition::new(0., 0.)),
-            size: Size::Logical(LogicalSize::new(width, size.height)),
+            position: Position::Logical(LogicalPosition::new(side_x, 0.)),
+            size: Size::Logical(LogicalSize::new(side_width, size.height)),
         },
         Rect {
             position: Position::Logical(LogicalPosition::new(content_left, margin)),
@@ -167,6 +166,22 @@ fn bounds(window: &Window, state: &BrowserState) -> (Rect, Rect, Rect, Rect) {
             )),
         },
     )
+}
+
+fn step(progress: f64, target: f64, dt: f64, snap: bool) -> f64 {
+    if snap {
+        return target;
+    }
+    let amount = dt / if target > progress { 0.30 } else { 0.22 };
+    if target > progress {
+        (progress + amount).min(target)
+    } else {
+        (progress - amount).max(target)
+    }
+}
+
+fn ease(progress: f64) -> f64 {
+    1. - (1. - progress).powi(3)
 }
 
 fn load(view: &WebView, state: &BrowserState, url: &str) -> wry::Result<()> {
@@ -202,7 +217,7 @@ fn content(
     let popup = proxy.clone();
     let navigation = proxy.clone();
     let mut builder = WebViewBuilder::new_with_web_context(context)
-        .with_bounds(bounds(window, state).1)
+        .with_bounds(bounds(window, state, 0., 0.).1)
         .with_visible(false)
         .with_focused(false)
         .with_initialization_script(&script)
@@ -396,7 +411,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     let ui_proxy = proxy.clone();
     let ready = proxy.clone();
     let mut sidebar_builder = WebViewBuilder::new_with_web_context(&mut chrome_context)
-        .with_bounds(bounds(&window, &state).0)
+        .with_bounds(bounds(&window, &state, 0., 0.).0)
         .with_html(ui::get_ui_html())
         .with_focused(false)
         .with_clipboard(true)
@@ -420,7 +435,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     let palette_proxy = proxy.clone();
     let palette_ready = proxy.clone();
     let mut palette_builder = WebViewBuilder::new_with_web_context(&mut chrome_context)
-        .with_bounds(bounds(&window, &state).2)
+        .with_bounds(bounds(&window, &state, 0., 0.).2)
         .with_visible(false)
         .with_focused(false)
         .with_transparent(true)
@@ -451,7 +466,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     let topbar_ready = proxy.clone();
     let topbar_proxy = proxy.clone();
     let mut topbar_builder = WebViewBuilder::new_with_web_context(&mut chrome_context)
-        .with_bounds(bounds(&window, &state).3)
+        .with_bounds(bounds(&window, &state, 0., 0.).3)
         .with_html(ui::get_topbar_html())
         .with_focused(false)
         .with_navigation_handler(|url| url == "about:blank" || url.starts_with("data:text/html;"))
@@ -479,6 +494,10 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     }
     let topbar = topbar_builder.build(&window)?;
     let mut last_loading = false;
+    let mut side_progress = if state.sidebar_collapsed { 0. } else { 1. };
+    let mut top_progress = 0.;
+    let mut animating = false;
+    let mut last_frame = std::time::Instant::now();
     let mut rounded: HashMap<usize, (u32, u32, i32)> = HashMap::new();
     let mut views = HashMap::new();
     let initial_id = state.active_tab_id;
@@ -533,12 +552,13 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     event_loop.run(move |event, _, flow| {
         let _keep_instance = &instance;
         let _keep_chrome_context = &chrome_context;
-        *flow = ControlFlow::Wait;
+        *flow = if animating { ControlFlow::WaitUntil(last_frame + std::time::Duration::from_millis(16)) } else { ControlFlow::Wait };
+        let tick = matches!(event, Event::NewEvents(StartCause::ResumeTimeReached { .. }));
         match event {
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } | Event::UserEvent(UserEvent::Command(Command::WindowClose)) => {
                 if may_exit(&state) { *flow = ControlFlow::Exit; }
             }
-            Event::NewEvents(StartCause::Init) => {},
+            Event::NewEvents(StartCause::Init | StartCause::ResumeTimeReached { .. }) => {},
             Event::WindowEvent { event: WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. }, .. } => {},
             Event::UserEvent(event) => {
                 let transient = matches!(&event, UserEvent::TopbarReady | UserEvent::Command(Command::Peek { .. } | Command::TopbarPeek { .. } | Command::DragWindow));
@@ -711,7 +731,16 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         }
         zooms.retain(|id, _| views.contains_key(id));
         state.zoom = zooms.get(&active_id).copied().unwrap_or(100);
-        let (sidebar_bounds, content_bounds, overlay_bounds, topbar_bounds) = bounds(&window, &state);
+        let now = std::time::Instant::now();
+        let dt = if animating { now.duration_since(last_frame).as_secs_f64().min(0.05) } else { 0. };
+        last_frame = now;
+        let side_target = if !state.sidebar_collapsed || state.sidebar_peek { 1. } else { 0. };
+        let top_target = if state.topbar_peek { 1. } else { 0. };
+        side_progress = step(side_progress, side_target, dt, !state.sidebar_collapsed);
+        top_progress = step(top_progress, top_target, dt, false);
+        animating = side_progress != side_target || top_progress != top_target;
+        if animating { *flow = ControlFlow::WaitUntil(now + std::time::Duration::from_millis(16)); }
+        let (sidebar_bounds, content_bounds, overlay_bounds, topbar_bounds) = bounds(&window, &state, ease(side_progress), ease(top_progress));
         let _ = sidebar.set_bounds(sidebar_bounds);
         for (id,view) in &views { let _ = view.set_bounds(content_bounds); let _ = view.set_visible(*id == active_id); }
         let physical = content_bounds.size.to_physical::<u32>(window.scale_factor());
@@ -721,7 +750,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         for (id, view) in &views { if rounded.get(id) != Some(&shape) { desktop::round(view, shape.0 as i32, shape.1 as i32, radius); rounded.insert(*id, shape); } }
         let _ = topbar.set_bounds(topbar_bounds);
         if !palette_open {
-            if state.sidebar_collapsed && state.sidebar_peek { desktop::raise(&sidebar); }
+            if state.sidebar_collapsed && side_progress > 0. { desktop::raise(&sidebar); }
             desktop::raise(&topbar);
         }
         let _ = palette.set_bounds(overlay_bounds);
@@ -730,6 +759,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             if !headless && let Some(view) = views.get(&active_id) { let _ = view.focus(); }
             visible_id = Some(active_id);
         }
+        if tick { return; }
         state.is_loading = state.active_tab().is_some_and(|tab| tab.is_loading);
         if state.is_loading != last_loading { last_loading = state.is_loading; let _ = topbar.evaluate_script(&format!("window.setLoading?.({last_loading})")); }
         if let Some(tab) = state.active_tab() { window.set_title(&format!("{} — Felaris", tab.title)); }

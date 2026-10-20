@@ -86,7 +86,7 @@ pub fn is_newer(remote: &str, current: &str) -> bool {
     }
 }
 
-fn run_curl(args: &[&str]) -> Option<String> {
+pub(crate) fn run_curl(args: &[&str]) -> Option<String> {
     let output = hidden_command("curl.exe").args(args).output().ok()?;
     if output.status.success() {
         String::from_utf8(output.stdout).ok()
@@ -174,7 +174,7 @@ pub fn download_and_apply_update(download_url: &str) -> Result<(), String> {
     std::process::exit(0);
 }
 
-fn download(url: &str, file: &std::path::Path) -> Result<(), String> {
+pub(crate) fn download(url: &str, file: &std::path::Path) -> Result<(), String> {
     let status = hidden_command("curl.exe")
         .args([
             "-s",
@@ -230,6 +230,16 @@ fn verify_download(sums_url: &str, asset: &str, file: &std::path::Path) -> Resul
     .ok_or("Could not fetch the release checksums. Your current version was kept.")?;
     let expected = checksum_for(&sums, asset)
         .ok_or("This release has no checksum for the update. Your current version was kept.")?;
+    let actual = sha256(file)?;
+    if !actual.eq_ignore_ascii_case(&expected) {
+        return Err(
+            "The download did not match its checksum. Your current version was kept.".into(),
+        );
+    }
+    Ok(())
+}
+
+pub(crate) fn sha256(file: &std::path::Path) -> Result<String, String> {
     let output = hidden_command("certutil.exe")
         .args([
             "-hashfile",
@@ -238,19 +248,13 @@ fn verify_download(sums_url: &str, asset: &str, file: &std::path::Path) -> Resul
         ])
         .output()
         .map_err(|e| format!("Could not verify the download: {e}"))?;
-    let actual: String = String::from_utf8_lossy(&output.stdout)
+    Ok(String::from_utf8_lossy(&output.stdout)
         .lines()
         .nth(1)
         .unwrap_or("")
         .chars()
         .filter(|c| !c.is_whitespace())
-        .collect();
-    if !actual.eq_ignore_ascii_case(&expected) {
-        return Err(
-            "The download did not match its checksum. Your current version was kept.".into(),
-        );
-    }
-    Ok(())
+        .collect())
 }
 
 fn checksum_for(sums: &str, asset: &str) -> Option<String> {
@@ -292,7 +296,7 @@ fn replace_and_launch(
     Ok(())
 }
 
-fn hidden_command(program: &str) -> Command {
+pub(crate) fn hidden_command(program: &str) -> Command {
     let mut command = Command::new(program);
     #[cfg(windows)]
     {

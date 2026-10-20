@@ -2,8 +2,10 @@
 
 mod app;
 mod desktop;
+mod extensions;
 mod instance;
 mod profile;
+mod settings;
 mod smoke;
 mod start_page;
 mod state;

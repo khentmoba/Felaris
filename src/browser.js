@@ -11,9 +11,9 @@
     if (!/\s/.test(text) && /^(localhost(?=[:/]|$)|\[[0-9a-f:]+\](?=[:/]|$)|[^/:]+\.[^/:]+)(:\d+)?([/?#].*)?$/i.test(text)) {
       return (/^(localhost|127\.0\.0\.1|\[::1\])(?=[:/]|$)/i.test(text) ? 'http://' : 'https://') + text;
     }
-    return 'https://search.brave.com/search?q=' + encodeURIComponent(text);
+    return window.Felaris.searchUrl + encodeURIComponent(text);
   }
-  window.Felaris = { send, resolveAddress, navigate: url => send('navigate', { url }) };
+  window.Felaris = { send, resolveAddress, navigate: url => send('navigate', { url }), searchUrl: 'https://search.brave.com/search?q=', searchName: 'Brave Search' };
   const postShortcut = window.ipc?.postMessage.bind(window.ipc);
   const stringify = JSON.stringify;
   window.addEventListener('keydown', event => {

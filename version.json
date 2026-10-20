@@ -1,6 +1,6 @@
 {
-  "version": "0.2.1",
-  "release_url": "https://github.com/khentmoba/Felaris/releases/tag/v0.2.1",
-  "download_url": "https://github.com/khentmoba/Felaris/releases/download/v0.2.1/felaris.exe",
-  "summary": "Felaris now has a sidebar and top controls that slide into view on hover, site favicons, History, Settings, and built-in uBlock Origin Lite. Sign-in popups open in their own window. Tabs have a context menu with duplicate and workspace actions, and the search palette includes history suggestions. This release also adds window-edge resizing, fullscreen and zoom shortcuts, improves large tab sessions, and protects pinned tabs and active downloads when closing other tabs."
+  "version": "0.2.2",
+  "release_url": "https://github.com/khentmoba/Felaris/releases/tag/v0.2.2",
+  "download_url": "https://github.com/khentmoba/Felaris/releases/download/v0.2.2/felaris.exe",
+  "summary": "- Fixed sidebar flicker and unreliable hover reveal after opening a tab.\n- Search suggestions now follow the pointer so Enter opens the highlighted result.\n- Added in-browser site permission prompts with the requesting origin and Allow or Block controls."
 }

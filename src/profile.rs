@@ -75,6 +75,7 @@ pub fn is_auth_url(value: &str) -> bool {
             "/auth/",
             "/sso",
             "/session",
+            "/callback",
             "/confirm",
             "/installations/",
         ]
@@ -163,6 +164,8 @@ mod tests {
             "https://accounts.google.com/o/oauth2/v2/auth?response_type=code"
         ));
         assert!(!is_auth_url("https://doc.rust-lang.org/book/"));
+        assert!(is_auth_url("https://example.com/api/callback?code=1"));
+        assert!(!is_auth_url("https://example.com/dashboard"));
         assert!(!is_auth_url("http://127.0.0.1:8080/popup"));
     }
 }

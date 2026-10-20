@@ -272,6 +272,71 @@ pub fn attach(_: &WebView, _: usize, _: u64, _: EventLoopProxy<UserEvent>) -> wr
     Ok(())
 }
 
+#[cfg(windows)]
+pub fn attach_popup(view: &WebView, proxy: EventLoopProxy<UserEvent>) -> wry::Result<()> {
+    use webview2_com::*;
+    use windows::core::{BOOL, PWSTR};
+    use wry::WebViewExtWindows;
+    let webview = view.webview();
+    let mut token = 0;
+    unsafe {
+        let close = proxy.clone();
+        webview.add_WindowCloseRequested(
+            &WindowCloseRequestedEventHandler::create(Box::new(move |_, _| {
+                let _ = close.send_event(UserEvent::PopupClosed);
+                Ok(())
+            })),
+            &mut token,
+        )?;
+        let started = proxy.clone();
+        webview.add_NavigationStarting(
+            &NavigationStartingEventHandler::create(Box::new(move |_, args| {
+                if let Some(args) = args {
+                    let mut uri = PWSTR::null();
+                    args.Uri(&mut uri)?;
+                    let _ = started.send_event(UserEvent::PopupState(take_pwstr(uri), true));
+                }
+                Ok(())
+            })),
+            &mut token,
+        )?;
+        let completed = proxy.clone();
+        webview.add_NavigationCompleted(
+            &NavigationCompletedEventHandler::create(Box::new(move |view, _| {
+                if let Some(view) = view {
+                    let mut uri = PWSTR::null();
+                    view.Source(&mut uri)?;
+                    let _ = completed.send_event(UserEvent::PopupState(take_pwstr(uri), false));
+                }
+                Ok(())
+            })),
+            &mut token,
+        )?;
+        let source = proxy;
+        webview.add_SourceChanged(
+            &SourceChangedEventHandler::create(Box::new(move |view, args| {
+                if let (Some(view), Some(args)) = (view, args) {
+                    let mut new_document = BOOL::default();
+                    args.IsNewDocument(&mut new_document)?;
+                    if !new_document.as_bool() {
+                        let mut uri = PWSTR::null();
+                        view.Source(&mut uri)?;
+                        let _ = source.send_event(UserEvent::PopupState(take_pwstr(uri), false));
+                    }
+                }
+                Ok(())
+            })),
+            &mut token,
+        )?;
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+pub fn attach_popup(_: &WebView, _: EventLoopProxy<UserEvent>) -> wry::Result<()> {
+    Ok(())
+}
+
 pub fn downloads(view: &WebView) -> Result<(), String> {
     #[cfg(windows)]
     {

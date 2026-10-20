@@ -49,7 +49,8 @@ kbd { font:11px "Segoe UI",system-ui,sans-serif; color:#dedee3; border:1px solid
 <script>
 const input=document.getElementById('new-tab-input');
 const results=document.getElementById('new-tab-results');
-let state={tabs:[],workspaces:[]};
+let state={tabs:[],workspaces:[],shortcuts:[]};
+let historyEntries=[];
 let options=[];
 let selected=0;
 let submitting=false;
@@ -79,18 +80,41 @@ function select(index) {
 }
 function render() {
  const query=input.value.trim();
+ const needle=query.toLowerCase();
  const target=Felaris.resolveAddress(query);
  options=[];
- if(target) options.push({title:query,detail:target===Felaris.searchUrl+encodeURIComponent(query)?'Search with '+Felaris.searchName.replace(/ Search$/,''):'Open in a new tab',url:target});
- for(const tab of state.tabs.filter(tab=>tab.url!=='felaris://newtab'&&(!query||(tab.title+' '+tab.url).toLowerCase().includes(query.toLowerCase()))).slice(0,6)) {
-  const workspace=state.workspaces.find(space=>space.id===tab.workspace_id);
+ const seen=new Set();
+ const norm=u=>(u||'').replace(/\/+$/,'').toLowerCase();
+ if(target) {
+  options.push({title:query,detail:target===Felaris.searchUrl+encodeURIComponent(query)?'Search with '+Felaris.searchName.replace(/ Search$/,''):'Open in a new tab',url:target});
+  seen.add(norm(target));
+ }
+ for(const tab of (state.tabs||[]).filter(tab=>tab.url!=='felaris://newtab'&&(!needle||(tab.title+' '+tab.url).toLowerCase().includes(needle))).slice(0,6)) {
+  const workspace=(state.workspaces||[]).find(space=>space.id===tab.workspace_id);
   options.push({title:tab.title||tab.url,detail:`Switch to tab${workspace?' · '+workspace.name:''} · ${tab.url}`,id:tab.id});
+  seen.add(norm(tab.url));
+ }
+ for(const entry of historyEntries) {
+  if(options.length>=8) break;
+  if(!entry?.url||seen.has(norm(entry.url))) continue;
+  if(needle&&!((entry.title||'')+' '+entry.url).toLowerCase().includes(needle)) continue;
+  seen.add(norm(entry.url));
+  options.push({title:entry.title||entry.url,detail:`History · ${entry.url}`,url:entry.url,history:true});
+ }
+ for(const item of (state.shortcuts||[])) {
+  if(options.length>=8) break;
+  if(!item?.url||seen.has(norm(item.url))) continue;
+  if(needle&&!((item.title||'')+' '+item.url).toLowerCase().includes(needle)) continue;
+  seen.add(norm(item.url));
+  options.push({title:item.title||item.url,detail:`Shortcut · ${item.url}`,url:item.url,shortcut:true});
  }
  results.replaceChildren();
  options.forEach((option,index)=>{
   const row=document.createElement('div'); row.id='new-tab-option-'+index; row.className='option'; row.setAttribute('role','option');
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'); svg.setAttribute('viewBox','0 0 24 24'); svg.setAttribute('aria-hidden','true');
-  const path=document.createElementNS(svg.namespaceURI,'path'); path.setAttribute('d',option.id?'M4 5h16v14H4zM4 9h16':'M5 12h14m-6-6 6 6-6 6'); svg.append(path);
+  const path=document.createElementNS(svg.namespaceURI,'path');
+  path.setAttribute('d',option.id?'M4 5h16v14H4zM4 9h16':option.history?'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 4v5l3 2':'M5 12h14m-6-6 6 6-6 6');
+  svg.append(path);
   const text=document.createElement('span'); text.className='option-text';
   const title=document.createElement('span'); title.className='option-title'; title.textContent=option.title;
   const detail=document.createElement('span'); detail.className='option-detail'; detail.textContent=option.detail;
@@ -109,9 +133,11 @@ function submit() {
  if(!option) return;
  finish(option.id?'switch_tab':'submit_new_tab',option.id?{id:option.id}:{url:option.url});
 }
-window.openNewTab=browserState=>{
+window.openNewTab=(browserState,recentHistory=browserState?.history||historyEntries)=>{
  document.getAnimations().forEach(animation=>animation.cancel());
- state=browserState; input.value=''; input.readOnly=false; submitting=false; composing=false; render(); input.focus();
+ state=browserState||{tabs:[],workspaces:[],shortcuts:[]};
+ historyEntries=Array.isArray(recentHistory)?recentHistory:[];
+ input.value=''; input.readOnly=false; submitting=false; composing=false; render(); input.focus();
  if(!reducedMotion.matches) {
   document.body.animate([{backgroundColor:'rgb(0 0 0 / 0)'},{backgroundColor:'rgb(0 0 0 / .48)'}],{duration:180,id:'palette-scrim'});
   panel.animate([{opacity:.6,transform:'translateY(-10px) scale(.985)',filter:'blur(2px)'},{opacity:1,transform:'translateY(0) scale(1)',filter:'blur(0)'}],{duration:220,easing:'cubic-bezier(.16,1,.3,1)',id:'palette-open'});

@@ -99,10 +99,18 @@ try {
   assert.equal(await palette.evaluate('document.getAnimations().filter(animation => animation.id.startsWith("palette-") && animation.playState === "running").length'), 0);
   await press(palette, 'Escape');
   await until(() => palette.evaluate('input.readOnly'), 'reduced-motion cancel');
-  await restored.evaluate('Felaris.send("new_tab")');
+  await restored.evaluate('Felaris.send("new_tab"); Felaris.send("duplicate_tab", { id: 1 }); Felaris.send("move_tab_to_workspace", { id: 1, workspace_id: 2 }); Felaris.send("expand_popup", { url: "https://example.com" })');
   await new Promise(resolve => setTimeout(resolve, 200));
-  assert.equal(await sidebar.evaluate('currentState.tabs.length'), count + 2, 'untrusted page IPC cannot create tabs');
-  console.log('Native keyboard, palette open/cancel/submit, page retention, restoration, compact address focus, workspaces, pinning, reduced motion, and IPC guard passed.');
+  assert.equal(await sidebar.evaluate('currentState.tabs.length'), count + 2, 'untrusted page IPC cannot create or mutate tabs');
+  const popupBar = await connect(page => page.title === 'Felaris Popup');
+  await restored.evaluate(`window.authDone = false; window.open(${JSON.stringify(origin + '/oauth/login')}, 'oauth', 'width=480,height=620'); true`);
+  const oauthPopup = await connect(page => page.url === origin + '/oauth/login', contentPort);
+  await until(() => oauthPopup.evaluate('document.readyState === "complete" && !!window.opener'), 'OAuth popup has live window.opener');
+  await until(() => popupBar.evaluate('document.getElementById("address").textContent.includes("/oauth/login")'), 'Popup URL bar displays login URL');
+  assert.equal(await sidebar.evaluate('currentState.tabs.length'), count + 2, 'OAuth popup does not clutter tab list');
+  await oauthPopup.evaluate('window.opener.authDone = true; window.close()');
+  await until(() => restored.evaluate('window.authDone === true'), 'OAuth popup communicates with opener and closes');
+  console.log('Native keyboard, palette open/cancel/submit, page retention, restoration, compact address focus, workspaces, pinning, reduced motion, OAuth popup, and IPC guard passed.');
 
   await command('new_tab', { url: origin + '/tests/ui.html' });
   const fixture = await connect(page => page.url === origin + '/tests/ui.html', contentPort);

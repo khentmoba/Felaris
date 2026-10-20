@@ -42,6 +42,55 @@ pub fn normalize_url(value: &str) -> Option<String> {
     matches!(url.scheme(), "http" | "https" | "file").then(|| url.into())
 }
 
+pub fn is_auth_url(value: &str) -> bool {
+    let Ok(url) = url::Url::parse(value) else {
+        return false;
+    };
+    if !matches!(url.scheme(), "http" | "https") {
+        return false;
+    }
+    let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
+    let path = url.path().to_ascii_lowercase();
+    let query = url.query().unwrap_or_default().to_ascii_lowercase();
+    matches!(
+        host.as_str(),
+        "accounts.google.com"
+            | "login.microsoftonline.com"
+            | "login.live.com"
+            | "appleid.apple.com"
+            | "id.atlassian.com"
+    ) || host.starts_with("auth.")
+        || host.starts_with("login.")
+        || host.starts_with("sso.")
+        || host.starts_with("id.")
+        || host.ends_with(".auth0.com")
+        || host.ends_with(".okta.com")
+        || host.ends_with(".clerk.accounts.dev")
+        || [
+            "/oauth",
+            "/authorize",
+            "/login",
+            "/signin",
+            "/sign-in",
+            "/auth/",
+            "/sso",
+            "/session",
+            "/confirm",
+            "/installations/",
+        ]
+        .iter()
+        .any(|needle| path.contains(needle))
+        || [
+            "client_id=",
+            "redirect_uri=",
+            "response_type=",
+            "oauth_token=",
+            "code_challenge=",
+        ]
+        .iter()
+        .any(|needle| query.contains(needle))
+}
+
 pub fn startup_url(value: &str) -> Option<String> {
     if let Some(url) = normalize_url(value) {
         return Some(url);
@@ -100,5 +149,20 @@ mod tests {
             Some("felaris://settings")
         );
         assert!(normalize_url("felaris://other").is_none());
+    }
+
+    #[test]
+    fn auth_urls_detect_oauth_login_and_installation_flows() {
+        assert!(is_auth_url(
+            "https://github.com/settings/installations/173231206"
+        ));
+        assert!(is_auth_url(
+            "https://github.com/login/oauth/authorize?client_id=abc"
+        ));
+        assert!(is_auth_url(
+            "https://accounts.google.com/o/oauth2/v2/auth?response_type=code"
+        ));
+        assert!(!is_auth_url("https://doc.rust-lang.org/book/"));
+        assert!(!is_auth_url("http://127.0.0.1:8080/popup"));
     }
 }

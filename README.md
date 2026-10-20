@@ -13,6 +13,7 @@
 
 - **Rust desktop shell:** Tao handles the Windows window and Wry hosts WebView2.
 - **Independent live tabs:** Switching tabs preserves page state and native back/forward history while the tabs stay awake.
+- **Floating sign-in & OAuth popups:** Login, OAuth, and confirmation popups open in a Zen-style floating window that shares your profile and `window.opener` session, with a compact read-only URL bar and one-click promotion to a full tab.
 - **Session recovery:** Tabs, workspace selection, pins, and recent closed tabs are saved locally, with a backup for recovery. Site storage uses a persistent WebView2 profile.
 - **Windows integration:** Setup wizard with uninstaller, Start menu and desktop shortcuts, Installed apps registration, default-browser eligibility, and link handoff to the running instance.
 - **Native downloads:** WebView2 provides download progress and file actions; Felaris reports completion and warns before closing active downloads.
@@ -66,17 +67,17 @@
 | `Ctrl + Shift + S` | Unload background tabs (except active downloads) |
 | `Ctrl + H` | Open History |
 | `Ctrl + J` | Open Downloads |
+| `Ctrl + +` / `Ctrl + -` / `Ctrl + 0` | Zoom in, zoom out, or reset zoom |
+| `F11` | Toggle full screen |
 | `Enter` (in URL bar) | Smart navigate (detects URLs vs. web search) |
 
-**New tabs work like Zen:** press `Ctrl+T` or click **New tab** to open a floating search/address bar over the current page. Enter opens the destination in a new tab; matching open tabs can be selected with the arrow keys. Escape, the close button, or clicking outside cancels without creating an empty tab or reloading the page. The startup/Home page remains available separately. The sidebar, Home page, native title bar, and palette share a black/charcoal theme.
+**New tabs work like Zen:** press `Ctrl+T` or click **New tab** to open a floating search/address bar over the current page. Enter opens the destination in a new tab; matching open tabs, history, and top shortcuts can be selected with the arrow keys. Escape, the close button, or clicking outside cancels without creating an empty tab or reloading the page. The startup/Home page remains available separately. The sidebar, Home page, native title bar, and palette share a black/charcoal theme.
 
 The sidebar has no fixed shortcut-tile dock. Search opens/closes with short, interruptible motion, and tab/workspace changes retain visual continuity. Reduced-motion preferences skip spatial effects. Home-page shortcuts rank your most-visited sites (such as YouTube or X) first and fill any remaining slots from the default 8 shortcuts.
 
-Web searches use **Brave Search** by default (Settings can switch to DuckDuckGo, Google, or Bing) throughout the sidebar, Home page, and floating search bar. Suggestions are local open tabs; no remote autocomplete requests are sent while typing.
+Web searches use **Brave Search** by default (Settings can switch to DuckDuckGo, Google, or Bing) throughout the sidebar, Home page, and floating search bar. Suggestions come from your local open tabs, history, and shortcuts; no remote autocomplete requests are sent while typing.
 
-Shortcuts work while browser chrome or page content has focus. The bottom sidebar menu contains pin/unpin, reopen, and close-other-tabs actions. Close Others keeps pinned tabs, affects only the current workspace, and can be undone one tab at a time with Reopen.
-
-**Current engine limits:** tab and workspace state is session-only. Felaris uses one content WebView, so switching tabs reloads their URLs rather than preserving independent live page sessions. Sleep labels represent tab state, not measured RAM savings. The compact rail is not Zen's floating edge-hover mode.
+Shortcuts work while browser chrome or page content has focus. Right-clicking any tab in the sidebar opens quick actions to pin/unpin, duplicate, sleep/wake, move to another workspace, or close it. The bottom sidebar menu contains pin/unpin, reopen, and close-other-tabs actions. Close Others keeps pinned tabs, affects only the current workspace, and can be undone one tab at a time with Reopen.
 
 See [DESIGN.md](DESIGN.md) for the interface decisions and research references.
 

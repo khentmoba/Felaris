@@ -1,4 +1,7 @@
-use crate::{desktop, instance::Instance, profile, start_page, state::BrowserState, ui, updater};
+use crate::{
+    desktop, extensions, history, instance::Instance, profile, settings, start_page,
+    state::BrowserState, ui, updater,
+};
 use serde::Deserialize;
 use std::{collections::HashMap, hash::BuildHasher};
 use tao::platform::windows::WindowBuilderExtWindows;
@@ -13,36 +16,75 @@ use wry::{NewWindowResponse, PageLoadEvent, Rect, WebContext, WebView, WebViewBu
 #[derive(Debug, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Command {
-    Navigate { url: String },
+    Navigate {
+        url: String,
+    },
     Back,
     Forward,
     Reload,
     Stop,
-    NewTab { url: Option<String> },
-    SwitchTab { id: usize },
-    CloseTab { id: usize },
-    ToggleSleep { id: usize },
+    NewTab {
+        url: Option<String>,
+    },
+    SwitchTab {
+        id: usize,
+    },
+    CloseTab {
+        id: usize,
+    },
+    ToggleSleep {
+        id: usize,
+    },
     SleepInactiveTabs,
     ClearUnpinnedTabs,
     ToggleSidebar,
-    Peek { open: bool },
-    TopbarPeek { open: bool },
+    Peek {
+        open: bool,
+    },
+    TopbarPeek {
+        open: bool,
+    },
     WindowMinimize,
     WindowMaximize,
     WindowClose,
     DragWindow,
-    SwitchWorkspace { id: usize },
+    SwitchWorkspace {
+        id: usize,
+    },
     RestoreClosedTab,
-    TogglePin { id: usize },
+    TogglePin {
+        id: usize,
+    },
     FocusAddress,
     CloseActiveTab,
-    CycleTab { backwards: bool },
+    CycleTab {
+        backwards: bool,
+    },
     CheckUpdates,
     ApplyUpdate,
     OpenDownloads,
     DefaultBrowser,
+    OpenSettings,
+    OpenHistory,
+    DeleteHistory {
+        url: String,
+    },
+    ClearHistory,
+    SetSetting {
+        key: String,
+        value: serde_json::Value,
+    },
+    InstallAdBlocker,
+    OpenExtensionsFolder,
+    Zoom {
+        delta: i32,
+    },
+    Print,
+    Exit,
     DismissNewTab,
-    SubmitNewTab { url: String },
+    SubmitNewTab {
+        url: String,
+    },
     Retry,
 }
 
@@ -74,6 +116,7 @@ pub enum UserEvent {
     UpdateChecked(Result<Option<updater::UpdateManifest>, String>),
     Status(String),
     UpdateFailed(String),
+    AdBlockerInstalled(Result<(), String>),
 }
 
 fn bounds(window: &Window, state: &BrowserState) -> (Rect, Rect, Rect, Rect) {
@@ -129,6 +172,10 @@ fn bounds(window: &Window, state: &BrowserState) -> (Rect, Rect, Rect, Rect) {
 fn load(view: &WebView, state: &BrowserState, url: &str) -> wry::Result<()> {
     if url == "felaris://newtab" {
         view.load_html(&start_page::get_start_page_html(&state.top_shortcuts()))
+    } else if url == "felaris://settings" {
+        view.load_html(&ui::get_settings_html())
+    } else if url == "felaris://history" {
+        view.load_html(&ui::get_history_html())
     } else {
         view.load_url(url)
     }
@@ -149,7 +196,7 @@ fn content(
         .unwrap()
         .generation = generation;
     let token = generation.to_string();
-    let script = include_str!("browser.js").replace("__SHORTCUT_TOKEN__", &token);
+    let script = ui::script().replace("__SHORTCUT_TOKEN__", &token);
     let ipc = proxy.clone();
     let title = proxy.clone();
     let popup = proxy.clone();
@@ -187,7 +234,19 @@ fn content(
                     .is_none_or(|scheme| scheme == "data")
                     || request.uri() == "about:blank";
                 let trusted = message.shortcut_token.as_deref() == Some(&token);
-                if (local && matches!(message.command, Command::Navigate { .. } | Command::Retry))
+                if (local
+                    && matches!(
+                        message.command,
+                        Command::Navigate { .. }
+                            | Command::Retry
+                            | Command::SetSetting { .. }
+                            | Command::DeleteHistory { .. }
+                            | Command::ClearHistory
+                            | Command::InstallAdBlocker
+                            | Command::OpenExtensionsFolder
+                            | Command::DefaultBrowser
+                            | Command::CheckUpdates
+                    ))
                     || (trusted
                         && matches!(
                             message.command,
@@ -204,6 +263,7 @@ fn content(
                                 | Command::CycleTab { .. }
                                 | Command::SwitchWorkspace { .. }
                                 | Command::OpenDownloads
+                                | Command::OpenHistory
                         ))
                 {
                     let _ = ipc.send_event(UserEvent::Command(message.command));
@@ -220,6 +280,14 @@ fn content(
             *path = profile::directory().join("smoke-download.txt");
             true
         });
+    }
+    #[cfg(windows)]
+    if extensions::enabled_at_startup() {
+        use wry::WebViewBuilderExtWindows;
+        let _ = std::fs::create_dir_all(extensions::directory());
+        builder = builder
+            .with_browser_extensions_enabled(true)
+            .with_extensions_path(extensions::directory());
     }
     let view = builder.build(window)?;
     desktop::attach(&view, id, generation, proxy.clone())?;
@@ -241,6 +309,35 @@ fn content(
         load(&view, state, &url)?;
     }
     Ok(view)
+}
+
+fn may_exit(state: &BrowserState) -> bool {
+    if state.active_downloads > 0
+        && !desktop::message(
+            "Downloads in progress",
+            "Closing Felaris will cancel active downloads. Close anyway?",
+            true,
+        )
+    {
+        return false;
+    }
+    if let Err(error) = state.save_session()
+        && !desktop::message(
+            "Session could not be saved",
+            &format!("{error}\n\nClose without saving this session?"),
+            true,
+        )
+    {
+        return false;
+    }
+    true
+}
+
+fn start_ad_blocker_install(proxy: &EventLoopProxy<UserEvent>) {
+    let proxy = proxy.clone();
+    extensions::install_in_background(move |result| {
+        let _ = proxy.send_event(UserEvent::AdBlockerInstalled(result));
+    });
 }
 
 pub fn run(args: &[String]) -> wry::Result<()> {
@@ -395,6 +492,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     let mut focus_address = false;
     let mut downloads: HashMap<usize, usize> = HashMap::new();
     let mut check_busy = false;
+    let mut zooms: HashMap<usize, u32> = HashMap::new();
     let mut smoke = crate::smoke::Smoke::new();
     if smoke.is_some() {
         let proxy = proxy.clone();
@@ -409,12 +507,19 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     }
     let background = proxy.clone();
     if !headless {
+        if extensions::enabled_at_startup() {
+            start_ad_blocker_install(&proxy);
+        }
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_secs(3));
-            let _ = background.send_event(UserEvent::UpdateChecked(updater::check_for_updates()));
+            if settings::get().auto_update {
+                let _ =
+                    background.send_event(UserEvent::UpdateChecked(updater::check_for_updates()));
+            }
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(6 * 60 * 60));
-                if let Ok(Some(update)) = updater::check_for_updates()
+                if settings::get().auto_update
+                    && let Ok(Some(update)) = updater::check_for_updates()
                     && background
                         .send_event(UserEvent::UpdateChecked(Ok(Some(update))))
                         .is_err()
@@ -431,10 +536,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         *flow = ControlFlow::Wait;
         match event {
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } | Event::UserEvent(UserEvent::Command(Command::WindowClose)) => {
-                if state.active_downloads > 0 && !desktop::message("Downloads in progress", "Closing Felaris will cancel active downloads. Close anyway?", true) { return; }
-                if let Err(error) = state.save_session()
-                    && !desktop::message("Session could not be saved", &format!("{error}\n\nClose without saving this session?"), true) { return; }
-                *flow = ControlFlow::Exit;
+                if may_exit(&state) { *flow = ControlFlow::Exit; }
             }
             Event::NewEvents(StartCause::Init) => {},
             Event::WindowEvent { event: WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. }, .. } => {},
@@ -468,7 +570,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                 let crashed = tab.error.is_some() && views.get(&id).and_then(|view| view.url().ok()).is_some_and(|url| url == "about:blank" || url.starts_with("data:"));
                                 if crashed { views.remove(&id); }
                                 if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id) { tab.error = None; tab.pending_url = Some(url.clone()); tab.is_loading = true; }
-                                if let Some(view) = views.get(&id) { let _ = if url == "felaris://newtab" { load(view, &state, &url) } else { view.reload() }; }
+                                if let Some(view) = views.get(&id) { let _ = if profile::is_internal(&url) { load(view, &state, &url) } else { view.reload() }; }
                             },
                             Command::Stop => { if let Some(view) = views.get(&state.active_tab_id) { let _ = view.evaluate_script("window.stop()"); }
                                 if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == state.active_tab_id) { tab.is_loading = false; } },
@@ -501,6 +603,36 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                 let id = downloads.iter().find(|(_, count)| **count > 0).map(|(id,_)| *id).unwrap_or(state.active_tab_id);
                                 if let Some(view) = views.get(&id) && let Err(error) = desktop::downloads(view) { state.update_status = Some(error); }
                             },
+                            Command::OpenSettings => { state.open_internal("felaris://settings"); palette_open = false; },
+                            Command::OpenHistory => { state.open_internal("felaris://history"); palette_open = false; },
+                            Command::DeleteHistory { url } => history::remove(&url),
+                            Command::ClearHistory => history::clear(),
+                            Command::SetSetting { key, value } => match settings::set(&key, &value) {
+                                Ok(current) => {
+                                    if key == "search_engine" {
+                                        let script = ui::search_script();
+                                        let _ = sidebar.evaluate_script(&script);
+                                        let _ = palette.evaluate_script(&script);
+                                        for view in views.values() { let _ = view.evaluate_script(&script); }
+                                    } else if key == "ad_blocker" {
+                                        if current.ad_blocker { start_ad_blocker_install(&proxy); }
+                                        state.update_status = Some("Ad blocker changes apply after you restart Felaris.".into());
+                                    }
+                                },
+                                Err(error) => { state.update_status = Some(error); },
+                            },
+                            Command::InstallAdBlocker => { start_ad_blocker_install(&proxy); },
+                            Command::OpenExtensionsFolder => {
+                                let _ = std::fs::create_dir_all(extensions::directory());
+                                if let Err(error) = std::process::Command::new("explorer.exe").arg(extensions::directory()).spawn() { state.update_status = Some(format!("Could not open the extensions folder: {error}")); }
+                            },
+                            Command::Zoom { delta } => if let Some(view) = views.get(&state.active_tab_id) {
+                                let current = zooms.get(&state.active_tab_id).copied().unwrap_or(100) as i32;
+                                let next = if delta == 0 { 100 } else { (current + delta).clamp(30, 300) } as u32;
+                                if view.zoom(f64::from(next) / 100.).is_ok() { zooms.insert(state.active_tab_id, next); }
+                            },
+                            Command::Print => if let Some(view) = views.get(&state.active_tab_id) { let _ = view.print(); },
+                            Command::Exit => if may_exit(&state) { *flow = ControlFlow::Exit; },
                             Command::DefaultBrowser => { if let Err(error) = std::process::Command::new("explorer.exe").arg("ms-settings:defaultapps").spawn() { state.update_status = Some(format!("Could not open Windows default apps: {error}")); } },
                             Command::CheckUpdates => if !check_busy {
                                 check_busy = true; state.update_status = Some("Checking for updates…".into());
@@ -515,15 +647,20 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             },
                         }
                     }
-                    UserEvent::Title(id, generation, title) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) && tab.error.is_none() && !title.is_empty() { tab.title = title; },
+                    UserEvent::Title(id, generation, title) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) && tab.error.is_none() && !title.is_empty() { history::retitle(&tab.url, &title); tab.title = title; },
                     UserEvent::PageLoad(id, generation, loading, url) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) {
                         if loading {
-                            if tab.pending_url.as_ref().is_some_and(|expected| expected != &url && !(expected == "felaris://newtab" && url == "about:blank")) { return; }
+                            if tab.pending_url.as_ref().is_some_and(|expected| expected != &url && !(profile::is_internal(expected) && url == "about:blank")) { return; }
                             tab.pending_url = None;
                             if let Some(url) = profile::normalize_url(&url) { tab.url = url; tab.error = None; }
-                            else if tab.error.is_none() && (url == "about:blank" || url.starts_with("data:text/html;")) { tab.url = "felaris://newtab".into(); }
+                            else if tab.error.is_none() && (url == "about:blank" || url.starts_with("data:text/html;")) && !profile::is_internal(&tab.url) { tab.url = "felaris://newtab".into(); }
                             tab.is_loading = true;
-                        } else { tab.is_loading = false; if tab.url == url && profile::allowed_url(&url) { tab.error = None; } }
+                        } else {
+                            let failed = tab.error.is_some();
+                            tab.is_loading = false;
+                            if tab.url == url && profile::allowed_url(&url) { tab.error = None; }
+                            if tab.url == url && !failed { history::visit(&tab.url, &tab.title); }
+                        }
                     },
                     UserEvent::Source(id, generation, url) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation && tab.pending_url.is_none())
                         && let Some(url) = profile::normalize_url(&url) { tab.url = url; },
@@ -544,6 +681,15 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         Err(error) => { state.update_status = Some(error); }
                     } },
                     UserEvent::Status(status) => { state.update_status = Some(status); },
+                    UserEvent::AdBlockerInstalled(result) => match result {
+                        Ok(()) if extensions::enabled_at_startup() && state.active_downloads == 0 => {
+                            // Rebuilding the pages makes WebView2 load the new extension.
+                            views.clear();
+                            state.update_status = Some("uBlock Origin Lite is installed and blocking ads.".into());
+                        },
+                        Ok(()) => { state.update_status = Some("uBlock Origin Lite is installed. Restart Felaris to start blocking ads.".into()); },
+                        Err(error) => { state.update_status = Some(format!("Ad blocker install failed: {error} Try again from Settings.")); },
+                    },
                     UserEvent::UpdateFailed(status) => { state.update_busy = false; state.update_status = Some(status); },
                 }
                 if !transient && let Err(error) = state.save_session() { state.update_status = Some(format!("Could not save your session: {error}")); }
@@ -563,6 +709,8 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                 Err(error) => { state.update_status = Some(format!("Could not open this tab: {error}")); }
             }
         }
+        zooms.retain(|id, _| views.contains_key(id));
+        state.zoom = zooms.get(&active_id).copied().unwrap_or(100);
         let (sidebar_bounds, content_bounds, overlay_bounds, topbar_bounds) = bounds(&window, &state);
         let _ = sidebar.set_bounds(sidebar_bounds);
         for (id,view) in &views { let _ = view.set_bounds(content_bounds); let _ = view.set_visible(*id == active_id); }

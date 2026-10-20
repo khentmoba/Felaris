@@ -43,6 +43,7 @@ form { transition:border-color 160ms ease,background-color 160ms ease; }
 <footer><span>Make space for what matters.</span><div class="keys"><span><kbd>Ctrl L</kbd>Address bar</span><span><kbd>Ctrl T</kbd>New tab</span><span><kbd>Ctrl S</kbd>Sidebar</span></div></footer>
 <script>__COMMON_SCRIPT__</script>
 <script>
+document.querySelector('.search-note').textContent='Web searches use '+Felaris.searchName;
 const date=new Date();
 const dateElement=document.getElementById('date');
 dateElement.dateTime=date.toISOString().slice(0,10);

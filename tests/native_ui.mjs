@@ -9,7 +9,7 @@ async function until(probe, label) {
     if (value) return value;
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  let info='';try{info=await (globalThis.__sidebar?.evaluate("JSON.stringify({c:currentState.sidebar_collapsed,peek:currentState.sidebar_peek,ae:document.activeElement.id||document.activeElement.tagName,cls:document.body.className,vis:getComputedStyle(document.getElementById('url-input')).visibility,w:innerWidth,h:innerHeight})"))}catch(e){info=String(e)}
+  let info='';try{info=await (globalThis.__sidebar?.evaluate("JSON.stringify({c:currentState.sidebar_collapsed,peek:currentState.sidebar_peek,ae:document.activeElement.id||document.activeElement.tagName,cls:document.body.className,vis:getComputedStyle(document.getElementById('url-input')).visibility,w:innerWidth,h:innerHeight,vs:document.visibilityState,hf:document.hasFocus(),rect:JSON.stringify(document.getElementById('url-input').getBoundingClientRect()),sl:document.scrollingElement.scrollLeft,retry:(()=>{document.getElementById('url-input').focus();return document.activeElement.id})()})"))}catch(e){info=String(e)}
   throw Error('Timed out: ' + label + ' ' + info);
 }
 async function connect(matches, port = chromePort) {

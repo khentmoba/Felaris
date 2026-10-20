@@ -415,6 +415,61 @@ impl BrowserState {
         }
     }
 
+    pub fn duplicate_tab(&mut self, tab_id: usize) -> Option<usize> {
+        let index = self.tabs.iter().position(|tab| tab.id == tab_id)?;
+        let source = self.tabs[index].clone();
+        let id = self.next_tab_id;
+        self.next_tab_id += 1;
+        let copy = Tab {
+            id,
+            workspace_id: source.workspace_id,
+            title: source.title,
+            url: source.url.clone(),
+            is_pinned: false,
+            is_sleeping: false,
+            is_loading: false,
+            favicon: source.favicon,
+            can_go_back: false,
+            can_go_forward: false,
+            error: None,
+            generation: 0,
+            pending_url: None,
+            last_active: 0,
+            has_capture: false,
+        };
+        self.tabs.insert(index + 1, copy);
+        self.switch_tab(id);
+        self.record_visit(&source.url);
+        Some(id)
+    }
+
+    pub fn move_tab_to_workspace(&mut self, tab_id: usize, workspace_id: usize) {
+        if !self.workspaces.iter().any(|w| w.id == workspace_id) {
+            return;
+        }
+        let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == tab_id) else {
+            return;
+        };
+        if tab.workspace_id == workspace_id {
+            return;
+        }
+        let old_workspace = tab.workspace_id;
+        tab.workspace_id = workspace_id;
+        if self.active_tab_id == tab_id {
+            if let Some(remaining) = self
+                .tabs
+                .iter()
+                .rev()
+                .find(|t| t.workspace_id == old_workspace)
+                .map(|t| t.id)
+            {
+                self.switch_tab(remaining);
+            } else {
+                self.active_workspace_id = workspace_id;
+            }
+        }
+    }
+
     pub fn cycle_tab(&mut self, backwards: bool) -> Option<&Tab> {
         let ids: Vec<usize> = self
             .tabs
@@ -812,5 +867,35 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn duplicate_and_move_tab_preserve_workspace_invariants() {
+        let mut state = BrowserState::new();
+        state.update_active_tab("https://example.com".into(), Some("Example".into()));
+        state.tabs[0].has_capture = true;
+        let copy = state.duplicate_tab(1).unwrap();
+        assert_eq!(state.active_tab_id, copy);
+        assert_eq!(state.active_tab().unwrap().url, "https://example.com");
+        assert_eq!(state.active_tab().unwrap().title, "Example");
+        assert!(!state.active_tab().unwrap().has_capture);
+        assert!(state.active_tab().unwrap().last_active > state.tabs[0].last_active);
+
+        state.move_tab_to_workspace(copy, 2);
+        assert_eq!(state.active_workspace_id, 1);
+        assert_eq!(state.active_tab_id, 1);
+        assert_eq!(
+            state
+                .tabs
+                .iter()
+                .find(|t| t.id == copy)
+                .unwrap()
+                .workspace_id,
+            2
+        );
+
+        state.move_tab_to_workspace(1, 3);
+        assert_eq!(state.active_workspace_id, 3);
+        assert_eq!(state.active_tab_id, 1);
     }
 }

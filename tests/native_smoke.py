@@ -31,10 +31,10 @@ class Fixture(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if path in ('/tests/ui.html', '/src/ui.html', '/src/start_page.html', '/src/new_tab.html', '/src/browser.js'):
+        if path in ('/tests/ui.html', '/src/ui.html', '/src/start_page.html', '/src/new_tab.html', '/src/browser.js', '/assets/favicon.svg'):
             body = (Path(__file__).resolve().parent.parent / path.lstrip('/')).read_bytes()
             self.send_response(200)
-            self.send_header('Content-Type', 'text/javascript; charset=utf-8' if path.endswith('.js') else 'text/html; charset=utf-8')
+            self.send_header('Content-Type', 'image/svg+xml' if path.endswith('.svg') else 'text/javascript; charset=utf-8' if path.endswith('.js') else 'text/html; charset=utf-8')
             self.send_header('Content-Length', str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -47,8 +47,6 @@ class Fixture(BaseHTTPRequestHandler):
         else:
             title = {'/': 'fixture', '/second': 'second', '/next': 'next', '/popup': 'popup'}.get(self.path, 'fixture')
             extra = "<script>setTimeout(()=>{history.pushState({},'', '/route');document.title='Felaris route'},300)</script>" if self.path == '/spa' else ''
-            if self.path == '/slow':
-                extra = "<script>setTimeout(()=>document.getElementById('download').click(),500)</script>"
             download = '/slow-download' if self.path == '/slow' else '/download'
             body = f'''<!doctype html><html><meta charset="utf-8"><title>Felaris {title}</title>
 <body style="font:16px system-ui;padding:40px"><h1>Felaris {title}</h1>

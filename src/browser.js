@@ -30,12 +30,18 @@
       else if (key === 'h' && !event.shiftKey) action = 'open_history';
       else if (key === 'r' && !event.shiftKey) action = 'reload';
       else if (key === 'tab') { action = 'cycle_tab'; payload = { backwards: event.shiftKey }; }
+      else if (key === '=' || key === '+') { action = 'zoom'; payload = { delta: 10 }; }
+      else if (key === '-' || key === '_') { action = 'zoom'; payload = { delta: -10 }; }
+      else if (key === '0' && !event.shiftKey) { action = 'zoom'; payload = { delta: 0 }; }
     } else if (event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey) {
       if (key === 'arrowleft') action = 'back';
       else if (key === 'arrowright') action = 'forward';
       else if (key === 'd') action = 'focus_address';
       else if (/^[1-3]$/.test(key)) { action = 'switch_workspace'; payload = { id: Number(key) }; }
-    } else if (!event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey && key === 'f5') action = 'reload';
+    } else if (!event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
+      if (key === 'f5') action = 'reload';
+      else if (key === 'f11') action = 'toggle_fullscreen';
+    }
     if (action) {
       event.preventDefault();
       postShortcut?.(stringify({ __proto__: null, action, ...payload, shortcut_token: '__SHORTCUT_TOKEN__' }));

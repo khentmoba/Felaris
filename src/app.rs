@@ -4,15 +4,17 @@ use crate::{
 };
 use serde::Deserialize;
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
     hash::BuildHasher,
+    rc::Rc,
 };
-use tao::platform::windows::WindowBuilderExtWindows;
+use tao::platform::windows::{WindowBuilderExtWindows, WindowExtWindows};
 use tao::{
     dpi::{LogicalPosition, LogicalSize, Position, Size},
-    event::{Event, StartCause, WindowEvent},
+    event::{ElementState, Event, MouseButton, StartCause, WindowEvent},
     event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy},
-    window::{Icon, Window, WindowBuilder},
+    window::{CursorIcon, Fullscreen, Icon, ResizeDirection, Window, WindowBuilder},
 };
 use wry::{NewWindowResponse, PageLoadEvent, Rect, WebContext, WebView, WebViewBuilder};
 
@@ -58,10 +60,24 @@ pub enum Command {
     TogglePin {
         id: usize,
     },
+    DuplicateTab {
+        id: usize,
+    },
+    MoveTabToWorkspace {
+        id: usize,
+        workspace_id: usize,
+    },
     FocusAddress,
     CloseActiveTab,
     CycleTab {
         backwards: bool,
+    },
+    ToggleFullscreen,
+    ResizeWindow {
+        direction: String,
+    },
+    ExpandPopup {
+        url: String,
     },
     CheckUpdates,
     ApplyUpdate,
@@ -110,6 +126,10 @@ pub enum UserEvent {
     Ready,
     PaletteReady,
     TopbarReady,
+    PopupReady,
+    PopupTitle(String),
+    PopupState(String, bool),
+    PopupClosed,
     Frame,
     External(Vec<String>),
     Title(usize, u64, String),
@@ -192,6 +212,161 @@ fn ease(progress: f64) -> f64 {
     1. - (1. - progress).powi(3)
 }
 
+#[derive(Clone)]
+struct PopupHost {
+    main: Rc<Window>,
+    window: Rc<Window>,
+    view: Rc<RefCell<Option<WebView>>>,
+    url: Rc<RefCell<String>>,
+    headless: bool,
+}
+
+fn popup_bounds(window: &Window) -> (Rect, Rect) {
+    let size = window.inner_size().to_logical::<f64>(window.scale_factor());
+    let bar = ui::POPUP_BAR_HEIGHT;
+    (
+        Rect {
+            position: Position::Logical(LogicalPosition::new(0., 0.)),
+            size: Size::Logical(LogicalSize::new(size.width.max(10.), bar)),
+        },
+        Rect {
+            position: Position::Logical(LogicalPosition::new(0., bar)),
+            size: Size::Logical(LogicalSize::new(
+                size.width.max(10.),
+                (size.height - bar).max(10.),
+            )),
+        },
+    )
+}
+
+fn parse_resize_direction(direction: &str) -> Option<ResizeDirection> {
+    match direction {
+        "n" => Some(ResizeDirection::North),
+        "s" => Some(ResizeDirection::South),
+        "e" => Some(ResizeDirection::East),
+        "w" => Some(ResizeDirection::West),
+        "ne" => Some(ResizeDirection::NorthEast),
+        "nw" => Some(ResizeDirection::NorthWest),
+        "se" => Some(ResizeDirection::SouthEast),
+        "sw" => Some(ResizeDirection::SouthWest),
+        _ => None,
+    }
+}
+
+fn border_resize_direction(
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> Option<(ResizeDirection, CursorIcon)> {
+    let border = ui::WINDOW_MARGIN;
+    let corner = 12.;
+    let left = x < border;
+    let right = x >= width - border;
+    let top = y < border;
+    let bottom = y >= height - border;
+    if !(left || right || top || bottom) {
+        return None;
+    }
+    let near_left = x < corner;
+    let near_right = x >= width - corner;
+    let near_top = y < corner;
+    let near_bottom = y >= height - corner;
+    Some(match (near_left, near_right, near_top, near_bottom) {
+        (true, _, true, _) => (ResizeDirection::NorthWest, CursorIcon::NwResize),
+        (_, true, true, _) => (ResizeDirection::NorthEast, CursorIcon::NeResize),
+        (true, _, _, true) => (ResizeDirection::SouthWest, CursorIcon::SwResize),
+        (_, true, _, true) => (ResizeDirection::SouthEast, CursorIcon::SeResize),
+        _ if left => (ResizeDirection::West, CursorIcon::WResize),
+        _ if right => (ResizeDirection::East, CursorIcon::EResize),
+        _ if top => (ResizeDirection::North, CursorIcon::NResize),
+        _ => (ResizeDirection::South, CursorIcon::SResize),
+    })
+}
+
+#[cfg(windows)]
+fn open_popup(
+    host: &PopupHost,
+    url: &str,
+    features: &wry::NewWindowFeatures,
+    proxy: &EventLoopProxy<UserEvent>,
+) -> Option<NewWindowResponse> {
+    use wry::{WebViewBuilderExtWindows, WebViewExtWindows};
+    let size = features
+        .size
+        .map(|s| LogicalSize::new(s.width.clamp(380., 920.), s.height.clamp(440., 860.)))
+        .unwrap_or_else(|| LogicalSize::new(500., 660.));
+    host.window.set_inner_size(size);
+    if let Some(pos) = features.position {
+        host.window.set_outer_position(pos);
+    } else if let Ok(outer) = host.main.outer_position() {
+        let scale = host.main.scale_factor();
+        let main_pos = outer.to_logical::<f64>(scale);
+        let main_size = host.main.inner_size().to_logical::<f64>(scale);
+        let x = main_pos.x + ((main_size.width - size.width) * 0.5).max(24.);
+        let y = main_pos.y + ((main_size.height - size.height) * 0.5).max(32.);
+        host.window.set_outer_position(LogicalPosition::new(x, y));
+    }
+    host.window.set_title("Sign in — Felaris");
+    if !host.headless {
+        host.window.set_minimized(false);
+        host.window.set_visible(true);
+        host.window.set_focus();
+    }
+    *host.url.borrow_mut() = url.to_string();
+    let title_proxy = proxy.clone();
+    let nav_proxy = proxy.clone();
+    let tab_proxy = proxy.clone();
+    let (_, content_rect) = popup_bounds(&host.window);
+    let mut builder = WebViewBuilder::new()
+        .with_environment(features.opener.environment.clone())
+        .with_bounds(content_rect)
+        .with_focused(!host.headless)
+        .with_clipboard(true)
+        .with_document_title_changed_handler(move |text| {
+            let _ = title_proxy.send_event(UserEvent::PopupTitle(text));
+        })
+        .with_navigation_handler(move |target| {
+            let allowed = profile::allowed_url(&target)
+                || target == "about:blank"
+                || target.starts_with("data:text/html;");
+            if !allowed {
+                let _ = nav_proxy.send_event(UserEvent::Status(
+                    "This link uses an unsupported application protocol.".into(),
+                ));
+            }
+            allowed
+        })
+        .with_new_window_req_handler(move |target, _| {
+            if profile::allowed_url(&target) {
+                let _ =
+                    tab_proxy.send_event(UserEvent::Command(Command::NewTab { url: Some(target) }));
+            }
+            NewWindowResponse::Deny
+        });
+    if host.headless
+        && let Ok(arguments) = std::env::var("FELARIS_SMOKE_CONTENT_BROWSER_ARGUMENTS")
+    {
+        builder = builder.with_additional_browser_args(arguments);
+    }
+    let view = builder.build(&*host.window).ok()?;
+    let _ = desktop::attach_popup(&view, proxy.clone());
+    let raw = view.webview();
+    *host.view.borrow_mut() = Some(view);
+    let _ = proxy.send_event(UserEvent::PopupState(url.to_string(), true));
+    Some(NewWindowResponse::Create { webview: raw })
+}
+
+#[cfg(not(windows))]
+fn open_popup(
+    _: &PopupHost,
+    _: &str,
+    _: &wry::NewWindowFeatures,
+    _: &EventLoopProxy<UserEvent>,
+) -> Option<NewWindowResponse> {
+    None
+}
+
 fn load(view: &WebView, state: &BrowserState, url: &str) -> wry::Result<()> {
     if url == "felaris://newtab" {
         view.load_html(&start_page::get_start_page_html(&state.top_shortcuts()))
@@ -210,6 +385,7 @@ fn content(
     state: &mut BrowserState,
     id: usize,
     proxy: &EventLoopProxy<UserEvent>,
+    popup_host: &PopupHost,
 ) -> wry::Result<WebView> {
     let generation = std::collections::hash_map::RandomState::new().hash_one(id);
     let tab = state.tabs.iter_mut().find(|tab| tab.id == id).unwrap();
@@ -220,6 +396,7 @@ fn content(
     let ipc = proxy.clone();
     let title = proxy.clone();
     let popup = proxy.clone();
+    let popup_host = popup_host.clone();
     let navigation = proxy.clone();
     let mut builder = WebViewBuilder::new_with_web_context(context)
         .with_bounds(bounds(window, state, 0., 0.).1)
@@ -241,7 +418,16 @@ fn content(
             }
             allowed
         })
-        .with_new_window_req_handler(move |url, _| {
+        .with_new_window_req_handler(move |url, features| {
+            let is_popup = features.size.is_some()
+                || features.position.is_some()
+                || profile::is_auth_url(&url);
+            if is_popup
+                && (url == "about:blank" || profile::allowed_url(&url))
+                && let Some(response) = open_popup(&popup_host, &url, &features, &popup)
+            {
+                return response;
+            }
             if profile::allowed_url(&url) {
                 let _ = popup.send_event(UserEvent::Command(Command::NewTab { url: Some(url) }));
             }
@@ -285,6 +471,8 @@ fn content(
                                 | Command::SwitchWorkspace { .. }
                                 | Command::OpenDownloads
                                 | Command::OpenHistory
+                                | Command::Zoom { .. }
+                                | Command::ToggleFullscreen
                         ))
                 {
                     let _ = ipc.send_event(UserEvent::Command(message.command));
@@ -393,23 +581,51 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     }
     updater::cleanup_old_version();
     let icon = Icon::from_rgba(include_bytes!("../assets/icon_64.rgba").to_vec(), 64, 64).ok();
-    let window = WindowBuilder::new()
-        .with_title("Felaris")
-        .with_visible(!headless)
-        .with_focused(!headless)
+    let window = Rc::new(
+        WindowBuilder::new()
+            .with_title("Felaris")
+            .with_visible(!headless)
+            .with_focused(!headless)
+            .with_theme(Some(tao::window::Theme::Dark))
+            .with_decorations(false)
+            .with_undecorated_shadow(true)
+            .with_background_color((16, 16, 17, 255))
+            .with_window_icon(icon.clone())
+            .with_inner_size(if std::env::var_os("FELARIS_SMOKE_TEST").is_some() {
+                LogicalSize::new(640., 480.)
+            } else {
+                LogicalSize::new(1380., 860.)
+            })
+            .with_min_inner_size(LogicalSize::new(640., 480.))
+            .build(&event_loop)
+            .expect("Cannot create window"),
+    );
+    let mut popup_window_builder = WindowBuilder::new()
+        .with_title("Sign in — Felaris")
+        .with_visible(false)
+        .with_focused(false)
         .with_theme(Some(tao::window::Theme::Dark))
-        .with_decorations(false)
-        .with_undecorated_shadow(true)
-        .with_background_color((16, 16, 17, 255))
+        .with_decorations(true)
+        .with_background_color((23, 23, 25, 255))
         .with_window_icon(icon)
-        .with_inner_size(if std::env::var_os("FELARIS_SMOKE_TEST").is_some() {
-            LogicalSize::new(640., 480.)
-        } else {
-            LogicalSize::new(1380., 860.)
-        })
-        .with_min_inner_size(LogicalSize::new(640., 480.))
-        .build(&event_loop)
-        .expect("Cannot create window");
+        .with_inner_size(LogicalSize::new(500., 660.))
+        .with_min_inner_size(LogicalSize::new(360., 420.));
+    #[cfg(windows)]
+    {
+        popup_window_builder = popup_window_builder.with_owner_window(window.hwnd());
+    }
+    let popup_window = Rc::new(
+        popup_window_builder
+            .build(&event_loop)
+            .expect("Cannot create popup window"),
+    );
+    let popup_host = PopupHost {
+        main: window.clone(),
+        window: popup_window.clone(),
+        view: Rc::new(RefCell::new(None)),
+        url: Rc::new(RefCell::new(String::new())),
+        headless,
+    };
     let mut state = BrowserState::restore();
     let saved = proxy.clone();
     let session = SessionWriter::new(move |result| {
@@ -455,7 +671,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         use wry::WebViewBuilderExtWindows;
         sidebar_builder = sidebar_builder.with_additional_browser_args(arguments);
     }
-    let sidebar = sidebar_builder.build(&window)?;
+    let sidebar = sidebar_builder.build(&*window)?;
     let palette_proxy = proxy.clone();
     let palette_ready = proxy.clone();
     let mut palette_builder = WebViewBuilder::new_with_web_context(&mut chrome_context)
@@ -486,7 +702,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         use wry::WebViewBuilderExtWindows;
         palette_builder = palette_builder.with_additional_browser_args(arguments);
     }
-    let palette = palette_builder.build(&window)?;
+    let palette = palette_builder.build(&*window)?;
     let topbar_ready = proxy.clone();
     let topbar_proxy = proxy.clone();
     let mut topbar_builder = WebViewBuilder::new_with_web_context(&mut chrome_context)
@@ -505,7 +721,8 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                 | Command::WindowMinimize
                 | Command::WindowMaximize
                 | Command::WindowClose
-                | Command::DragWindow),
+                | Command::DragWindow
+                | Command::ResizeWindow { .. }),
             ) = serde_json::from_str::<Command>(request.body())
             {
                 let _ = topbar_proxy.send_event(UserEvent::Command(command));
@@ -516,8 +733,36 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         use wry::WebViewBuilderExtWindows;
         topbar_builder = topbar_builder.with_additional_browser_args(arguments);
     }
-    let topbar = topbar_builder.build(&window)?;
+    let topbar = topbar_builder.build(&*window)?;
+    let popup_ready = proxy.clone();
+    let popup_bar_proxy = proxy.clone();
+    let mut popup_bar_builder = WebViewBuilder::new_with_web_context(&mut chrome_context)
+        .with_bounds(popup_bounds(&popup_window).0)
+        .with_html(ui::get_popup_html())
+        .with_focused(false)
+        .with_navigation_handler(|url| url == "about:blank" || url.starts_with("data:text/html;"))
+        .with_on_page_load_handler(move |event, _| {
+            if matches!(event, PageLoadEvent::Finished) {
+                let _ = popup_ready.send_event(UserEvent::PopupReady);
+            }
+        })
+        .with_ipc_handler(move |request| {
+            if let Ok(command @ Command::ExpandPopup { .. }) =
+                serde_json::from_str::<Command>(request.body())
+            {
+                let _ = popup_bar_proxy.send_event(UserEvent::Command(command));
+            }
+        });
+    #[cfg(windows)]
+    if headless && let Ok(arguments) = std::env::var("FELARIS_SMOKE_BROWSER_ARGUMENTS") {
+        use wry::WebViewBuilderExtWindows;
+        popup_bar_builder = popup_bar_builder.with_additional_browser_args(arguments);
+    }
+    let popup_bar = popup_bar_builder.build(&*popup_window)?;
     let mut last_loading = false;
+    let mut last_topbar_tab: Option<(String, String)> = None;
+    let mut cursor_pos = (100., 100.);
+    let mut popup_loading = false;
     let mut side_progress = if state.sidebar_collapsed { 0. } else { 1. };
     let mut top_progress = 0.;
     let mut animating = false;
@@ -543,7 +788,14 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     let initial_id = state.active_tab_id;
     views.insert(
         initial_id,
-        content(&window, &mut context, &mut state, initial_id, &proxy)?,
+        content(
+            &window,
+            &mut context,
+            &mut state,
+            initial_id,
+            &proxy,
+            &popup_host,
+        )?,
     );
     let mut palette_open = false;
     let mut palette_needs_open = false;
@@ -598,11 +850,55 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         *flow = ControlFlow::Wait;
         let tick = matches!(event, Event::UserEvent(UserEvent::Frame));
         match event {
-            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } | Event::UserEvent(UserEvent::Command(Command::WindowClose)) => {
+            Event::WindowEvent { window_id, event: WindowEvent::CloseRequested, .. } => {
+                if window_id == popup_host.window.id() {
+                    *popup_host.view.borrow_mut() = None;
+                    popup_host.window.set_visible(false);
+                    if !headless { window.set_focus(); }
+                    return;
+                }
+                if may_exit(&state, &session) { *flow = ControlFlow::Exit; }
+            }
+            Event::UserEvent(UserEvent::Command(Command::WindowClose)) => {
                 if may_exit(&state, &session) { *flow = ControlFlow::Exit; }
             }
             Event::NewEvents(StartCause::Init) => {},
-            Event::WindowEvent { event: WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. }, .. } => {},
+            Event::WindowEvent { window_id, event: WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. }, .. } => {
+                if window_id == popup_host.window.id() {
+                    let (bar_rect, content_rect) = popup_bounds(&popup_host.window);
+                    let _ = popup_bar.set_bounds(bar_rect);
+                    if let Some(view) = popup_host.view.borrow().as_ref() {
+                        let _ = view.set_bounds(content_rect);
+                    }
+                    return;
+                }
+            },
+            Event::WindowEvent { window_id, event: WindowEvent::CursorMoved { position, .. }, .. } if window_id == window.id() => {
+                let logical = position.to_logical::<f64>(window.scale_factor());
+                cursor_pos = (logical.x, logical.y);
+                let size = window.inner_size().to_logical::<f64>(window.scale_factor());
+                let icon = if window.is_maximized() || window.fullscreen().is_some() {
+                    CursorIcon::Default
+                } else {
+                    border_resize_direction(cursor_pos.0, cursor_pos.1, size.width, size.height)
+                        .map_or(CursorIcon::Default, |(_, cursor)| cursor)
+                };
+                window.set_cursor_icon(icon);
+                return;
+            }
+            Event::WindowEvent {
+                window_id,
+                event: WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. },
+                ..
+            } if window_id == window.id() => {
+                if !window.is_maximized() && window.fullscreen().is_none() {
+                    let size = window.inner_size().to_logical::<f64>(window.scale_factor());
+                    if let Some((dir, _)) = border_resize_direction(cursor_pos.0, cursor_pos.1, size.width, size.height) {
+                        let _ = window.drag_resize_window(dir);
+                    }
+                }
+                return;
+            }
             Event::UserEvent(event) => {
                 let persistent = matches!(&event,
                     UserEvent::External(_) | UserEvent::Title(..) | UserEvent::PageLoad(..)
@@ -612,7 +908,8 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         | Command::ToggleSleep { .. } | Command::SleepInactiveTabs | Command::ClearUnpinnedTabs
                         | Command::ToggleSidebar | Command::SwitchWorkspace { .. } | Command::RestoreClosedTab
                         | Command::TogglePin { .. } | Command::CycleTab { .. } | Command::FocusAddress
-                        | Command::OpenSettings | Command::OpenHistory));
+                        | Command::OpenSettings | Command::OpenHistory | Command::DuplicateTab { .. }
+                        | Command::MoveTabToWorkspace { .. } | Command::ExpandPopup { .. }));
                 match event {
                     UserEvent::Maintenance => {
                         if session_dirty {
@@ -662,7 +959,31 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         if let Some(smoke) = &mut smoke && smoke.result(phase, success, &proxy) { *flow = ControlFlow::Exit; }
                     }
                     UserEvent::Ready => { last_sidebar_state.clear(); },
-                    UserEvent::TopbarReady => { last_loading = false; },
+                    UserEvent::TopbarReady => { last_loading = false; last_topbar_tab = None; },
+                    UserEvent::PopupReady => {
+                        if let Ok(url_json) = serde_json::to_string(&*popup_host.url.borrow()) {
+                            let _ = popup_bar.evaluate_script(&format!("window.setPopupState?.({url_json},{popup_loading})"));
+                        }
+                    },
+                    UserEvent::PopupTitle(title) => {
+                        if !title.is_empty() {
+                            popup_host.window.set_title(&format!("{title} — Felaris"));
+                        }
+                    },
+                    UserEvent::PopupState(url, loading) => {
+                        popup_loading = loading;
+                        if !url.is_empty() && url != "about:blank" {
+                            *popup_host.url.borrow_mut() = url;
+                        }
+                        if let Ok(url_json) = serde_json::to_string(&*popup_host.url.borrow()) {
+                            let _ = popup_bar.evaluate_script(&format!("window.setPopupState?.({url_json},{loading})"));
+                        }
+                    },
+                    UserEvent::PopupClosed => {
+                        *popup_host.view.borrow_mut() = None;
+                        popup_host.window.set_visible(false);
+                        if !headless { window.set_focus(); }
+                    },
                     UserEvent::Frame => {},
                     UserEvent::PaletteReady => { palette_needs_open = palette_open; },
                     UserEvent::External(urls) => {
@@ -707,9 +1028,45 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             Command::WindowMaximize => { window.set_maximized(!window.is_maximized()); },
                             Command::WindowClose => {},
                             Command::DragWindow => { let _ = window.drag_window(); },
+                            Command::ResizeWindow { direction } => {
+                                if !window.is_maximized()
+                                    && window.fullscreen().is_none()
+                                    && let Some(dir) = parse_resize_direction(&direction)
+                                {
+                                    let _ = window.drag_resize_window(dir);
+                                }
+                            },
+                            Command::ToggleFullscreen => {
+                                let next = if window.fullscreen().is_some() {
+                                    None
+                                } else {
+                                    Some(Fullscreen::Borderless(None))
+                                };
+                                window.set_fullscreen(next);
+                            },
+                            Command::ExpandPopup { url } => {
+                                let target = if profile::allowed_url(&url) {
+                                    url
+                                } else {
+                                    popup_host.url.borrow().clone()
+                                };
+                                *popup_host.view.borrow_mut() = None;
+                                popup_host.window.set_visible(false);
+                                if profile::allowed_url(&target) {
+                                    state.add_tab(Some(target), false);
+                                }
+                                if !headless {
+                                    window.set_minimized(false);
+                                    window.set_focus();
+                                }
+                            },
                             Command::SwitchWorkspace { id } => { state.switch_workspace(id); },
                             Command::RestoreClosedTab => { state.restore_closed_tab(); },
                             Command::TogglePin { id } => state.toggle_pin(id),
+                            Command::DuplicateTab { id } => { state.duplicate_tab(id); },
+                            Command::MoveTabToWorkspace { id, workspace_id } => {
+                                state.move_tab_to_workspace(id, workspace_id);
+                            },
                             Command::CycleTab { backwards } => { state.cycle_tab(backwards); },
                             Command::FocusAddress => { state.sidebar_collapsed = false; focus_address = true; },
                             Command::OpenDownloads => {
@@ -813,7 +1170,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         let active_id = state.active_tab_id;
         let mut created = false;
         if let std::collections::hash_map::Entry::Vacant(entry) = views.entry(active_id) {
-            match content(&window, &mut context, &mut state, active_id, &proxy) {
+            match content(&window, &mut context, &mut state, active_id, &proxy, &popup_host) {
                 Ok(view) => {
                     if state.active_tab().is_some_and(|tab| tab.error.is_some()) { let _ = view.load_html(include_str!("error.html")); }
                     entry.insert(view);
@@ -877,11 +1234,26 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         }
         state.is_loading = state.active_tab().is_some_and(|tab| tab.is_loading);
         if state.is_loading != last_loading { last_loading = state.is_loading; let _ = topbar.evaluate_script(&format!("window.setLoading?.({last_loading})")); }
-        if let Some(tab) = state.active_tab() { window.set_title(&format!("{} — Felaris", tab.title)); }
+        if let Some(tab) = state.active_tab() {
+            window.set_title(&format!("{} — Felaris", tab.title));
+            let pair = (tab.title.clone(), tab.url.clone());
+            if last_topbar_tab.as_ref() != Some(&pair) {
+                if let (Ok(t), Ok(u)) = (serde_json::to_string(&pair.0), serde_json::to_string(&pair.1)) {
+                    let _ = topbar.evaluate_script(&format!("window.setTab?.({t},{u})"));
+                }
+                last_topbar_tab = Some(pair);
+            }
+        }
         if let Ok(json) = serde_json::to_string(&state) {
             if json != last_sidebar_state && sidebar.evaluate_script(&format!("window.updateState?.({json})")).is_ok() { last_sidebar_state = json.clone(); }
             if focus_address { if !headless { let _ = sidebar.focus(); } let _ = sidebar.evaluate_script("window.focusAddress()"); focus_address = false; }
-            if palette_open && palette_needs_open { desktop::raise(&palette); let _ = palette.evaluate_script(&format!("window.openNewTab?.({json})")); if !headless { let _ = palette.focus(); } palette_needs_open = false; }
+            if palette_open && palette_needs_open {
+                desktop::raise(&palette);
+                let history_json = serde_json::to_string(&history::all()).unwrap_or_else(|_| "[]".into());
+                let _ = palette.evaluate_script(&format!("window.openNewTab?.({json},{history_json})"));
+                if !headless { let _ = palette.focus(); }
+                palette_needs_open = false;
+            }
         }
     });
 }

@@ -134,6 +134,7 @@ def main():
             command('switch_tab', id=pinned)
             command('new_tab', url=origin + '/slow')
             downloader = active(loaded(origin + '/slow'))['id']
+            content(origin + '/slow', "document.getElementById('download').click();true")
             wait(lambda _: sidebar('currentState.active_downloads') == 1, 'active download')
             command('new_tab', url=origin + '/second')
             kept = active(loaded(origin + '/second'))['id']
@@ -154,7 +155,22 @@ def main():
             assert (profile / 'smoke-download.txt').read_bytes() == b'x' * 65536
             subprocess.run(['node', str(Path(__file__).with_name('native_ui.mjs')), str(port), str(content_port), origin],
                            check=True, timeout=120)
-            checks.append('Native keyboard interactions and 49 DOM checks at desktop and minimum sizes')
+            checks.append('Native keyboard interactions and 56 DOM checks at desktop and minimum sizes')
+
+            source = next(tab['id'] for tab in sidebar('currentState.tabs') if tab['url'] == origin + '/next')
+            command('duplicate_tab', id=source)
+            duplicate = loaded(origin + '/next')['active_tab_id']
+            assert duplicate != source
+            command('move_tab_to_workspace', id=duplicate, workspace_id=2)
+            wait(lambda snapshot: any(tab['id'] == duplicate and tab['workspace_id'] == 2 for tab in snapshot['tabs']),
+                 'moved duplicate reaches disk')
+            command('close_tab', id=duplicate)
+            wait(lambda snapshot: all(tab['id'] != duplicate for tab in snapshot['tabs']), 'duplicate closes')
+            command('expand_popup', url=origin + '/expanded')
+            expanded = loaded(origin + '/expanded')['active_tab_id']
+            command('close_tab', id=expanded)
+            wait(lambda snapshot: all(tab['id'] != expanded for tab in snapshot['tabs']), 'expanded tab closes')
+            checks.append('Duplicated tabs, workspace moves, and popup expansion persist through the session writer')
 
             seed = sidebar('currentState')
             capacity = []
@@ -188,6 +204,7 @@ def main():
                 assert not content(f'{origin}/capacity/3', '__felarisCanSleep()'), 'hidden playback must stay protected even if WebView2 pauses it'
                 command('navigate', url=origin + '/slow')
                 loaded(origin + '/slow')
+                content(origin + '/slow', "document.getElementById('download').click();true")
                 wait(lambda snapshot: sidebar('currentState.active_downloads') == 1, 'capacity download starts')
                 latencies.extend(switch(id) for id in range(5, 31))
                 settled = wait(lambda snapshot: len(snapshot['tabs']) == count and sum(not tab['is_sleeping'] for tab in snapshot['tabs']) <= 12,

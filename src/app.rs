@@ -24,6 +24,12 @@ pub enum Command {
     SleepInactiveTabs,
     ClearUnpinnedTabs,
     ToggleSidebar,
+    Peek { open: bool },
+    TopbarPeek { open: bool },
+    WindowMinimize,
+    WindowMaximize,
+    WindowClose,
+    DragWindow,
     SwitchWorkspace { id: usize },
     RestoreClosedTab,
     TogglePin { id: usize },
@@ -53,6 +59,7 @@ pub enum UserEvent {
     Command(Command),
     Ready,
     PaletteReady,
+    TopbarReady,
     External(Vec<String>),
     Title(usize, u64, String),
     PageLoad(usize, u64, bool, String),
@@ -60,6 +67,7 @@ pub enum UserEvent {
     Source(usize, u64, String),
     Failed(usize, u64, String, String),
     Crashed(usize, u64),
+    Favicon(usize, u64, String),
     DownloadStarted(usize),
     DownloadFinished(usize, bool),
     UpdateChecked(Result<Option<updater::UpdateManifest>, String>),
@@ -67,12 +75,24 @@ pub enum UserEvent {
     UpdateFailed(String),
 }
 
-fn bounds(window: &Window, collapsed: bool) -> (Rect, Rect, Rect) {
+fn bounds(window: &Window, state: &BrowserState) -> (Rect, Rect, Rect, Rect) {
     let size = window.inner_size().to_logical::<f64>(window.scale_factor());
-    let width = if collapsed {
-        ui::SIDEBAR_WIDTH_COLLAPSED
-    } else {
+    let shown = !state.sidebar_collapsed || state.sidebar_peek;
+    let width = if shown {
         ui::SIDEBAR_WIDTH_EXPANDED
+    } else {
+        ui::SIDEBAR_HOT_ZONE
+    };
+    let content_left = if state.sidebar_collapsed {
+        8.
+    } else {
+        width + 8.
+    };
+    let top_left = if shown { width } else { 0. };
+    let top_height = if state.topbar_peek {
+        ui::TOPBAR_EXPANDED
+    } else {
+        ui::TOPBAR_HOT_ZONE
     };
     (
         Rect {
@@ -80,15 +100,22 @@ fn bounds(window: &Window, collapsed: bool) -> (Rect, Rect, Rect) {
             size: Size::Logical(LogicalSize::new(width, size.height)),
         },
         Rect {
-            position: Position::Logical(LogicalPosition::new(width + 8., 8.)),
+            position: Position::Logical(LogicalPosition::new(content_left, 8.)),
             size: Size::Logical(LogicalSize::new(
-                (size.width - width - 16.).max(10.),
+                (size.width - content_left - 8.).max(10.),
                 (size.height - 16.).max(10.),
             )),
         },
         Rect {
             position: Position::Logical(LogicalPosition::new(0., 0.)),
             size: Size::Logical(size),
+        },
+        Rect {
+            position: Position::Logical(LogicalPosition::new(top_left, 0.)),
+            size: Size::Logical(LogicalSize::new(
+                (size.width - top_left).max(10.),
+                top_height,
+            )),
         },
     )
 }
@@ -122,7 +149,7 @@ fn content(
     let popup = proxy.clone();
     let navigation = proxy.clone();
     let mut builder = WebViewBuilder::new_with_web_context(context)
-        .with_bounds(bounds(window, state.sidebar_collapsed).1)
+        .with_bounds(bounds(window, state).1)
         .with_visible(false)
         .with_focused(false)
         .with_initialization_script(&script)
@@ -243,6 +270,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         .with_visible(!headless)
         .with_focused(!headless)
         .with_theme(Some(tao::window::Theme::Dark))
+        .with_decorations(false)
         .with_background_color((16, 16, 17, 255))
         .with_window_icon(icon)
         .with_inner_size(if std::env::var_os("FELARIS_SMOKE_TEST").is_some() {
@@ -254,6 +282,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         .build(&event_loop)
         .expect("Cannot create window");
     let mut state = BrowserState::restore();
+    state.sidebar_peek = false;
     for url in urls {
         state.add_tab(Some(url), false);
     }
@@ -262,7 +291,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     let ui_proxy = proxy.clone();
     let ready = proxy.clone();
     let mut sidebar_builder = WebViewBuilder::new_with_web_context(&mut chrome_context)
-        .with_bounds(bounds(&window, state.sidebar_collapsed).0)
+        .with_bounds(bounds(&window, &state).0)
         .with_html(ui::get_ui_html())
         .with_focused(false)
         .with_clipboard(true)
@@ -286,7 +315,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     let palette_proxy = proxy.clone();
     let palette_ready = proxy.clone();
     let mut palette_builder = WebViewBuilder::new_with_web_context(&mut chrome_context)
-        .with_bounds(bounds(&window, state.sidebar_collapsed).2)
+        .with_bounds(bounds(&window, &state).2)
         .with_visible(false)
         .with_focused(false)
         .with_transparent(true)
@@ -314,6 +343,37 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         palette_builder = palette_builder.with_additional_browser_args(arguments);
     }
     let palette = palette_builder.build(&window)?;
+    let topbar_ready = proxy.clone();
+    let topbar_proxy = proxy.clone();
+    let mut topbar_builder = WebViewBuilder::new_with_web_context(&mut chrome_context)
+        .with_bounds(bounds(&window, &state).3)
+        .with_html(ui::get_topbar_html())
+        .with_focused(false)
+        .with_navigation_handler(|url| url == "about:blank" || url.starts_with("data:text/html;"))
+        .with_on_page_load_handler(move |event, _| {
+            if matches!(event, PageLoadEvent::Finished) {
+                let _ = topbar_ready.send_event(UserEvent::TopbarReady);
+            }
+        })
+        .with_ipc_handler(move |request| {
+            if let Ok(
+                command @ (Command::TopbarPeek { .. }
+                | Command::WindowMinimize
+                | Command::WindowMaximize
+                | Command::WindowClose
+                | Command::DragWindow),
+            ) = serde_json::from_str::<Command>(request.body())
+            {
+                let _ = topbar_proxy.send_event(UserEvent::Command(command));
+            }
+        });
+    #[cfg(windows)]
+    if headless && let Ok(arguments) = std::env::var("FELARIS_SMOKE_BROWSER_ARGUMENTS") {
+        use wry::WebViewBuilderExtWindows;
+        topbar_builder = topbar_builder.with_additional_browser_args(arguments);
+    }
+    let topbar = topbar_builder.build(&window)?;
+    let mut last_loading = false;
     let mut views = HashMap::new();
     let initial_id = state.active_tab_id;
     views.insert(
@@ -361,7 +421,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         let _keep_chrome_context = &chrome_context;
         *flow = ControlFlow::Wait;
         match event {
-            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } | Event::UserEvent(UserEvent::Command(Command::WindowClose)) => {
                 if state.active_downloads > 0 && !desktop::message("Downloads in progress", "Closing Felaris will cancel active downloads. Close anyway?", true) { return; }
                 if let Err(error) = state.save_session()
                     && !desktop::message("Session could not be saved", &format!("{error}\n\nClose without saving this session?"), true) { return; }
@@ -378,6 +438,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         if let Some(smoke) = &mut smoke && smoke.result(phase, success, &proxy) { *flow = ControlFlow::Exit; }
                     }
                     UserEvent::Ready => {},
+                    UserEvent::TopbarReady => { last_loading = false; },
                     UserEvent::PaletteReady => { palette_needs_open = palette_open; },
                     UserEvent::External(urls) => {
                         if !headless { window.set_minimized(false); window.set_focus(); }
@@ -415,6 +476,12 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                 for id in ids { state.close_tab(id); }
                             },
                             Command::ToggleSidebar => { state.toggle_sidebar(); },
+                            Command::Peek { open } => { state.sidebar_peek = open && state.sidebar_collapsed; },
+                            Command::TopbarPeek { open } => { state.topbar_peek = open; },
+                            Command::WindowMinimize => { window.set_minimized(true); },
+                            Command::WindowMaximize => { window.set_maximized(!window.is_maximized()); },
+                            Command::WindowClose => {},
+                            Command::DragWindow => { let _ = window.drag_window(); },
                             Command::SwitchWorkspace { id } => { state.switch_workspace(id); },
                             Command::RestoreClosedTab => { state.restore_closed_tab(); },
                             Command::TogglePin { id } => state.toggle_pin(id),
@@ -446,7 +513,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             if let Some(url) = profile::normalize_url(&url) { tab.url = url; tab.error = None; }
                             else if tab.error.is_none() && (url == "about:blank" || url.starts_with("data:text/html;")) { tab.url = "felaris://newtab".into(); }
                             tab.is_loading = true;
-                        } else if tab.url == url || url == "about:blank" || url.starts_with("data:text/html;") { tab.is_loading = false; if profile::allowed_url(&url) { tab.error = None; } }
+                        } else { tab.is_loading = false; if tab.url == url && profile::allowed_url(&url) { tab.error = None; } }
                     },
                     UserEvent::Source(id, generation, url) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation && tab.pending_url.is_none())
                         && let Some(url) = profile::normalize_url(&url) { tab.url = url; },
@@ -454,6 +521,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                     UserEvent::Failed(id, generation, url, message) => if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation && tab.pending_url.as_ref().is_none_or(|pending| pending == &url) && tab.url == url) {
                         tab.error = Some(message); tab.pending_url = None; tab.is_loading = false;
                     },
+                    UserEvent::Favicon(id, generation, uri) => if state.tabs.iter().any(|tab| tab.id == id && tab.generation == generation) { state.set_favicon(id, (uri.starts_with("https://") || uri.starts_with("http://")).then_some(uri)); },
                     UserEvent::Crashed(id, generation) => {
                         if state.tabs.iter().any(|tab| tab.id == id && tab.generation == generation) { views.remove(&id); }
                         if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) { tab.error = Some("This tab stopped responding. Reload it to continue.".into()); tab.is_loading = false; }
@@ -485,9 +553,14 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                 Err(error) => { state.update_status = Some(format!("Could not open this tab: {error}")); }
             }
         }
-        let (sidebar_bounds, content_bounds, overlay_bounds) = bounds(&window, state.sidebar_collapsed);
+        let (sidebar_bounds, content_bounds, overlay_bounds, topbar_bounds) = bounds(&window, &state);
         let _ = sidebar.set_bounds(sidebar_bounds);
         for (id,view) in &views { let _ = view.set_bounds(content_bounds); let _ = view.set_visible(*id == active_id); }
+        let _ = topbar.set_bounds(topbar_bounds);
+        if !palette_open {
+            if state.sidebar_collapsed && state.sidebar_peek { desktop::raise(&sidebar); }
+            desktop::raise(&topbar);
+        }
         let _ = palette.set_bounds(overlay_bounds);
         let _ = palette.set_visible(palette_open);
         if visible_id != Some(active_id) && !palette_open {
@@ -495,6 +568,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             visible_id = Some(active_id);
         }
         state.is_loading = state.active_tab().is_some_and(|tab| tab.is_loading);
+        if state.is_loading != last_loading { last_loading = state.is_loading; let _ = topbar.evaluate_script(&format!("window.setLoading?.({last_loading})")); }
         if let Some(tab) = state.active_tab() { window.set_title(&format!("{} — Felaris", tab.title)); }
         if let Ok(json) = serde_json::to_string(&state) {
             let _ = sidebar.evaluate_script(&format!("window.updateState?.({json})"));

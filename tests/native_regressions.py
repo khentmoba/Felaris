@@ -134,6 +134,7 @@ def main():
             command('switch_tab', id=pinned)
             command('new_tab', url=origin + '/slow')
             downloader = active(loaded(origin + '/slow'))['id']
+            content(origin + '/slow', "document.getElementById('download').click();true")
             wait(lambda _: sidebar('currentState.active_downloads') == 1, 'active download')
             command('new_tab', url=origin + '/second')
             kept = active(loaded(origin + '/second'))['id']
@@ -203,6 +204,7 @@ def main():
                 assert not content(f'{origin}/capacity/3', '__felarisCanSleep()'), 'hidden playback must stay protected even if WebView2 pauses it'
                 command('navigate', url=origin + '/slow')
                 loaded(origin + '/slow')
+                content(origin + '/slow', "document.getElementById('download').click();true")
                 wait(lambda snapshot: sidebar('currentState.active_downloads') == 1, 'capacity download starts')
                 latencies.extend(switch(id) for id in range(5, 31))
                 settled = wait(lambda snapshot: len(snapshot['tabs']) == count and sum(not tab['is_sleeping'] for tab in snapshot['tabs']) <= 12,

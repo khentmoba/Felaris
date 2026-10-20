@@ -54,6 +54,20 @@ pub fn round(view: &WebView, width: i32, height: i32, radius: i32) {
     }
 }
 
+pub fn quiet(view: &WebView) -> bool {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_8;
+    use windows::core::{BOOL, Interface};
+    use wry::WebViewExtWindows;
+    unsafe {
+        let mut playing = BOOL::default();
+        view.webview()
+            .cast::<ICoreWebView2_8>()
+            .and_then(|view| view.IsDocumentPlayingAudio(&mut playing))
+            .is_ok()
+            && !playing.as_bool()
+    }
+}
+
 pub fn message(title: &str, text: &str, confirm: bool) -> bool {
     if std::env::var_os("FELARIS_SMOKE_TEST").is_some() {
         eprintln!("{title}: {text}");
@@ -192,6 +206,7 @@ pub fn attach(
             })),
             &mut token,
         )?;
+        let capture = proxy.clone();
         webview.add_PermissionRequested(
             &PermissionRequestedEventHandler::create(Box::new(move |_, args| {
                 if let Some(args) = args {
@@ -224,6 +239,15 @@ pub fn attach(
                     } else {
                         COREWEBVIEW2_PERMISSION_STATE_DENY
                     })?;
+                    if allow
+                        && matches!(
+                            kind,
+                            COREWEBVIEW2_PERMISSION_KIND_CAMERA
+                                | COREWEBVIEW2_PERMISSION_KIND_MICROPHONE
+                        )
+                    {
+                        let _ = capture.send_event(UserEvent::CaptureAllowed(id, generation));
+                    }
                     if let Ok(args) = args.cast::<ICoreWebView2PermissionRequestedEventArgs3>() {
                         args.SetSavesInProfile(false)?;
                     }

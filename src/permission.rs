@@ -33,9 +33,15 @@ impl Request {
         })
     }
 
-    fn finish(&mut self, allow: bool) {
+    fn finish(&mut self, allow: bool, save: bool) {
         if let Some(deferral) = self.deferral.take() {
             unsafe {
+                if let Ok(args) = self
+                    .args
+                    .cast::<ICoreWebView2PermissionRequestedEventArgs3>()
+                {
+                    let _ = args.SetSavesInProfile(save);
+                }
                 let granted = self
                     .args
                     .SetState(if allow {
@@ -57,7 +63,7 @@ impl Request {
 
 impl Drop for Request {
     fn drop(&mut self) {
-        self.finish(false);
+        self.finish(false, false);
     }
 }
 
@@ -161,7 +167,8 @@ impl Prompt {
             .is_some_and(|request| request.token == token)
             && let Some(mut request) = self.pending.take()
         {
-            request.finish(allow && request.current(state));
+            let current = request.current(state);
+            request.finish(allow && current, current);
             return true;
         }
         false

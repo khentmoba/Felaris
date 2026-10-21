@@ -135,8 +135,13 @@ try {
     }
     await permission.evaluate(`document.getElementById('${allow ? 'allow' : 'block'}').click()`);
     await until(() => requester.evaluate(`window.permissionResult === '${allow ? 'granted' : 'denied'}'`), 'native permission decision applied');
+    await requester.call('Page.navigate', { url: site + '/permission-repeat' });
+    await until(() => requester.evaluate('document.readyState === "complete" && location.pathname === "/permission-repeat"'), 'repeat fixture ready');
+    await requester.call('Runtime.evaluate', { expression: 'window.permissionResult="pending";Notification.requestPermission().then(result=>window.permissionResult=result);true', userGesture: true });
+    await until(() => requester.evaluate(`window.permissionResult === '${allow ? 'granted' : 'denied'}'`), 'saved permission decision applied without prompt');
+    assert.equal(await permission.evaluate('current'), null, 'remembered permission does not prompt again');
   }
-  console.log('Native notification permission prompts show the requesting origin and apply Block and Allow.');
+  console.log('Native notification permission prompts show the requesting origin and apply Block and Allow, persisting decisions across visits.');
 
   await command('new_tab', { url: origin + '/location' });
   const locator = await connect(page => page.url === origin + '/location', contentPort);

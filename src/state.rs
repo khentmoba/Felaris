@@ -79,6 +79,8 @@ pub struct BrowserState {
     activity_clock: u64,
     pub homepage: String,
     #[serde(default)]
+    pub welcome_dismissed: bool,
+    #[serde(default)]
     pub closed_tabs: Vec<Tab>,
     #[serde(default)]
     pub bookmarks: Vec<Bookmark>,
@@ -139,6 +141,7 @@ impl BrowserState {
             next_tab_id: 2,
             activity_clock: 0,
             homepage: "felaris://newtab".to_string(),
+            welcome_dismissed: false,
             closed_tabs: Vec::new(),
             bookmarks: Vec::new(),
             update_available: None,
@@ -242,7 +245,12 @@ impl BrowserState {
         state.zoom = 100;
         state.update_status = None;
         state.update_available = None;
-        state.homepage = "felaris://newtab".into();
+        state.homepage = if state.welcome_dismissed {
+            "felaris://blank"
+        } else {
+            "felaris://newtab"
+        }
+        .into();
         Some(state)
     }
 
@@ -256,7 +264,7 @@ impl BrowserState {
             id,
             workspace_id: self.active_workspace_id,
             title: match target_url.as_str() {
-                "felaris://newtab" => "New Tab".to_string(),
+                "felaris://newtab" | "felaris://blank" => "New Tab".to_string(),
                 "felaris://settings" => "Settings".to_string(),
                 "felaris://history" => "History".to_string(),
                 _ => target_url.clone(),
@@ -297,6 +305,10 @@ impl BrowserState {
     pub fn close_tab(&mut self, tab_id: usize) -> Option<usize> {
         let idx = self.tabs.iter().position(|t| t.id == tab_id)?;
         let removed = self.tabs.remove(idx);
+        if removed.url == "felaris://newtab" {
+            self.welcome_dismissed = true;
+            self.homepage = "felaris://blank".into();
+        }
         self.closed_tabs.push(removed);
         if self.closed_tabs.len() > 30 {
             self.closed_tabs.remove(0);
@@ -1032,11 +1044,34 @@ mod tests {
     }
 
     #[test]
+    fn closing_welcome_keeps_existing_tabs_on_restart() {
+        let mut state = BrowserState::new();
+        let id = state.add_tab(Some("https://example.com".into()), false);
+        state.close_tab(1);
+        let restored = BrowserState::from_session(&serde_json::to_string(&state).unwrap()).unwrap();
+        assert!(restored.welcome_dismissed);
+        assert_eq!(restored.tabs.len(), 1);
+        assert_eq!(restored.active_tab_id, id);
+        assert_eq!(restored.active_tab().unwrap().url, "https://example.com/");
+        let mut legacy = serde_json::to_value(BrowserState::new()).unwrap();
+        legacy.as_object_mut().unwrap().remove("welcome_dismissed");
+        let restored = BrowserState::from_session(&legacy.to_string()).unwrap();
+        assert!(!restored.welcome_dismissed);
+        assert_eq!(restored.homepage, "felaris://newtab");
+    }
+
+    #[test]
     fn closing_last_tab_creates_a_recoverable_new_tab() {
         let mut state = BrowserState::new();
         state.close_tab(1);
         assert_eq!(state.tabs.len(), 1);
-        assert_eq!(state.active_tab().unwrap().url, "felaris://newtab");
+        assert_eq!(state.active_tab().unwrap().url, "felaris://blank");
+        let mut restored =
+            BrowserState::from_session(&serde_json::to_string(&state).unwrap()).unwrap();
+        assert!(restored.welcome_dismissed);
+        assert_eq!(restored.homepage, "felaris://blank");
+        restored.add_tab(None, false);
+        assert_eq!(restored.active_tab().unwrap().url, "felaris://blank");
         assert!(state.can_restore_closed_tab);
         state.restore_closed_tab();
         assert_eq!(state.tabs.len(), 2);

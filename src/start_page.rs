@@ -1,8 +1,12 @@
-use crate::state::Shortcut;
+use crate::{history, state::BrowserState};
 
-pub fn get_start_page_html(shortcuts: &[Shortcut]) -> String {
-    let shortcuts_json = serde_json::to_string(shortcuts).unwrap_or_else(|_| "[]".to_string());
+pub fn get_start_page_html(state: &BrowserState) -> String {
+    let data = serde_json::json!({
+        "shortcuts": state.top_shortcuts(),
+        "bookmarks": state.bookmarks,
+        "history": history::all(),
+    });
     include_str!("start_page.html")
         .replace("__COMMON_SCRIPT__", &crate::ui::script())
-        .replace("__SHORTCUTS__", &shortcuts_json)
+        .replace("__SHORTCUTS__", &data.to_string().replace('<', "\\u003c"))
 }

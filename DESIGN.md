@@ -41,6 +41,22 @@ Two Gemini 3.8 Flash research subagents investigated mainstream browsers and Zen
 - [Chromium omnibox principles](https://www.chromium.org/user-experience/omnibox/): one search/address entry point and familiar keyboard behavior.
 - [Edge sleeping tabs](https://blogs.windows.com/msedgedev/2020/12/09/sleeping-tabs-beta-performance/): quiet dormant-tab treatment instead of noisy resource claims.
 
+## Workspace and site controls
+
+Regular tab groups are labelled Workspaces throughout the UI. Their cookies and website logins remain shared. The workspace picker supports renaming and deletion; deletion explicitly chooses another regular workspace and moves live tabs, pins, and recently closed tabs without rebuilding healthy WebViews. The final regular workspace and Private cannot be deleted through this control; Private cannot be renamed or used as a move destination.
+
+Tabs reorder by drag within their pinned or ordinary group, through the tab menu, or with Alt+Shift+Up/Down while a sidebar tab has focus. The saved tab order persists. Cross-workspace and cross-pin-group reorder requests are ignored.
+
+Native playing-audio events show a speaker control in tab rows. Mute remains available through the tab menu for silent tabs. Muting changes the native WebView, persists with the tab, and applies before loading recreated pages. The current playing state is refreshed from the native view rather than restored from a session.
+
+Address suggestions display the site's saved favicon, reusing a known icon from tabs or shortcuts for matching hosts, then trying the site's own `/favicon.ico`. Failed loads retain the suggestion-type icon. Search actions keep the search icon; internal targets do not fetch site icons. Icons preserve transparency and use no referrer.
+
+The address connection icon opens site controls with the complete origin, an HTTPS/HTTP explanation, and a two-step clear-data action. Clearing validates the active tab and origin, removes that origin's cookies and stored data, then reloads the matching page after completion. The confirmation explains shared workspace data and cookies shared with related subdomains. Permission decisions continue to ask each time.
+
+Status and undo feedback share one compact area. Routine download completion and clear-data messages expire; persistent messages stay until dismissed and can be expanded to read the full text. Settings categories retain their text labels and accessible names at the minimum window size. Both History and Settings confirm clearing history.
+
+A download-only navigation with no committed document removes its unpinned empty tab and selects its surviving opener within the same workspace. The native download owner stays hidden until the transfer can be released; active/resumable owners and at most one completed owner remain available to Downloads. Existing documents, including Home, stay open and recover their committed address after a download navigation. Automatic cleanup never creates a recently closed tab or an Undo message.
+
 ## Motion
 
 The focal interaction is the floating search palette: each invocation resolves into focus over a dimmed page in 220ms, and exits in 100ms before the native overlay hides. A new invocation cancels a pending exit so stale dismiss/submit IPC cannot fire. Reduced-motion mode skips these spatial effects and never delays submission or cancellation.
@@ -49,4 +65,4 @@ Tab rows preserve identity and use 200ms position transitions when the list chan
 
 ## Deliberate limits
 
-No new UI dependency, fake settings, permission badges, private mode, bookmarks backend, audio controls, or floating edge-hover sidebar. Only the new-tab palette is a floating overlay; suggestions use open tabs, bookmarks, saved history, and shortcuts; no network autocomplete is used. Closing Home suppresses it on later startup. Live tabs use independent WebViews; sleeping unloads a page and waking reloads its saved URL. Native WebView2 downloads provide progress and file actions. Sessions persist URLs, pins, workspaces, and recent closed tabs; unsaved forms and native page history do not survive restart. Site permissions use origin-labelled native prompts, and page errors provide Retry. Status messages persist until dismissed. Downloads and update activity disable conflicting actions. The Windows title follows the active tab.
+No new UI dependency, fake settings, permission badges, private mode, bookmarks backend, or floating edge-hover sidebar. Only the new-tab palette is a floating overlay; suggestions use open tabs, bookmarks, saved history, and shortcuts; no network autocomplete is used. Closing Home suppresses it on later startup. Live tabs use independent WebViews; sleeping unloads a page and waking reloads its saved URL. Native WebView2 downloads provide progress and file actions. Sessions persist URLs, pins, workspaces, and recent closed tabs; unsaved forms and native page history do not survive restart. Site permissions use origin-labelled native prompts, and page errors provide Retry. Status messages persist until dismissed. Downloads and update activity disable conflicting actions. The Windows title follows the active tab.

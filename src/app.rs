@@ -76,6 +76,26 @@ pub enum Command {
         id: usize,
         workspace_id: usize,
     },
+    ReorderTab {
+        id: usize,
+        target: usize,
+        after: bool,
+    },
+    RenameWorkspace {
+        id: usize,
+        name: String,
+    },
+    DeleteWorkspace {
+        id: usize,
+        destination: usize,
+    },
+    ToggleMute {
+        id: usize,
+    },
+    ClearSiteData {
+        id: usize,
+        origin: String,
+    },
     FocusAddress,
     AddressSuggestions,
     CloseActiveTab,
@@ -170,6 +190,8 @@ struct ContentCommand {
 
 #[derive(Debug)]
 pub enum UserEvent {
+    Audio(usize, u64, bool, bool),
+    SiteDataCleared(usize, u64, String, Result<(), String>),
     Maintenance,
     SessionSaved(Result<(), String>),
     SleepChecked(usize, u64, u64, String, bool),
@@ -197,7 +219,8 @@ pub enum UserEvent {
     Crashed(usize, u64),
     Favicon(usize, u64, String),
     DownloadsChanged,
-    DownloadFinished(bool),
+    DownloadStarted(usize, u64, bool, Option<String>),
+    DownloadFinished(usize, u64, bool),
     UpdateChecked(Result<Option<updater::UpdateManifest>, String>),
     Status(String),
     UpdateFailed(String),
@@ -575,6 +598,9 @@ fn content(
     }
     let view = builder.build_as_child(window)?;
     desktop::attach(&view, id, generation, proxy.clone())?;
+    if let Some(tab) = state.tabs.iter().find(|tab| tab.id == id) {
+        let _ = desktop::mute(&view, tab.is_muted);
+    }
     if failed {
         view.load_html(include_str!("error.html"))?;
     } else {
@@ -648,6 +674,9 @@ fn tab_event(
             } else {
                 let failed = tab.error.is_some();
                 tab.is_loading = false;
+                if !failed && (tab.url == url || profile::is_internal(&tab.url)) {
+                    tab.document_url = Some(tab.url.clone());
+                }
                 if tab.url == url && profile::allowed_url(&url) {
                     tab.error = None;
                 }
@@ -994,6 +1023,8 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     let mut hidden_at: HashMap<usize, std::time::Instant> = HashMap::new();
     let mut focus_address = false;
     let mut downloads: HashMap<usize, usize> = HashMap::new();
+    let mut download_only = HashSet::new();
+    let mut last_download_host = None;
     let mut check_busy = false;
     let mut zooms: HashMap<usize, u32> = HashMap::new();
     let mut smoke = crate::smoke::Smoke::new();
@@ -1102,7 +1133,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                 }
                 let persistent = matches!(&event,
                     UserEvent::External(_) | UserEvent::Title(..) | UserEvent::PageLoad(..)
-                    | UserEvent::Source(..) | UserEvent::Favicon(..)
+                    | UserEvent::Source(..) | UserEvent::Favicon(..) | UserEvent::DownloadStarted(..)
                     | UserEvent::Command(Command::Navigate { .. } | Command::NewTab { url: Some(_) }
                         | Command::SubmitNewTab { .. } | Command::SwitchTab { .. } | Command::CloseTab { .. }
                         | Command::ToggleSleep { .. } | Command::SleepInactiveTabs | Command::ClearUnpinnedTabs
@@ -1110,8 +1141,25 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         | Command::TogglePin { .. } | Command::CycleTab { .. } | Command::FocusAddress
                         | Command::OpenSettings | Command::OpenHistory | Command::DuplicateTab { .. }
                         | Command::MoveTabToWorkspace { .. } | Command::ExpandPopup { .. }
+                        | Command::ReorderTab { .. } | Command::RenameWorkspace { .. } | Command::DeleteWorkspace { .. } | Command::ToggleMute { .. }
                         | Command::ToggleBookmark { .. } | Command::NewPrivateTab));
                 match event {
+                    UserEvent::Audio(id, generation, playing, muted) => {
+                        if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) {
+                            tab.is_playing_audio = playing; tab.is_muted = muted;
+                        }
+                    },
+                    UserEvent::SiteDataCleared(id, generation, origin, result) => {
+                        state.update_status = Some(match result {
+                            Ok(()) => {
+                                if let Some(tab) = state.tabs.iter().find(|tab| tab.id == id && tab.generation == generation)
+                                    && profile::web_origin(tab.pending_url.as_ref().unwrap_or(&tab.url)).as_deref() == Some(&origin)
+                                    && let Some(view) = views.get(&id) { let _ = view.reload(); }
+                                format!("Site data cleared for {origin}.")
+                            },
+                            Err(error) => format!("Could not clear site data: {error}"),
+                        });
+                    },
                     UserEvent::Maintenance => {
                         let current_downloads = desktop::download_counts(&views);
                         let downloads_changed = current_downloads != downloads;
@@ -1291,6 +1339,30 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             Command::MoveTabToWorkspace { id, workspace_id } => {
                                 state.move_tab_to_workspace(id, workspace_id);
                             },
+                            Command::ReorderTab { id, target, after } => state.reorder_tab(id, target, after),
+                            Command::RenameWorkspace { id, name } => {
+                                if let Err(error) = state.rename_workspace(id, &name) { state.update_status = Some(error); }
+                            },
+                            Command::DeleteWorkspace { id, destination } => {
+                                if let Err(error) = state.delete_workspace(id, destination) { state.update_status = Some(error); }
+                            },
+                            Command::ToggleMute { id } => {
+                                if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id) {
+                                    let muted = !tab.is_muted;
+                                    match views.get(&id).map_or(Ok(()), |view| desktop::mute(view, muted)) {
+                                        Ok(()) => tab.is_muted = muted,
+                                        Err(error) => state.update_status = Some(format!("Could not change tab audio: {error}")),
+                                    }
+                                }
+                            },
+                            Command::ClearSiteData { id, origin } => {
+                                if let Some(tab) = state.active_tab().filter(|tab| tab.id == id
+                                    && profile::web_origin(tab.pending_url.as_ref().unwrap_or(&tab.url)).as_deref() == Some(&origin))
+                                    && let Some(view) = views.get(&id)
+                                    && let Err(error) = desktop::clear_site_data(view, id, tab.generation, &origin, proxy.clone()) {
+                                        state.update_status = Some(format!("Could not clear site data: {error}"));
+                                    }
+                            },
                             Command::CycleTab { backwards } => { state.cycle_tab(backwards); },
                             Command::FocusAddress => { state.sidebar_collapsed = false; focus_address = true; },
                             Command::AddressSuggestions => {
@@ -1299,7 +1371,8 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                 }
                             },
                             Command::OpenDownloads => {
-                                let id = downloads.iter().find(|(_, count)| **count > 0).map(|(id,_)| *id).unwrap_or(state.active_tab_id);
+                                let id = downloads.iter().find(|(_, count)| **count > 0).map(|(id,_)| *id)
+                                    .or(last_download_host.filter(|id| views.contains_key(id))).unwrap_or(state.active_tab_id);
                                 if let Some(view) = views.get(&id) && let Err(error) = desktop::downloads(view) { state.update_status = Some(error); }
                             },
                             Command::OpenSettings => { state.open_internal("felaris://settings"); palette_open = false; },
@@ -1350,7 +1423,24 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         | UserEvent::History(..) | UserEvent::Failed(..) | UserEvent::Favicon(..)
                         | UserEvent::Crashed(..)) => tab_event(&mut state, &mut views, &mut permission_prompt, event),
                     UserEvent::DownloadsChanged => {},
-                    UserEvent::DownloadFinished(success) => { state.update_status = Some(if success { "Download complete. Open Downloads to view the file." } else { "Download interrupted. Open Downloads to retry or choose another location." }.into()); },
+                    UserEvent::DownloadStarted(id, generation, blank, document) => {
+                        if state.tabs.iter().any(|tab| tab.id == id && tab.generation == generation) {
+                            last_download_host = Some(id);
+                            if blank && state.discard_download_tab(id) {
+                                download_only.insert(id);
+                                if let Some(view) = views.get(&id) { desktop::show(view, false); }
+                            } else if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id) {
+                                tab.is_loading = false; tab.pending_url = None; tab.error = None;
+                                if let Some(url) = document.or_else(|| tab.document_url.clone()) { tab.url = url; }
+                            }
+                        }
+                    },
+                    UserEvent::DownloadFinished(id, generation, success) => {
+                        if state.tabs.iter().any(|tab| tab.id == id && tab.generation == generation) || download_only.contains(&id) {
+                            if views.contains_key(&id) { last_download_host = Some(id); }
+                            state.update_status = Some(if success { "Download complete. Open Downloads to view the file." } else { "Download interrupted. Open Downloads to retry or choose another location." }.into());
+                        }
+                    },
                     UserEvent::UpdateChecked(result) => { check_busy = false; match result {
                         Ok(Some(update)) => { state.update_available = Some(update); state.update_status = None; },
                         Ok(None) => { state.update_status = Some(format!("Felaris is up to date (v{}).", updater::CURRENT_VERSION)); },
@@ -1371,7 +1461,11 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         downloads = desktop::download_counts(&views);
         state.active_downloads = downloads.values().sum();
         let awake: HashSet<_> = state.tabs.iter().filter(|tab| !tab.is_sleeping).map(|tab| tab.id).collect();
-        views.retain(|id,_| awake.contains(id));
+        let download_hosts = desktop::download_hosts();
+        // Active and resumable transfers retain their owner; keep one completed owner for Downloads.
+        download_only.retain(|id| download_hosts.contains(id) || last_download_host == Some(*id));
+        views.retain(|id,_| awake.contains(id) || download_only.contains(id));
+        for tab in &mut state.tabs { if !views.contains_key(&tab.id) { tab.is_playing_audio = false; } }
         downloads.retain(|id, count| *count > 0 || awake.contains(id));
         sleep_pending.retain(|(id, _)| views.contains_key(id));
         let active_id = state.active_tab_id;

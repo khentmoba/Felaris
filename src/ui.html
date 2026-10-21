@@ -22,6 +22,9 @@ svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7;
 .address-option { display:flex; align-items:center; gap:8px; padding:10px 8px; border-radius:6px; cursor:pointer; }
 .address-option[aria-selected="true"] { background:var(--active); }
 .address-option svg { width:16px; height:16px; color:var(--muted); }
+.address-option-icon { width:16px; height:16px; flex-shrink:0; display:grid; place-items:center; }
+.address-option-icon>* { grid-area:1/1; }
+.address-option-icon img { width:16px; height:16px; object-fit:contain; }
 .address-option-text { min-width:0; display:flex; flex-direction:column; gap:3px; }
 .address-option-title,.address-option-detail { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .address-option-title { font-size:12px; } .address-option-detail { font-size:11px; color:var(--muted); }
@@ -67,6 +70,20 @@ button:active:not(:disabled),summary:active { transform:scale(.96); }
 .tab.failed .tab-title { text-decoration:underline dotted; text-underline-offset:4px; }
 @media(max-height:560px) { body { gap:8px; padding-top:8px; padding-bottom:8px; } .workspace-heading { padding-top:0; } .footer { gap:4px; padding-top:6px; } .activity { max-height:82px; } }
 @media(forced-colors:active) { .tab.active,.space[aria-pressed="true"] { outline:1px solid Highlight; } button:disabled { color:GrayText; opacity:1; } }
+.tab.drop-before::before,.tab.drop-after::after { content:""; position:absolute; left:8px; right:8px; height:2px; background:var(--accent); pointer-events:none; }
+.tab.drop-before::before { top:-3px; } .tab.drop-after::after { bottom:-3px; } .tab.dragging { opacity:.5; }
+.audio-toggle { width:26px; height:28px; flex-shrink:0; display:grid; place-items:center; color:var(--text); } .audio-toggle svg { width:15px; }
+.workspace-actions { border-top:1px solid var(--line); margin-top:4px; padding-top:4px; }
+#delete-workspace-panel { padding:8px; font-size:12px; } #workspace-destination { width:100%; margin-top:8px; padding:8px; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:6px; font:inherit; }
+.site-panel { position:absolute; top:48px; left:0; width:100%; max-height:calc(100vh - 110px); overflow:auto; padding:12px; background:var(--surface); border:1px solid var(--line); border-radius:10px; z-index:25; font-size:12px; }
+.site-heading { display:flex; align-items:center; justify-content:space-between; } .site-panel p { color:var(--muted); line-height:1.5; margin:10px 0; } #site-origin { color:var(--text); overflow-wrap:anywhere; user-select:text; }
+.site-panel>button,.site-actions button { padding:9px 8px; background:var(--active); text-align:left; width:100%; } .site-actions { display:flex; gap:8px; }
+.feedback { flex-shrink:0; display:flex; flex-direction:column; gap:0; border-radius:8px; background:var(--surface); }
+.feedback:has(>.activity[hidden]):has(>.toast[hidden]) { display:none; }
+.feedback .activity,.feedback .toast { border:0; border-radius:0; background:none; box-shadow:none; padding:5px 8px; font-size:12px; min-height:32px; }
+.feedback .activity { padding-right:30px; max-height:min(120px,25vh); }
+#activity-message { display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; width:100%; padding:3px 0; text-align:left; line-height:1.5; overflow-wrap:anywhere; }
+#activity-message[aria-expanded="true"] { display:block; } .feedback .toast { display:flex; align-items:center; gap:8px; } #toast-message { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .feedback .toast button { display:inline; margin:0; padding:3px 0; flex-shrink:0; }
 </style>
 </head>
 <body>
@@ -93,29 +110,42 @@ button:active:not(:disabled),summary:active { transform:scale(.96); }
 <button class="icon toggle" id="btn-toggle-sidebar" title="Collapse sidebar (Ctrl+Shift+B)" aria-label="Collapse sidebar" aria-expanded="true"><svg><use href="#sidebar"/></svg></button>
 </nav>
 <form class="address" id="address-form" aria-label="Address bar">
-<svg id="security" role="img" aria-label="Search"><use href="#search"/></svg>
+<button type="button" id="security" class="icon" aria-label="Site controls" title="Site controls" aria-expanded="false" aria-controls="site-panel"><svg aria-hidden="true"><use href="#search"/></svg></button>
 <input id="url-input" role="combobox" aria-autocomplete="list" aria-controls="address-results" aria-expanded="false" aria-label="Search or enter address" placeholder="Search or enter address" autocomplete="off" spellcheck="false">
 <button type="button" class="icon" id="btn-bookmark" title="Bookmark this page (Ctrl+D)" aria-label="Bookmark this page" aria-pressed="false"><svg><use href="#star"/></svg></button>
 <button type="button" class="icon" id="btn-copy-url" title="Copy address" aria-label="Copy address"><svg><use href="#copy"/></svg></button>
 <div id="address-results" class="address-results" role="listbox" aria-label="Address suggestions" hidden></div>
+<section id="site-panel" class="site-panel" aria-label="Site controls" hidden>
+<div class="site-heading"><strong>Site controls</strong><button type="button" class="icon" id="close-site" aria-label="Close site controls"><svg><use href="#close"/></svg></button></div>
+<p id="site-origin"></p><p id="site-connection"></p>
+<p>Camera, microphone, location, notifications, and clipboard access ask each time.</p>
+<button type="button" id="clear-site">Clear cookies and site data</button>
+<div id="site-confirm" hidden><p>This can sign you out across regular workspaces. Shared cookies may affect related subdomains. The page will reload.</p><div class="site-actions"><button type="button" id="cancel-clear-site">Cancel</button><button type="button" id="confirm-clear-site">Clear data</button></div></div>
+</section>
 </form>
 <div class="workspace-heading"><svg aria-hidden="true"><use id="workspace-icon" href="#home"/></svg><span id="workspace-name">General</span><span class="count" id="tab-count">1 tab</span></div>
 <div class="tab-tools"><button class="new-tab" id="btn-add-tab" title="New tab (Ctrl+T)" aria-label="New tab"><svg><use href="#plus"/></svg><span>New tab</span><kbd>Ctrl T</kbd></button><button class="icon" id="btn-search-tabs" title="Search tabs" aria-label="Search tabs" aria-expanded="false"><svg><use href="#search"/></svg></button></div>
-<input id="tab-search" type="search" aria-label="Filter tabs in this profile" placeholder="Find a tab…" hidden>
-<section class="tabs" aria-label="Tabs in this profile"><div id="pinned-tabs" class="tab-group" aria-label="Pinned tabs"></div><div id="tabs-container" class="tab-group" aria-label="Open tabs"></div><p class="empty" id="empty-tabs" hidden>No matching tabs.<br>Try a different title or address.</p></section>
+<input id="tab-search" type="search" aria-label="Filter tabs in this workspace" placeholder="Find a tab…" hidden>
+<section class="tabs" aria-label="Tabs in this workspace"><div id="pinned-tabs" class="tab-group" aria-label="Pinned tabs"></div><div id="tabs-container" class="tab-group" aria-label="Open tabs"></div><p class="empty" id="empty-tabs" hidden>No matching tabs.<br>Try a different title or address.</p></section>
 <div class="update-banner" id="update-banner" hidden>
 <div class="update-header"><svg aria-hidden="true"><use href="#felaris"/></svg><span id="update-text">Update available</span></div>
 <button id="btn-apply-update" class="update-btn">Update now</button>
 </div>
-<div class="activity" id="activity" role="status" aria-live="polite" hidden><span id="activity-message"></span><button class="icon" id="dismiss-status" aria-label="Dismiss message" title="Dismiss message"><svg><use href="#close"/></svg></button></div>
+<div class="feedback">
+<div class="activity" id="activity" role="status" aria-live="polite" hidden><button id="activity-message" aria-expanded="false" title="Expand message"></button><button class="icon" id="dismiss-status" aria-label="Dismiss message" title="Dismiss message"><svg><use href="#close"/></svg></button></div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-message"></span><button id="toast-undo" hidden>Reopen tab</button></div>
+</div>
 <footer class="footer">
 <button class="download-control" id="btn-downloads" title="Downloads (Ctrl+J)" aria-label="Downloads"><svg><use href="#download"/></svg><span>Downloads</span><small id="download-count"></small></button>
 <button class="sleep-control" id="btn-ram-saver" title="Unload background tabs to free memory (Ctrl+Shift+S)"><svg><use href="#moon"/></svg><span id="sleep-label">Sleep background tabs</span><svg><use href="#forward"/></svg></button>
-<div class="workspace-switcher"><details id="profiles"><summary aria-label="Switch profile"><svg aria-hidden="true"><use href="#globe"/></svg><span id="profile-current">General</span></summary><div class="menu"><p>Profiles</p><div id="spaces" aria-label="Profiles"></div><form id="profile-form"><label for="profile-name">New profile</label><input id="profile-name" placeholder="e.g. School" maxlength="40" required autocomplete="off"><small>Each profile keeps its own tabs and pins. Website logins are shared.</small><p id="profile-error" role="alert" hidden></p><button type="submit">Create profile</button></form></div></details><details id="browser-menu"><summary class="icon" title="Tab actions" aria-label="Tab actions"><svg><use href="#more"/></svg></summary><div class="menu"><button id="btn-pin-tab">Pin current tab</button><button id="btn-reopen-tab">Reopen closed tab <kbd>Ctrl Shift T</kbd></button><button id="btn-clear-tabs">Close other unpinned tabs</button><hr><button id="btn-check-update">Check for updates</button><button id="btn-default-browser">Set default browser?</button><hr><p>Profiles: Alt + 1-9<br>Address bar: Ctrl + L<br>Toggle sidebar: Ctrl + Shift + B<br>Bookmark page: Ctrl + D<br>Find in page: Ctrl + F</p></div></details></div>
+<div class="workspace-switcher"><details id="profiles"><summary aria-label="Switch workspace"><svg aria-hidden="true"><use href="#globe"/></svg><span id="profile-current">General</span></summary><div class="menu"><p>Workspaces</p><div id="spaces" aria-label="Workspaces"></div><form id="profile-form"><label for="profile-name">New workspace</label><input id="profile-name" placeholder="e.g. School" maxlength="40" required autocomplete="off"><small>Workspaces organize tabs and pins. Website logins are shared.</small><p id="profile-error" role="alert" hidden></p><button type="submit">Create workspace</button></form><div class="workspace-actions"><button type="button" id="rename-workspace">Rename workspace</button><button type="button" id="delete-workspace">Delete workspace</button></div>
+<div id="delete-workspace-panel" hidden><label for="workspace-destination">Move tabs and pins to</label><select id="workspace-destination"></select><p>Tabs stay open. Shared website data is kept.</p><button type="button" id="confirm-delete-workspace">Move tabs and delete workspace</button><button type="button" id="cancel-delete-workspace">Cancel</button></div>
+<button type="button" id="cancel-rename-workspace" hidden>Cancel rename</button>
+</div></details><details id="browser-menu"><summary class="icon" title="Tab actions" aria-label="Tab actions"><svg><use href="#more"/></svg></summary><div class="menu"><button id="btn-pin-tab">Pin current tab</button><button id="btn-reopen-tab">Reopen closed tab <kbd>Ctrl Shift T</kbd></button><button id="btn-clear-tabs">Close other unpinned tabs</button><hr><button id="btn-check-update">Check for updates</button><button id="btn-default-browser">Set default browser?</button><hr><p>Workspaces: Alt + 1-9<br>Address bar: Ctrl + L<br>Toggle sidebar: Ctrl + Shift + B<br>Bookmark page: Ctrl + D<br>Find in page: Ctrl + F</p></div></details></div>
 </footer>
 <div class="menu" id="tab-context-menu" role="menu" aria-label="Tab options" hidden></div>
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg"><defs>
+<symbol id="audio" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5ZM15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol><symbol id="muted" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Zm5 4 6 6m0-6-6 6"/></symbol>
 <symbol id="download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></symbol><symbol id="back" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6M8 12h12"/></symbol><symbol id="forward" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6M4 12h12"/></symbol>
 <symbol id="reload" viewBox="0 0 24 24"><path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5M20 12a8 8 0 0 0-2-6"/></symbol><symbol id="home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7M5 9v11h5v-6h4v6h5V9"/></symbol>
 <symbol id="sidebar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></symbol><symbol id="search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 5 5"/></symbol>
@@ -132,6 +162,14 @@ let currentState = {tabs:[],workspaces:[],active_tab_id:1,active_workspace_id:1,
 const $ = id => document.getElementById(id);
 const icon = name => { const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'); const use=document.createElementNS(svg.namespaceURI,'use'); use.setAttribute('href','#'+name); svg.setAttribute('aria-hidden','true'); svg.append(use); return svg; };
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+let draggedTab=null;
+const clearDropMarkers=()=>document.querySelectorAll('.drop-before,.drop-after').forEach(row=>row.classList.remove('drop-before','drop-after'));
+function clearDrag() { draggedTab=null; clearDropMarkers(); document.querySelectorAll('.dragging').forEach(row=>row.classList.remove('dragging')); }
+function moveTab(tab,down) {
+ const peers=currentState.tabs.filter(t=>t.workspace_id===tab.workspace_id&&t.is_pinned===tab.is_pinned);
+ const target=peers[peers.findIndex(t=>t.id===tab.id)+(down?1:-1)];
+ if(target)Felaris.send('reorder_tab',{id:tab.id,target:target.id,after:down});
+}
 let tabSignature='';
 reducedMotion.addEventListener('change',()=>{if(reducedMotion.matches)document.getAnimations().filter(animation=>animation.id==='tab-layout').forEach(animation=>animation.finish());});
 let toastTimer;
@@ -143,7 +181,7 @@ function displayAddress(url) { if(!url || url==='felaris://newtab') return ''; t
 function renderTabs() {
  const tabs=currentState.tabs.filter(t=>t.workspace_id===currentState.active_workspace_id);
  const query=$('tab-search').value.trim().toLowerCase();
- const signature=JSON.stringify([tabs.map(tab=>[tab.id,tab.title,tab.url,tab.is_pinned,tab.is_sleeping,tab.favicon,tab.error]),query,currentState.active_workspace_id]);
+ const signature=JSON.stringify([tabs.map(tab=>[tab.id,tab.title,tab.url,tab.is_pinned,tab.is_sleeping,tab.favicon,tab.error,tab.is_playing_audio,tab.is_muted]),query,currentState.active_workspace_id]);
  if(signature===tabSignature) {
   document.querySelectorAll('.tab').forEach(row=>{
    const active=Number(row.dataset.tabId)===currentState.active_tab_id;
@@ -159,7 +197,7 @@ function renderTabs() {
  oldRows.forEach(row=>row.getAnimations().filter(animation=>animation.id==='tab-layout').forEach(animation=>animation.cancel()));
  const focused=document.activeElement;
  const focusId=focused?.dataset.tabId;
- const focusClose=focused?.classList.contains('close-tab');
+ const focusControl=focused?.classList.contains('close-tab')?'close-tab':focused?.classList.contains('audio-toggle')?'audio-toggle':'tab-main';
  $('tab-count').textContent=`${tabs.length} ${tabs.length===1?'tab':'tabs'}`;
  const pinned=[];
  const normal=[];
@@ -168,13 +206,13 @@ function renderTabs() {
   if(query && !(tab.title+' '+tab.url).toLowerCase().includes(query)) continue;
   visible++;
   const row=oldRows.get(tab.id)||document.createElement('div');
-  const rowSignature=JSON.stringify([tab.title,tab.url,tab.is_pinned,tab.is_sleeping,tab.favicon,tab.error,tab.id===currentState.active_tab_id]);
+  const rowSignature=JSON.stringify([tab.title,tab.url,tab.is_pinned,tab.is_sleeping,tab.favicon,tab.error,tab.is_playing_audio,tab.is_muted,tab.id===currentState.active_tab_id]);
   if(row.dataset.signature===rowSignature) { (tab.is_pinned?pinned:normal).push(row); continue; }
   row.dataset.signature=rowSignature;
   row.dataset.tabId=tab.id;
   row.replaceChildren();
   row.className='tab'+(tab.id===currentState.active_tab_id?' active':'')+(tab.is_sleeping?' sleeping':'')+(tab.error?' failed':'');
-  const select=document.createElement('button'); select.className='tab-main'; select.title=tab.title+'\n'+tab.url+(tab.is_pinned?'\nPinned':'')+(tab.is_sleeping?'\nSleeping — select to wake':'');
+  const select=document.createElement('button'); select.className='tab-main'; select.title=tab.title+'\n'+tab.url+'\nReorder: Alt+Shift+Up/Down'+(tab.is_pinned?'\nPinned':'')+(tab.is_sleeping?'\nSleeping — select to wake':'');
   if(tab.id===currentState.active_tab_id) select.setAttribute('aria-current','page');
   const favicon=document.createElement('span'); favicon.className='favicon'; favicon.setAttribute('aria-hidden','true');
   const fallback=icon('globe'); favicon.append(fallback);
@@ -193,9 +231,20 @@ function renderTabs() {
   if(tab.url==='felaris://newtab') { favicon.replaceChildren(icon('felaris')); }
   const label=document.createElement('span'); label.className='tab-title'; label.textContent=tab.title||tab.url;
   select.dataset.tabId=tab.id; select.setAttribute('aria-label',(tab.title||tab.url)+(tab.is_pinned?', pinned':'')+(tab.is_sleeping?', sleeping':'')+(tab.error?', page unavailable':''));
-  select.onkeydown=event=>{ if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)) { event.preventDefault(); const items=[...document.querySelectorAll('.tab-main')]; const index=items.indexOf(select); items[event.key==='Home'?0:event.key==='End'?items.length-1:(index+(event.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus(); } };
+  select.onkeydown=event=>{ if(event.altKey&&event.shiftKey&&['ArrowUp','ArrowDown'].includes(event.key)) { event.preventDefault(); event.stopPropagation(); moveTab(tab,event.key==='ArrowDown'); return; } if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)) { event.preventDefault(); const items=[...document.querySelectorAll('.tab-main')]; const index=items.indexOf(select); items[event.key==='Home'?0:event.key==='End'?items.length-1:(index+(event.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus(); } };
   select.append(favicon,label); select.onclick=()=>Felaris.send('switch_tab',{id:tab.id});
   row.append(select);
+  if(tab.is_playing_audio||tab.is_muted) {
+   const audio=document.createElement('button'); audio.className='audio-toggle'; audio.dataset.tabId=tab.id;
+   audio.title=tab.is_muted?'Unmute tab':'Mute tab'; audio.setAttribute('aria-label',audio.title+': '+(tab.title||tab.url)); audio.setAttribute('aria-pressed',String(!!tab.is_muted));
+   audio.append(icon(tab.is_muted?'muted':'audio')); audio.onclick=()=>Felaris.send('toggle_mute',{id:tab.id}); row.append(audio);
+  }
+  row.draggable=true;
+  row.ondragstart=e=>{ if(e.target.closest('.close-tab,.audio-toggle')) { e.preventDefault(); return; } draggedTab=tab.id; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',String(tab.id)); row.classList.add('dragging'); };
+  row.ondragover=e=>{ const source=currentState.tabs.find(t=>t.id===draggedTab); if(!source||source.id===tab.id||source.workspace_id!==tab.workspace_id||source.is_pinned!==tab.is_pinned)return; e.preventDefault(); clearDropMarkers(); row.classList.add(e.clientY>row.getBoundingClientRect().top+row.offsetHeight/2?'drop-after':'drop-before'); e.dataTransfer.dropEffect='move'; };
+  row.ondrop=e=>{ e.preventDefault(); const after=e.clientY>row.getBoundingClientRect().top+row.offsetHeight/2; if(draggedTab!=null)Felaris.send('reorder_tab',{id:draggedTab,target:tab.id,after}); clearDrag(); };
+  row.ondragend=clearDrag;
+
   if(tab.is_sleeping) {
    const sleep=document.createElement('span'); sleep.title='This tab is sleeping to save memory. Select the tab to wake it.'; sleep.style.display='flex';
    const moon=icon('moon'); moon.classList.add('sleep-icon'); sleep.append(moon); row.append(sleep);
@@ -219,13 +268,13 @@ function renderTabs() {
   } else row.animate([{opacity:.35,transform:'translateX(-8px)'},{opacity:1,transform:'translateX(0)'}],{duration:200,delay:Math.min(index*16,64),easing:'cubic-bezier(.16,1,.3,1)',id:'tab-layout'});
  });
  $('empty-tabs').hidden=visible>0;
- if(focusId) document.querySelector(`.${focusClose?'close-tab':'tab-main'}[data-tab-id="${focusId}"]`)?.focus({preventScroll:true});
+ if(focusId) document.querySelector(`.${focusControl}[data-tab-id="${focusId}"]`)?.focus({preventScroll:true});
 }
 window.updateState = state => {
  const previous=currentState;
  currentState=state;
  const tabIds=new Set(state.tabs.map(tab=>tab.id));
- if(previous.tabs.some(tab=>!tabIds.has(tab.id))) showToast('Tab closed',true);
+ if(previous.tabs.some(tab=>!tabIds.has(tab.id)&&(state.closed_tabs||[]).some(closed=>closed.id===tab.id))) showToast('Tab closed',true);
  syncCollapsed();
  $('btn-toggle-sidebar').setAttribute('aria-expanded',String(!state.sidebar_collapsed));
  $('btn-toggle-sidebar').setAttribute('aria-label',state.sidebar_collapsed?'Expand sidebar':'Collapse sidebar');
@@ -236,6 +285,9 @@ window.updateState = state => {
  $('workspace-icon').setAttribute('href',workspace?.private?'#private':'#globe');
  $('workspace-name').title=workspace?.private?'Private: pages, history, and tabs here are not saved':'';
  $('profile-current').textContent=workspace?.name||'General';
+ $('rename-workspace').disabled=!!workspace?.private;
+ $('delete-workspace').disabled=!!workspace?.private||state.workspaces.filter(w=>!w.private).length<2;
+ if(previous.active_workspace_id!==state.active_workspace_id)resetWorkspaceEditor();
  if(previous.active_workspace_id!==state.active_workspace_id) $('tab-search').value='';
  const spacesSignature=JSON.stringify(state.workspaces);
  if($('spaces').dataset.signature!==spacesSignature) {
@@ -252,8 +304,9 @@ window.updateState = state => {
  if(document.activeElement!==$('url-input') || previous.active_tab_id!==state.active_tab_id) $('url-input').value=displayAddress(active?.url);
  const scheme=(()=>{ try { return new URL(active?.url).protocol; } catch { return ''; } })();
  const [securityIcon,securityLabel]=scheme==='https:'?['lock','Connection is secure']:scheme==='http:'?['warn','Not secure: this site does not use HTTPS']:['search','Search'];
- $('security').firstElementChild.setAttribute('href','#'+securityIcon); $('security').setAttribute('aria-label',securityLabel); $('security').classList.toggle('insecure',securityIcon==='warn');
- $('security').replaceChildren($('security').firstElementChild,Object.assign(document.createElementNS('http://www.w3.org/2000/svg','title'),{textContent:securityLabel}));
+ $('security').querySelector('use').setAttribute('href','#'+securityIcon); $('security').setAttribute('aria-label','Site controls: '+securityLabel); $('security').title='Site controls: '+securityLabel; $('security').classList.toggle('insecure',securityIcon==='warn');
+ $('security').disabled=!['https:','http:'].includes(scheme);
+ if(siteTarget&&(siteTarget.id!==active?.id||siteTarget.origin!==webOrigin(active?.pending_url||active?.url))) closeSitePanel(false);
  const bookmarked=!!active&&(state.bookmarks||[]).some(b=>b.url===active.url);
  $('btn-bookmark').disabled=!['https:','http:','file:'].includes(scheme);
  $('btn-bookmark').setAttribute('aria-pressed',String(bookmarked));
@@ -284,7 +337,8 @@ window.updateState = state => {
   $('update-banner').hidden=true;
  }
  if(state.update_status && previous.update_status!==state.update_status) {
-  $('activity-message').textContent=state.update_status; $('activity').hidden=false;
+  if(/^(Download complete|Download cancelled|Site data cleared)/.test(state.update_status)) showToast(state.update_status);
+  else { $('activity-message').textContent=state.update_status; $('activity-message').setAttribute('aria-expanded','false'); $('activity').hidden=false; }
  }
 };
 window.focusAddress=()=>{ let tries=0; const focus=()=>{ $('url-input').focus(); $('url-input').select(); if(document.activeElement!==$('url-input')&&++tries<10) setTimeout(focus,50); }; focus(); };
@@ -305,6 +359,26 @@ function selectAddressOption(index,scroll=true) {
  if(row) { $('url-input').setAttribute('aria-activedescendant',row.id); if(scroll) row.scrollIntoView({block:'nearest'}); }
  else $('url-input').removeAttribute('aria-activedescendant');
 }
+function addressOptionIcon(option) {
+ const container=document.createElement('span'); container.className='address-option-icon'; container.setAttribute('aria-hidden','true');
+ const fallback=icon(option.search?'search':option.id!=null?'sidebar':option.history?'clock':option.bookmark?'star':'globe'); container.append(fallback);
+ if(!option.search) {
+  try {
+   const site=new URL(option.url);
+   if(['https:','http:'].includes(site.protocol)) {
+    const root=site.origin+'/favicon.ico';
+    const known=[option,...(currentState.tabs||[]),...(currentState.shortcuts||[])].find(item=>{
+     try { return item.favicon&&new URL(item.url).hostname===site.hostname&&['https:','http:'].includes(new URL(item.favicon).protocol); } catch { return false; }
+    });
+    const img=document.createElement('img'); img.alt=''; img.referrerPolicy='no-referrer'; img.hidden=true;
+    img.onload=()=>{ img.hidden=false; fallback.style.visibility='hidden'; };
+    img.onerror=()=>{ img.hidden=true; fallback.style.visibility=''; if(img.src!==root)img.src=root; else img.remove(); };
+    img.src=known?.favicon||root; container.append(img);
+   }
+  } catch {}
+ }
+ return container;
+}
 function renderAddressResults() {
  addressQuery=$('url-input').value;
  addressOptions=Felaris.suggestions(addressQuery,currentState,addressHistory);
@@ -314,7 +388,7 @@ function renderAddressResults() {
   const text=document.createElement('span'); text.className='address-option-text';
   const title=document.createElement('span'); title.className='address-option-title'; title.textContent=option.title;
   const detail=document.createElement('span'); detail.className='address-option-detail'; detail.textContent=option.detail==='Open in a new tab'?'Open address':option.detail;
-  text.append(title,detail); row.append(icon(option.search?'search':option.id!=null?'sidebar':option.history?'clock':option.bookmark?'star':'globe'),text);
+  text.append(title,detail); row.append(addressOptionIcon(option),text);
   row.onpointermove=()=>selectAddressOption(index,false);
   row.onmousedown=e=>e.preventDefault();
   row.onclick=()=>{ selectAddressOption(index,false); submitAddress(); };
@@ -365,11 +439,12 @@ $('btn-ram-saver').onclick=()=>Felaris.send('sleep_inactive_tabs');
 $('toast-undo').onclick=()=>{ Felaris.send('restore_closed_tab'); $('toast').hidden=true; };
 $('btn-downloads').onclick=()=>Felaris.send('open_downloads');
 $('btn-default-browser').onclick=()=>Felaris.send('default_browser');
+$('activity-message').onclick=()=>{ const button=$('activity-message'); button.setAttribute('aria-expanded',String(button.getAttribute('aria-expanded')!=='true')); };
 $('dismiss-status').onclick=()=>{ $('activity').hidden=true; };
 $('btn-check-update').onclick=()=>Felaris.send('check_updates');
 $('btn-apply-update').onclick=()=>{ Felaris.send('apply_update'); $('btn-apply-update').disabled=true; $('btn-apply-update').textContent='Updating…'; };
 document.querySelectorAll('.app-menu [data-action]').forEach(button=>button.onclick=()=>Felaris.send(button.dataset.action,button.dataset.delta===undefined?{}:{delta:Number(button.dataset.delta)}));
-const menus=[$('app-menu'),$('browser-menu')];
+const menus=[$('app-menu'),$('browser-menu'),$('profiles')];
 const tabMenu=$('tab-context-menu');
 const closeTabMenu=()=>{ if(!tabMenu.hidden) { tabMenu.hidden=true; scheduleHide(); } };
 function openTabContextMenu(tab,clientY) {
@@ -381,6 +456,9 @@ function openTabContextMenu(tab,clientY) {
   tabMenu.append(btn);
  };
  addItem(tab.is_pinned?'Unpin tab':'Pin tab',()=>Felaris.send('toggle_pin',{id:tab.id}));
+ addItem(tab.is_muted?'Unmute tab':'Mute tab',()=>Felaris.send('toggle_mute',{id:tab.id}));
+ addItem('Move tab up',()=>moveTab(tab,false));
+ addItem('Move tab down',()=>moveTab(tab,true));
  addItem('Duplicate tab',()=>Felaris.send('duplicate_tab',{id:tab.id}));
  addItem(tab.is_sleeping?'Wake tab':'Sleep tab',()=>Felaris.send(tab.is_sleeping?'switch_tab':'toggle_sleep',{id:tab.id}),tab.id===currentState.active_tab_id);
  const privateIds=(currentState.workspaces||[]).filter(w=>w.private).map(w=>w.id);
@@ -397,25 +475,66 @@ function openTabContextMenu(tab,clientY) {
  tabMenu.querySelector('button:not(:disabled)')?.focus();
 }
 const peek=open=>{ if(currentState.sidebar_collapsed&&currentState.sidebar_peek!==open) Felaris.send('peek',{open}); };
-const scheduleHide=()=>{ clearTimeout(hideTimer); hideTimer=setTimeout(()=>{ if(!inside&&tabMenu.hidden&&!menus.some(menu=>menu.open)&&document.activeElement!==$('url-input')&&document.activeElement!==$('tab-search')) peek(false); },250); };
+const scheduleHide=()=>{ clearTimeout(hideTimer); hideTimer=setTimeout(()=>{ if(!inside&&$('site-panel').hidden&&tabMenu.hidden&&!menus.some(menu=>menu.open)&&document.activeElement!==$('url-input')&&document.activeElement!==$('tab-search')) peek(false); },250); };
 document.documentElement.addEventListener('mouseenter',()=>{ inside=true; clearTimeout(hideTimer); peek(true); });
 document.documentElement.addEventListener('mouseleave',()=>{ inside=false; scheduleHide(); });
+let renamingWorkspace=null;
+function resetWorkspaceEditor() {
+ renamingWorkspace=null; $('profile-name').value=''; $('profile-error').hidden=true;
+ document.querySelector('label[for="profile-name"]').textContent='New workspace';
+ document.querySelector('#profile-form button[type="submit"]').textContent='Create workspace';
+ $('cancel-rename-workspace').hidden=true; $('delete-workspace-panel').hidden=true;
+}
+$('rename-workspace').onclick=()=>{
+ const workspace=currentState.workspaces.find(w=>w.id===currentState.active_workspace_id); if(!workspace||workspace.private)return;
+ resetWorkspaceEditor(); renamingWorkspace=workspace.id; $('profile-name').value=workspace.name;
+ document.querySelector('label[for="profile-name"]').textContent='Workspace name'; document.querySelector('#profile-form button[type="submit"]').textContent='Save name';
+ $('cancel-rename-workspace').hidden=false; $('profile-name').focus(); $('profile-name').select();
+};
+$('cancel-rename-workspace').onclick=resetWorkspaceEditor;
+$('delete-workspace').onclick=()=>{
+ resetWorkspaceEditor(); const select=$('workspace-destination');
+ select.replaceChildren(...currentState.workspaces.filter(w=>!w.private&&w.id!==currentState.active_workspace_id).map(w=>{const option=document.createElement('option'); option.value=w.id; option.textContent=w.name; return option;}));
+ if(select.options.length) { $('delete-workspace-panel').hidden=false; select.focus(); }
+};
+$('cancel-delete-workspace').onclick=resetWorkspaceEditor;
+$('confirm-delete-workspace').onclick=()=>{
+ Felaris.send('delete_workspace',{id:currentState.active_workspace_id,destination:Number($('workspace-destination').value)});
+ resetWorkspaceEditor(); $('profiles').open=false;
+};
+let siteTarget=null;
+function webOrigin(url) { try { const parsed=new URL(url); return ['http:','https:'].includes(parsed.protocol)?parsed.origin:null; } catch { return null; } }
+function closeSitePanel(focus=true) { $('site-panel').hidden=true; $('site-confirm').hidden=true; $('clear-site').hidden=false; $('security').setAttribute('aria-expanded','false'); siteTarget=null; if(focus)$('security').focus(); }
+$('security').onclick=()=>{
+ if(!$('site-panel').hidden) { closeSitePanel(); return; }
+ const tab=activeTab(),origin=webOrigin(tab?.pending_url||tab?.url); if(!origin)return;
+ siteTarget={id:tab.id,origin}; $('site-origin').textContent=origin;
+ $('site-connection').textContent=origin.startsWith('https:')?'Your connection uses HTTPS encryption. This does not establish that the site is trustworthy.':'This connection uses HTTP. Information sent to this site is not encrypted.';
+ $('site-panel').hidden=false; $('security').setAttribute('aria-expanded','true'); $('close-site').focus();
+};
+$('close-site').onclick=()=>closeSitePanel();
+$('clear-site').onclick=()=>{ $('site-confirm').hidden=false; $('clear-site').hidden=true; $('cancel-clear-site').focus(); };
+$('cancel-clear-site').onclick=()=>{ $('site-confirm').hidden=true; $('clear-site').hidden=false; $('clear-site').focus(); };
+$('confirm-clear-site').onclick=()=>{ if(siteTarget)Felaris.send('clear_site_data',siteTarget); closeSitePanel(); };
+document.addEventListener('click',e=>{ if(!$('site-panel').hidden&&!$('address-form').contains(e.target))closeSitePanel(false); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('site-panel').hidden) { e.preventDefault();closeSitePanel(); } });
 $('profile-form').onsubmit=e=>{
  e.preventDefault();
  const input=$('profile-name'),name=input.value.trim();
  const error=$('profile-error');
- const duplicate=currentState.workspaces.some(space=>space.name.toLowerCase()===name.toLowerCase());
- error.textContent=duplicate?'A profile with that name already exists.':!name?'Enter a profile name.':'';
+ const duplicate=currentState.workspaces.some(space=>space.id!==renamingWorkspace&&space.name.toLowerCase()===name.toLowerCase());
+ error.textContent=duplicate?'A workspace with that name already exists.':!name?'Enter a workspace name.':'';
  error.hidden=!error.textContent;
  if(error.textContent) { input.focus(); return; }
- Felaris.send('create_profile',{name});
+ if(renamingWorkspace!=null)Felaris.send('rename_workspace',{id:renamingWorkspace,name}); else Felaris.send('create_profile',{name});
+ resetWorkspaceEditor();
  input.value=''; $('profiles').open=false; document.querySelector('#profiles summary')?.focus();
 };
 $('url-input').addEventListener('blur',scheduleHide); $('tab-search').addEventListener('blur',scheduleHide);
 for(const menu of menus) {
- menu.addEventListener('click',e=>{ if(e.target.closest('button')&&!e.target.closest('.zoom,#profile-form')) menu.open=false; });
- menu.addEventListener('toggle',()=>{ if(menu.open) { closeTabMenu(); for(const other of menus) if(other!==menu) other.open=false; } scheduleHide(); });
- menu.addEventListener('keydown',e=>{ if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key)||!menu.open)return; e.preventDefault(); const items=[...menu.querySelectorAll('button:not(:disabled)')]; const index=items.indexOf(document.activeElement); items[e.key==='Home'?0:e.key==='End'?items.length-1:(index+(e.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus(); });
+ menu.addEventListener('click',e=>{ if(menu.id!=='profiles'&&e.target.closest('button')&&!e.target.closest('.zoom,#profile-form')) menu.open=false; });
+ menu.addEventListener('toggle',()=>{ if(menu.id==='profiles'&&!menu.open)resetWorkspaceEditor(); if(menu.open) { closeTabMenu(); for(const other of menus) if(other!==menu) other.open=false; } scheduleHide(); });
+ menu.addEventListener('keydown',e=>{ if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key)||!menu.open||e.target.matches('input,select'))return; e.preventDefault(); const items=[...menu.querySelectorAll('button:not(:disabled)')]; const index=items.indexOf(document.activeElement); items[e.key==='Home'?0:e.key==='End'?items.length-1:(index+(e.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus(); });
 }
 tabMenu.addEventListener('keydown',e=>{ if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key)||tabMenu.hidden)return; e.preventDefault(); const items=[...tabMenu.querySelectorAll('button:not(:disabled)')]; const index=items.indexOf(document.activeElement); items[e.key==='Home'?0:e.key==='End'?items.length-1:(index+(e.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus(); });
 document.addEventListener('click',e=>{ for(const menu of menus) if(!menu.contains(e.target)) menu.open=false; if(!tabMenu.hidden&&!tabMenu.contains(e.target)) closeTabMenu(); });

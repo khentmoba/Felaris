@@ -1,0 +1,20 @@
+{
+  "baseline_commit": "d0a3e59c533d48105ef6b99380b2c149b487dcf7",
+  "baseline_ui_sha256": "a606d7958b769fdff21ec646ef1c5f740202f8691a0160e308e81483ea1c5cc0",
+  "after_ui_sha256": "e90ecf7be579217075aa440244b40e9cb8a18b2ea0184a554d10dcbd2fac09c3",
+  "viewport": {
+    "width": 260,
+    "height": 640
+  },
+  "synthetic": true,
+  "method": "Baseline and working-tree sidebar HTML rendered in srcdoc frames in an owned, isolated WebView2 content view. IPC was stubbed for screenshot capture. Runtime behavior was tested separately in native_controls.mjs.",
+  "images": [
+    "address-after.png",
+    "address-before.png",
+    "feedback-after.png",
+    "feedback-before.png",
+    "site-controls-after.png",
+    "workspaces-after.png",
+    "workspaces-before.png"
+  ]
+}

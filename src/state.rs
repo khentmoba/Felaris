@@ -45,6 +45,14 @@ pub struct Tab {
     pub last_active: u64,
     #[serde(skip)]
     pub has_capture: bool,
+    #[serde(default, skip_deserializing)]
+    pub is_playing_audio: bool,
+    #[serde(default)]
+    pub is_muted: bool,
+    #[serde(skip)]
+    pub opener: Option<usize>,
+    #[serde(skip)]
+    pub document_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,6 +132,10 @@ impl BrowserState {
             pending_url: None,
             last_active: 0,
             has_capture: false,
+            is_playing_audio: false,
+            is_muted: false,
+            opener: None,
+            document_url: None,
         };
 
         Self {
@@ -281,6 +293,10 @@ impl BrowserState {
             pending_url: None,
             last_active: self.activity_clock.saturating_add(1),
             has_capture: false,
+            is_playing_audio: false,
+            is_muted: false,
+            opener: Some(self.active_tab_id),
+            document_url: None,
         };
         self.activity_clock = new_tab.last_active;
         self.tabs.push(new_tab);
@@ -335,6 +351,39 @@ impl BrowserState {
         Some(self.active_tab_id)
     }
 
+    pub fn discard_download_tab(&mut self, id: usize) -> bool {
+        let Some(index) = self
+            .tabs
+            .iter()
+            .position(|tab| tab.id == id && tab.document_url.is_none() && !tab.is_pinned)
+        else {
+            return false;
+        };
+        let removed = self.tabs.remove(index);
+        if self.active_tab_id == id {
+            let replacement = removed
+                .opener
+                .filter(|opener| {
+                    self.tabs
+                        .iter()
+                        .any(|tab| tab.id == *opener && tab.workspace_id == removed.workspace_id)
+                })
+                .or_else(|| {
+                    self.tabs
+                        .iter()
+                        .rfind(|tab| tab.workspace_id == removed.workspace_id)
+                        .map(|tab| tab.id)
+                });
+            if let Some(replacement) = replacement {
+                self.switch_tab(replacement);
+            } else {
+                self.active_workspace_id = removed.workspace_id;
+                self.add_tab(None, false);
+            }
+        }
+        true
+    }
+
     pub fn restore_closed_tab(&mut self) -> Option<usize> {
         if let Some(mut tab) = self.closed_tabs.pop() {
             tab.id = self.next_tab_id;
@@ -346,6 +395,9 @@ impl BrowserState {
             tab.error = None;
             tab.pending_url = None;
             tab.has_capture = false;
+            tab.is_playing_audio = false;
+            tab.opener = None;
+            tab.document_url = None;
             let id = tab.id;
             self.active_workspace_id = tab.workspace_id;
             self.tabs.push(tab);
@@ -398,14 +450,14 @@ impl BrowserState {
     pub fn create_profile(&mut self, name: &str) -> Result<usize, String> {
         let name = name.trim();
         if name.is_empty() || name.chars().count() > 40 || name.chars().any(char::is_control) {
-            return Err("Use a profile name between 1 and 40 characters.".into());
+            return Err("Use a workspace name between 1 and 40 characters.".into());
         }
         if self
             .workspaces
             .iter()
             .any(|w| w.name.to_lowercase() == name.to_lowercase())
         {
-            return Err("A profile with that name already exists.".into());
+            return Err("A workspace with that name already exists.".into());
         }
         let id = self
             .workspaces
@@ -415,7 +467,7 @@ impl BrowserState {
             .unwrap_or(0)
             .checked_add(1)
             .filter(|id| *id < usize::MAX - 1)
-            .ok_or("Could not create another profile.")?;
+            .ok_or("Could not create another workspace.")?;
         self.workspaces.push(Workspace {
             id,
             name: name.into(),
@@ -425,6 +477,67 @@ impl BrowserState {
         });
         self.switch_workspace(id);
         Ok(id)
+    }
+
+    pub fn rename_workspace(&mut self, id: usize, name: &str) -> Result<(), String> {
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 40 || name.chars().any(char::is_control) {
+            return Err("Use a workspace name between 1 and 40 characters.".into());
+        }
+        if self
+            .workspaces
+            .iter()
+            .any(|w| w.id != id && w.name.to_lowercase() == name.to_lowercase())
+        {
+            return Err("A workspace with that name already exists.".into());
+        }
+        let workspace = self
+            .workspaces
+            .iter_mut()
+            .find(|w| w.id == id && !w.private)
+            .ok_or("This workspace cannot be renamed.")?;
+        workspace.name = name.into();
+        Ok(())
+    }
+
+    pub fn delete_workspace(&mut self, id: usize, destination: usize) -> Result<(), String> {
+        if id == destination
+            || !self.workspaces.iter().any(|w| w.id == id && !w.private)
+            || !self
+                .workspaces
+                .iter()
+                .any(|w| w.id == destination && !w.private)
+        {
+            return Err("Choose another regular workspace to receive the tabs.".into());
+        }
+        for tab in self.tabs.iter_mut().chain(self.closed_tabs.iter_mut()) {
+            if tab.workspace_id == id {
+                tab.workspace_id = destination;
+            }
+        }
+        self.workspaces.retain(|w| w.id != id);
+        if self.active_workspace_id == id {
+            self.active_workspace_id = destination;
+        }
+        Ok(())
+    }
+
+    pub fn reorder_tab(&mut self, id: usize, target: usize, after: bool) {
+        let Some(from) = self.tabs.iter().position(|t| t.id == id) else {
+            return;
+        };
+        let Some(to) = self.tabs.iter().position(|t| t.id == target) else {
+            return;
+        };
+        if from == to
+            || self.tabs[from].workspace_id != self.tabs[to].workspace_id
+            || self.tabs[from].is_pinned != self.tabs[to].is_pinned
+        {
+            return;
+        }
+        let tab = self.tabs.remove(from);
+        let to = self.tabs.iter().position(|t| t.id == target).unwrap();
+        self.tabs.insert(to + usize::from(after), tab);
     }
 
     pub fn private_workspace(&self) -> Option<usize> {
@@ -578,6 +691,10 @@ impl BrowserState {
             pending_url: None,
             last_active: 0,
             has_capture: false,
+            is_playing_audio: false,
+            is_muted: false,
+            opener: Some(tab_id),
+            document_url: None,
         };
         self.tabs.insert(index + 1, copy);
         self.switch_tab(id);
@@ -844,6 +961,115 @@ impl BrowserState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn download_tab_cleanup_returns_to_opener_without_undo_or_focus_theft() {
+        let mut state = BrowserState::new();
+        let source = state.add_tab(Some("https://example.com/source".into()), false);
+        let other = state.add_tab(Some("https://example.com/other".into()), false);
+        state.switch_tab(source);
+        let download = state.add_tab(Some("https://example.com/file".into()), false);
+        assert!(state.discard_download_tab(download));
+        assert_eq!(state.active_tab_id, source);
+        assert!(state.closed_tabs.is_empty());
+        assert!(!state.can_restore_closed_tab);
+        let background = state.add_tab(Some("https://example.com/file".into()), false);
+        state.switch_tab(other);
+        assert!(state.discard_download_tab(background));
+        assert_eq!(state.active_tab_id, other);
+        let document = state.add_tab(Some("https://example.com/page".into()), false);
+        state
+            .tabs
+            .iter_mut()
+            .find(|tab| tab.id == document)
+            .unwrap()
+            .document_url = Some("https://example.com/page".into());
+        assert!(!state.discard_download_tab(document));
+        let pinned = state.add_tab(Some("https://example.com/file".into()), true);
+        assert!(!state.discard_download_tab(pinned));
+        let private = state.open_private_tab();
+        assert!(state.discard_download_tab(private));
+        assert!(state.is_private(state.active_tab_id));
+        assert!(
+            !state
+                .for_session()
+                .tabs
+                .iter()
+                .any(|tab| tab.id == download || tab.id == background)
+        );
+    }
+
+    #[test]
+    fn reordering_stays_within_workspace_and_pin_group_and_survives_restore() {
+        let mut state = BrowserState::new();
+        let a = state.active_tab_id;
+        let b = state.add_tab(Some("https://example.com/b".into()), false);
+        let c = state.add_tab(Some("https://example.com/c".into()), false);
+        state.reorder_tab(a, c, true);
+        assert_eq!(
+            state.tabs.iter().map(|t| t.id).collect::<Vec<_>>(),
+            [b, c, a]
+        );
+        state.reorder_tab(a, b, false);
+        assert_eq!(
+            state.tabs.iter().map(|t| t.id).collect::<Vec<_>>(),
+            [a, b, c]
+        );
+        state.toggle_pin(b);
+        let before = state.tabs.iter().map(|t| t.id).collect::<Vec<_>>();
+        state.reorder_tab(a, b, true);
+        state.create_profile("Other").unwrap();
+        let other = state.add_tab(Some("https://example.org/".into()), false);
+        state.reorder_tab(a, other, true);
+        assert_eq!(
+            state.tabs.iter().take(3).map(|t| t.id).collect::<Vec<_>>(),
+            before
+        );
+        state.tabs[0].is_muted = true;
+        state.tabs[0].is_playing_audio = true;
+        let restored = BrowserState::from_session(&serde_json::to_string(&state).unwrap()).unwrap();
+        assert_eq!(
+            restored.tabs.iter().map(|t| t.id).collect::<Vec<_>>(),
+            state.tabs.iter().map(|t| t.id).collect::<Vec<_>>()
+        );
+        assert!(restored.tabs[0].is_muted);
+        assert!(!restored.tabs[0].is_playing_audio);
+    }
+
+    #[test]
+    fn workspace_deletion_moves_live_and_closed_tabs_without_changing_identity() {
+        let mut state = BrowserState::new();
+        let original = state.active_workspace_id;
+        let destination = state.create_profile("School").unwrap();
+        let active = state.add_tab(Some("https://example.com/live".into()), true);
+        let closed = state.add_tab(Some("https://example.com/closed".into()), false);
+        state.close_tab(closed);
+        state.rename_workspace(destination, "Study").unwrap();
+        assert!(state.rename_workspace(destination, "General").is_err());
+        assert!(state.rename_workspace(destination, "\n").is_err());
+        state.delete_workspace(destination, original).unwrap();
+        assert_eq!(state.active_workspace_id, original);
+        assert_eq!(state.active_tab_id, active);
+        assert!(
+            state
+                .tabs
+                .iter()
+                .any(|t| t.id == active && t.is_pinned && t.workspace_id == original)
+        );
+        assert!(
+            state
+                .closed_tabs
+                .iter()
+                .any(|t| t.id == closed && t.workspace_id == original)
+        );
+        assert!(state.delete_workspace(original, original).is_err());
+        let private_tab = state.open_private_tab();
+        let private = state.private_workspace().unwrap();
+        assert!(state.delete_workspace(private, original).is_err());
+        assert!(state.rename_workspace(private, "Secret").is_err());
+        assert!(state.delete_workspace(original, private).is_err());
+        assert!(state.is_private(private_tab));
+    }
 
     #[test]
     fn automatic_sleep_orders_old_tabs_and_protects_active_work() {

@@ -14,13 +14,13 @@
 - **Rust desktop shell:** Tao handles the Windows window and Wry hosts WebView2.
 - **Independent live tabs:** Switching tabs preserves page state and native back/forward history while the tabs stay awake.
 - **Floating sign-in & OAuth popups:** Login, OAuth, and confirmation popups open in a Zen-style floating window that shares your profile and `window.opener` session, with a compact read-only URL bar and one-click promotion to a full tab.
-- **Session recovery:** Tabs, profile selection, pins, and recent closed tabs are saved locally, with a backup for recovery. Site storage uses a persistent WebView2 profile.
+- **Session recovery:** Tabs, workspace selection, pins, and recent closed tabs are saved locally, with a backup for recovery. Site storage uses a persistent WebView2 profile.
 - **Windows integration:** Setup wizard with uninstaller, Start menu and desktop shortcuts, Installed apps registration, default-browser eligibility, and link handoff to the running instance.
 - **Native downloads:** WebView2 provides download progress and file actions; Felaris reports completion and warns before closing active downloads.
 - **Automatic tab sleeping:** Targets 12 live pages by unloading older background tabs. Pinned tabs stay awake, as do active downloads, playing media, capture sessions, and pages with detected edits or unload handlers. Pages with frames or failed safety checks stay awake too, so protected work can exceed the budget. Manual sleeping is still available. Selecting a sleeping tab reloads its saved URL; unsaved form state and page history do not survive sleeping or an app restart.
 - **Ad blocking built in:** uBlock Origin Lite is downloaded on first launch (SHA-256 checked) and loaded into every tab as a WebView2 extension. Turn it off in **Settings > Privacy and security**.
 - **Bookmarks:** Press `Ctrl + D` or the star in the address bar. Bookmarks appear first in new-tab suggestions and at the top of History, where you can remove them.
-- **Private tabs:** `Ctrl + Shift + N` (or **New private tab** in the app menu) opens a tab in the Private profile. Its pages use an InPrivate WebView2 profile, and none of their tabs, history, or top sites are saved. Ad blocking may not apply to private pages.
+- **Private tabs:** `Ctrl + Shift + N` (or **New private tab** in the app menu) opens a tab in the Private workspace. Its pages use an InPrivate WebView2 profile, and none of their tabs, history, or top sites are saved. Ad blocking may not apply to private pages.
 - **Connection security:** The address bar shows a lock for HTTPS pages and a warning for plain HTTP. WebView2 blocks pages with certificate errors.
 - **App menu and Settings:** The button at the top-left of the sidebar opens the app menu (new tab, downloads, print, zoom, settings, updates, exit). Settings (`felaris://settings`) covers search engine, ad blocker, updates, extensions, and shortcuts.
 - **Built-in Upstream Sync & Conflict Inspector:** Includes an automated local tool and agent skill to fetch upstream sources, compare local changes, and simulate pre-merge conflict status in memory before applying.
@@ -35,8 +35,8 @@
 │                                                        │
 │  Zen-inspired sidebar (260px / 56px compact rail)       │
 │  • Navigation and address / search                     │
-│  • Pinned tabs and searchable profile tabs           │
-│  • Profile picker and tab actions                      │
+│  • Pinned tabs and searchable workspace tabs           │
+│  • Workspace picker and tab actions                      │
 │                                                        │
 │  ┌─ Content Viewport (Hardware-Accelerated) ────────┐  │
 │  │                                                  │  │
@@ -64,8 +64,9 @@
 | `Alt + Left` | Navigate back |
 | `Alt + Right` | Navigate forward |
 | `Ctrl + Shift + T` | Reopen last closed tab |
-| `Ctrl + Tab` / `Ctrl + Shift + Tab` | Cycle tabs within the profile |
-| `Alt + 1` to `9` | Switch profile |
+| `Ctrl + Tab` / `Ctrl + Shift + Tab` | Cycle tabs within the workspace |
+| `Alt + 1` to `9` | Switch workspace |
+| `Alt + Shift + Up` / `Down` | Reorder a focused sidebar tab within its pinned or ordinary group |
 | `Ctrl + Shift + B` | Expand / collapse sidebar |
 | `Ctrl + Shift + S` | Unload background tabs (except active downloads) |
 | `Ctrl + H` | Open History and bookmarks |
@@ -79,11 +80,19 @@
 
 **New tabs work like Zen:** press `Ctrl+T` or click **New tab** to open a floating search/address bar over the current page. Enter opens the destination in a new tab; matching open tabs, history, and top shortcuts can be selected with the arrow keys. Escape, the close button, or clicking outside cancels without creating an empty tab or reloading the page. The startup/Home page remains available separately. The sidebar, Home page, native title bar, and palette share a black/charcoal theme.
 
-The sidebar has no fixed shortcut-tile dock. Search opens/closes with short, interruptible motion, and tab and profile changes retain visual continuity. Reduced-motion preferences skip spatial effects. Home-page shortcuts rank your most-visited sites (such as YouTube or X) first and fill any remaining slots from the default 8 shortcuts.
+The sidebar has no fixed shortcut-tile dock. Search opens/closes with short, interruptible motion, and tab and workspace changes retain visual continuity. Reduced-motion preferences skip spatial effects. Home-page shortcuts rank your most-visited sites (such as YouTube or X) first and fill any remaining slots from the default 8 shortcuts.
 
-Web searches use **Brave Search** by default (Settings can switch to DuckDuckGo, Google, or Bing) throughout the sidebar, Home page, and floating search bar. Suggestions come from your local open tabs, history, and shortcuts; no remote autocomplete requests are sent while typing.
+Web searches use **Brave Search** by default (Settings can switch to DuckDuckGo, Google, or Bing) throughout the sidebar, Home page, and floating search bar. Suggestions come from your local open tabs, bookmarks, history, and shortcuts; no remote autocomplete requests are sent while typing.
 
-Shortcuts work while browser chrome or page content has focus. In pages they are caught natively before the page sees the key, so sites and focused iframes can't swallow them; `Ctrl + S`, `Ctrl + F`, and other keys not listed stay with the page. Right-clicking any tab in the sidebar opens quick actions to pin/unpin, duplicate, sleep/wake, move to another profile, or close it. The bottom sidebar menu contains pin/unpin, reopen, and close-other-tabs actions. Close Others keeps pinned tabs, affects only the current profile, and can be undone one tab at a time with Reopen.
+Shortcuts work while browser chrome or page content has focus. In pages they are caught natively before the page sees the key, so sites and focused iframes can't swallow them; `Ctrl + S`, `Ctrl + F`, and other keys not listed stay with the page. Right-clicking any tab in the sidebar opens quick actions to pin/unpin, duplicate, sleep/wake, move to another workspace, or close it. The bottom sidebar menu contains pin/unpin, reopen, and close-other-tabs actions. Close Others keeps pinned tabs, affects only the current workspace, and can be undone one tab at a time with Reopen.
+
+**Workspaces organize tabs, not accounts:** regular workspaces share cookies and website logins. Create, rename, or delete them from the bottom workspace picker. Deletion moves open tabs, pins, and recently closed tabs to the regular workspace you choose, without reloading live pages. Private remains separate and is never saved.
+
+Drag sidebar tabs to reorder them within their pinned or ordinary group, or focus a tab and press `Alt+Shift+Up/Down`. Audio-playing tabs show a speaker button; click it to mute or unmute. The tab menu also offers mute controls, including for silent tabs, and mute choices survive sleep and restart.
+
+Links that open only a download dismiss their empty tab and return to the originating page while the transfer continues. Downloads started from an existing page keep that page, its address, and its form state. Active and resumable downloads retain their native owner in the background; at most one completed download owner remains for the Downloads dialog. Automatically dismissed download tabs do not enter recently closed tabs or trigger Undo.
+
+Click the connection icon beside a website address for its full origin, connection information, and **Clear cookies and site data**. Clearing requires confirmation, clears the selected origin's cookies and stored data, and reloads that page. Regular workspaces share the cleared data; cookies shared with related subdomains may also be removed. Routine download feedback expires, while persistent messages can be expanded or dismissed in the compact feedback area.
 
 **Current engine limits:** Awake tabs preserve page state and navigation history. Sleeping tabs and restored sessions reload saved URLs; unsaved forms and per-tab history do not survive unloading or restart. Automatic sleeping uses conservative checks, but custom app state cannot always be detected; pin tabs whose state must be preserved.
 

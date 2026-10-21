@@ -38,6 +38,10 @@ pub fn download_counts(
     counts
 }
 
+pub fn download_hosts() -> std::collections::HashSet<usize> {
+    DOWNLOADS.with_borrow(|downloads| downloads.iter().map(|(id, _)| *id).collect())
+}
+
 pub fn is_default_browser() -> bool {
     #[cfg(windows)]
     {
@@ -153,6 +157,50 @@ pub fn quiet(view: &WebView) -> bool {
     }
 }
 
+pub fn mute(view: &WebView, muted: bool) -> Result<(), String> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_8;
+    use windows::core::Interface;
+    use wry::WebViewExtWindows;
+    unsafe {
+        view.webview()
+            .cast::<ICoreWebView2_8>()
+            .and_then(|view| view.SetIsMuted(muted))
+            .map_err(|error| error.to_string())
+    }
+}
+
+pub fn clear_site_data(
+    view: &WebView,
+    id: usize,
+    generation: u64,
+    origin: &str,
+    proxy: EventLoopProxy<UserEvent>,
+) -> Result<(), String> {
+    use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
+    use windows::core::HSTRING;
+    use wry::WebViewExtWindows;
+    let parameters = serde_json::json!({"origin": origin, "storageTypes": "cookies,local_storage,indexeddb,websql,file_systems,cache_storage,service_workers"}).to_string();
+    let origin = origin.to_owned();
+    unsafe {
+        view.webview()
+            .CallDevToolsProtocolMethod(
+                &HSTRING::from("Storage.clearDataForOrigin"),
+                &HSTRING::from(parameters),
+                &CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |result, _| {
+                    let result = result.map_err(|error| error.to_string());
+                    let _ = proxy.send_event(UserEvent::SiteDataCleared(
+                        id,
+                        generation,
+                        origin.clone(),
+                        result,
+                    ));
+                    Ok(())
+                })),
+            )
+            .map_err(|error| error.to_string())
+    }
+}
+
 pub fn message(title: &str, text: &str, confirm: bool) -> bool {
     if std::env::var_os("FELARIS_SMOKE_TEST").is_some() {
         eprintln!("{title}: {text}");
@@ -196,6 +244,48 @@ pub fn attach(
     let mut token = 0;
     let history = proxy.clone();
     unsafe {
+        if let Ok(audio) = webview.cast::<ICoreWebView2_8>() {
+            let playing_proxy = proxy.clone();
+            audio.add_IsDocumentPlayingAudioChanged(
+                &IsDocumentPlayingAudioChangedEventHandler::create(Box::new(move |view, _| {
+                    if let Some(view) = view
+                        && let Ok(audio) = view.cast::<ICoreWebView2_8>()
+                    {
+                        let (mut playing, mut muted) = (BOOL::default(), BOOL::default());
+                        audio.IsDocumentPlayingAudio(&mut playing)?;
+                        audio.IsMuted(&mut muted)?;
+                        let _ = playing_proxy.send_event(UserEvent::Audio(
+                            id,
+                            generation,
+                            playing.as_bool(),
+                            muted.as_bool(),
+                        ));
+                    }
+                    Ok(())
+                })),
+                &mut token,
+            )?;
+            let muted_proxy = proxy.clone();
+            audio.add_IsMutedChanged(
+                &IsMutedChangedEventHandler::create(Box::new(move |view, _| {
+                    if let Some(view) = view
+                        && let Ok(audio) = view.cast::<ICoreWebView2_8>()
+                    {
+                        let (mut playing, mut muted) = (BOOL::default(), BOOL::default());
+                        audio.IsDocumentPlayingAudio(&mut playing)?;
+                        audio.IsMuted(&mut muted)?;
+                        let _ = muted_proxy.send_event(UserEvent::Audio(
+                            id,
+                            generation,
+                            playing.as_bool(),
+                            muted.as_bool(),
+                        ));
+                    }
+                    Ok(())
+                })),
+                &mut token,
+            )?;
+        }
         let keys = proxy.clone();
         view.controller().add_AcceleratorKeyPressed(
             &AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
@@ -360,7 +450,7 @@ pub fn attach(
         )?;
         let download_proxy = proxy.clone();
         webview.cast::<ICoreWebView2_4>()?.add_DownloadStarting(
-            &DownloadStartingEventHandler::create(Box::new(move |_, args| {
+            &DownloadStartingEventHandler::create(Box::new(move |view, args| {
                 if let Some(args) = args {
                     let operation = args.DownloadOperation()?;
                     let complete = download_proxy.clone();
@@ -372,6 +462,8 @@ pub fn attach(
                                 let _ = complete.send_event(UserEvent::DownloadsChanged);
                                 if state != COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS {
                                     let _ = complete.send_event(UserEvent::DownloadFinished(
+                                        id,
+                                        generation,
                                         state == COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED,
                                     ));
                                 }
@@ -381,6 +473,15 @@ pub fn attach(
                         &mut 0,
                     )?;
                     DOWNLOADS.with_borrow_mut(|downloads| downloads.push((id, operation)));
+                    let mut source = PWSTR::null();
+                    let document = view
+                        .and_then(|view| view.Source(&mut source).ok().map(|_| take_pwstr(source)));
+                    let blank = document
+                        .as_deref()
+                        .is_some_and(|url| url.is_empty() || url == "about:blank");
+                    let document = document.and_then(|url| crate::profile::normalize_url(&url));
+                    let _ = download_proxy
+                        .send_event(UserEvent::DownloadStarted(id, generation, blank, document));
                     let _ = download_proxy.send_event(UserEvent::DownloadsChanged);
                 }
                 Ok(())

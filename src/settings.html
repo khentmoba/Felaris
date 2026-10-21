@@ -27,7 +27,7 @@ section { display:flex; flex-direction:column; gap:12px; } section>h2 { font-siz
 .note { color:var(--muted); font-size:12px; line-height:1.6; margin:0; } .empty { color:var(--muted); text-align:center; padding:40px 0; }
 .btn,.nav-item,.choice { transition:background-color 140ms ease,border-color 140ms ease,color 140ms ease; }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { transition:none!important; } }
-@media(max-width:760px) { body { grid-template-columns:1fr; padding:20px; gap:16px; } aside { position:static; } aside nav { flex-direction:row; flex-wrap:wrap; } .nav-item span { display:none; } .choices { grid-template-columns:1fr; } }
+@media(max-width:760px) { body { grid-template-columns:1fr; padding:20px; gap:16px; } aside { position:static; } aside nav { flex-direction:row; flex-wrap:wrap; } .nav-item { height:auto; min-height:38px; padding:8px 10px; } .choices { grid-template-columns:1fr; } }
 @media(forced-colors:active) { .nav-item[aria-current="true"],.choice[aria-checked="true"] { outline:1px solid Highlight; } }
 </style>
 </head>
@@ -49,7 +49,7 @@ section { display:flex; flex-direction:column; gap:12px; } section>h2 { font-siz
 <section data-section="search" data-label="Search" data-icon="M10 3.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zm5 11.5 5 5">
 <h2>Default search engine</h2>
 <div class="choices" id="engines" role="radiogroup" aria-label="Default search engine"></div>
-<p class="note">Used by the address bar, the Home page, and new-tab search. Suggestions only come from your open tabs, so nothing is sent while you type.</p>
+<p class="note">Used by the address bar, the Home page, and new-tab search. Suggestions come from open tabs, bookmarks, history, and shortcuts. Nothing is sent to a search engine while you type.</p>
 </section>
 
 <section data-section="privacy" data-label="Privacy and security" data-icon="M6 11V8a6 6 0 0 1 12 0v3M5 11h14v10H5z">
@@ -85,14 +85,14 @@ window.setDefaultBrowser=isDefault=>{
 };
 window.setDefaultBrowser(data.is_default_browser);
 const sections=[...document.querySelectorAll('section')];
-const shortcuts=[['New tab','Ctrl + T'],['Close tab','Ctrl + W'],['Address bar','Ctrl + L'],['Reload','Ctrl + R / F5'],['Back / forward','Alt + Left / Right'],['Reopen closed tab','Ctrl + Shift + T'],['Next / previous tab','Ctrl + Tab / Ctrl + Shift + Tab'],['Switch profile','Alt + 1-9'],['Collapse sidebar','Ctrl + Shift + B'],['Sleep background tabs','Ctrl + Shift + S'],['History and bookmarks','Ctrl + H'],['Bookmark page','Ctrl + D'],['New private tab','Ctrl + Shift + N'],['Find in page','Ctrl + F'],['Downloads','Ctrl + J'],['Zoom in / out / reset','Ctrl + + / Ctrl + - / Ctrl + 0'],['Full screen','F11']];
+const shortcuts=[['New tab','Ctrl + T'],['Close tab','Ctrl + W'],['Address bar','Ctrl + L'],['Reload','Ctrl + R / F5'],['Back / forward','Alt + Left / Right'],['Reopen closed tab','Ctrl + Shift + T'],['Next / previous tab','Ctrl + Tab / Ctrl + Shift + Tab'],['Switch workspace','Alt + 1-9'],['Reorder focused tab','Alt + Shift + Up / Down'],['Collapse sidebar','Ctrl + Shift + B'],['Sleep background tabs','Ctrl + Shift + S'],['History and bookmarks','Ctrl + H'],['Bookmark page','Ctrl + D'],['New private tab','Ctrl + Shift + N'],['Find in page','Ctrl + F'],['Downloads','Ctrl + J'],['Zoom in / out / reset','Ctrl + + / Ctrl + - / Ctrl + 0'],['Full screen','F11']];
 $('keys').replaceChildren(...shortcuts.map(([name,keys])=>{ const row=document.createElement('tr'); const a=document.createElement('td'); a.textContent=name; const b=document.createElement('td'); for(const [index,part] of keys.split(' / ').entries()) { if(index) b.append(' / '); const kbd=document.createElement('kbd'); kbd.textContent=part.replace(/ \+ /g,' '); b.append(kbd); } row.append(a,b); return row; }));
 $('version').textContent='Version '+data.version;
 $('extensions-folder').textContent=data.extensions_folder;
 let current='general';
 const nav=$('nav');
 for(const section of sections) {
- const button=document.createElement('button'); button.className='nav-item'; button.dataset.target=section.dataset.section;
+ const button=document.createElement('button'); button.className='nav-item'; button.dataset.target=section.dataset.section; button.setAttribute('aria-label',section.dataset.label); button.title=section.dataset.label;
  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'); svg.setAttribute('viewBox','0 0 24 24'); svg.setAttribute('aria-hidden','true');
  const path=document.createElementNS(svg.namespaceURI,'path'); path.setAttribute('d',section.dataset.icon); svg.append(path);
  const label=document.createElement('span'); label.textContent=section.dataset.label;
@@ -121,7 +121,7 @@ function show(id) {
 $('find').oninput=()=>show(current);
 $('find').onkeydown=e=>{ if(e.key==='Escape') { $('find').value=''; show(current); } };
 document.addEventListener('keydown',e=>{ if(e.ctrlKey&&!e.shiftKey&&!e.altKey&&e.key.toLowerCase()==='f') { e.preventDefault(); $('find').focus(); } });
-document.querySelectorAll('[data-send]').forEach(button=>button.onclick=()=>Felaris.send(button.dataset.send));
+document.querySelectorAll('[data-send]').forEach(button=>button.onclick=()=>{ if(button.dataset.send==='clear_history'&&!confirm('Clear all browsing history?'))return; Felaris.send(button.dataset.send); });
 function setting(key,value) { Felaris.send('set_setting',{key,value}); data.settings[key]=value; }
 function toggle(id,key) {
  const button=$(id); button.setAttribute('aria-checked',String(!!data.settings[key]));

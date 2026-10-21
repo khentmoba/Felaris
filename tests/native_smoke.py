@@ -19,6 +19,19 @@ class Fixture(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split('?', 1)[0]
+        if path == '/redirect-download':
+            self.send_response(302)
+            self.send_header('Location', '/slow-download')
+            self.end_headers()
+            return
+        if path in ('/hold-downloads', '/release-downloads'):
+            if path == '/hold-downloads':
+                Fixture.release_download.clear()
+            else:
+                Fixture.release_download.set()
+            self.send_response(204)
+            self.end_headers()
+            return
         if path == '/tone.wav':
             buffer = io.BytesIO()
             with wave.open(buffer, 'wb') as audio:

@@ -274,7 +274,7 @@ window.updateState = state => {
  const previous=currentState;
  currentState=state;
  const tabIds=new Set(state.tabs.map(tab=>tab.id));
- if(previous.tabs.some(tab=>!tabIds.has(tab.id))) showToast('Tab closed',true);
+ if(previous.tabs.some(tab=>!tabIds.has(tab.id)&&(state.closed_tabs||[]).some(closed=>closed.id===tab.id))) showToast('Tab closed',true);
  syncCollapsed();
  $('btn-toggle-sidebar').setAttribute('aria-expanded',String(!state.sidebar_collapsed));
  $('btn-toggle-sidebar').setAttribute('aria-label',state.sidebar_collapsed?'Expand sidebar':'Collapse sidebar');

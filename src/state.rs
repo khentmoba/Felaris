@@ -49,6 +49,10 @@ pub struct Tab {
     pub is_playing_audio: bool,
     #[serde(default)]
     pub is_muted: bool,
+    #[serde(skip)]
+    pub opener: Option<usize>,
+    #[serde(skip)]
+    pub document_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -130,6 +134,8 @@ impl BrowserState {
             has_capture: false,
             is_playing_audio: false,
             is_muted: false,
+            opener: None,
+            document_url: None,
         };
 
         Self {
@@ -289,6 +295,8 @@ impl BrowserState {
             has_capture: false,
             is_playing_audio: false,
             is_muted: false,
+            opener: Some(self.active_tab_id),
+            document_url: None,
         };
         self.activity_clock = new_tab.last_active;
         self.tabs.push(new_tab);
@@ -343,6 +351,39 @@ impl BrowserState {
         Some(self.active_tab_id)
     }
 
+    pub fn discard_download_tab(&mut self, id: usize) -> bool {
+        let Some(index) = self
+            .tabs
+            .iter()
+            .position(|tab| tab.id == id && tab.document_url.is_none() && !tab.is_pinned)
+        else {
+            return false;
+        };
+        let removed = self.tabs.remove(index);
+        if self.active_tab_id == id {
+            let replacement = removed
+                .opener
+                .filter(|opener| {
+                    self.tabs
+                        .iter()
+                        .any(|tab| tab.id == *opener && tab.workspace_id == removed.workspace_id)
+                })
+                .or_else(|| {
+                    self.tabs
+                        .iter()
+                        .rfind(|tab| tab.workspace_id == removed.workspace_id)
+                        .map(|tab| tab.id)
+                });
+            if let Some(replacement) = replacement {
+                self.switch_tab(replacement);
+            } else {
+                self.active_workspace_id = removed.workspace_id;
+                self.add_tab(None, false);
+            }
+        }
+        true
+    }
+
     pub fn restore_closed_tab(&mut self) -> Option<usize> {
         if let Some(mut tab) = self.closed_tabs.pop() {
             tab.id = self.next_tab_id;
@@ -355,6 +396,8 @@ impl BrowserState {
             tab.pending_url = None;
             tab.has_capture = false;
             tab.is_playing_audio = false;
+            tab.opener = None;
+            tab.document_url = None;
             let id = tab.id;
             self.active_workspace_id = tab.workspace_id;
             self.tabs.push(tab);
@@ -650,6 +693,8 @@ impl BrowserState {
             has_capture: false,
             is_playing_audio: false,
             is_muted: false,
+            opener: Some(tab_id),
+            document_url: None,
         };
         self.tabs.insert(index + 1, copy);
         self.switch_tab(id);
@@ -916,6 +961,43 @@ impl BrowserState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn download_tab_cleanup_returns_to_opener_without_undo_or_focus_theft() {
+        let mut state = BrowserState::new();
+        let source = state.add_tab(Some("https://example.com/source".into()), false);
+        let other = state.add_tab(Some("https://example.com/other".into()), false);
+        state.switch_tab(source);
+        let download = state.add_tab(Some("https://example.com/file".into()), false);
+        assert!(state.discard_download_tab(download));
+        assert_eq!(state.active_tab_id, source);
+        assert!(state.closed_tabs.is_empty());
+        assert!(!state.can_restore_closed_tab);
+        let background = state.add_tab(Some("https://example.com/file".into()), false);
+        state.switch_tab(other);
+        assert!(state.discard_download_tab(background));
+        assert_eq!(state.active_tab_id, other);
+        let document = state.add_tab(Some("https://example.com/page".into()), false);
+        state
+            .tabs
+            .iter_mut()
+            .find(|tab| tab.id == document)
+            .unwrap()
+            .document_url = Some("https://example.com/page".into());
+        assert!(!state.discard_download_tab(document));
+        let pinned = state.add_tab(Some("https://example.com/file".into()), true);
+        assert!(!state.discard_download_tab(pinned));
+        let private = state.open_private_tab();
+        assert!(state.discard_download_tab(private));
+        assert!(state.is_private(state.active_tab_id));
+        assert!(
+            !state
+                .for_session()
+                .tabs
+                .iter()
+                .any(|tab| tab.id == download || tab.id == background)
+        );
+    }
 
     #[test]
     fn reordering_stays_within_workspace_and_pin_group_and_survives_restore() {

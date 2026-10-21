@@ -90,6 +90,8 @@ Shortcuts work while browser chrome or page content has focus. In pages they are
 
 Drag sidebar tabs to reorder them within their pinned or ordinary group, or focus a tab and press `Alt+Shift+Up/Down`. Audio-playing tabs show a speaker button; click it to mute or unmute. The tab menu also offers mute controls, including for silent tabs, and mute choices survive sleep and restart.
 
+Links that open only a download dismiss their empty tab and return to the originating page while the transfer continues. Downloads started from an existing page keep that page, its address, and its form state. Active and resumable downloads retain their native owner in the background; at most one completed download owner remains for the Downloads dialog. Automatically dismissed download tabs do not enter recently closed tabs or trigger Undo.
+
 Click the connection icon beside a website address for its full origin, connection information, and **Clear cookies and site data**. Clearing requires confirmation, clears the selected origin's cookies and stored data, and reloads that page. Regular workspaces share the cleared data; cookies shared with related subdomains may also be removed. Routine download feedback expires, while persistent messages can be expanded or dismissed in the compact feedback area.
 
 **Current engine limits:** Awake tabs preserve page state and navigation history. Sleeping tabs and restored sessions reload saved URLs; unsaved forms and per-tab history do not survive unloading or restart. Automatic sleeping uses conservative checks, but custom app state cannot always be detected; pin tabs whose state must be preserved.

@@ -51,7 +51,7 @@ Native playing-audio events show a speaker control in tab rows. Mute remains ava
 
 Address suggestions display the site's saved favicon, reusing a known icon from tabs or shortcuts for matching hosts, then trying the site's own `/favicon.ico`. Failed loads retain the suggestion-type icon. Search actions keep the search icon; internal targets do not fetch site icons. Icons preserve transparency and use no referrer.
 
-The address connection icon opens site controls with the complete origin, an HTTPS/HTTP explanation, and a two-step clear-data action. Clearing validates the active tab and origin, removes that origin's cookies and stored data, then reloads the matching page after completion. The confirmation explains shared workspace data and cookies shared with related subdomains. Permission decisions continue to ask each time.
+The address connection icon opens site controls with the complete origin, an HTTPS/HTTP explanation, and a two-step clear-data action. Clearing validates the active tab and origin, removes that origin's cookies and stored data, then reloads the matching page after completion. The confirmation explains shared workspace data and cookies shared with related subdomains. Permission decisions persist in the profile so granted or blocked sites do not prompt on repeat visits.
 
 Status and undo feedback share one compact area. Routine download completion and clear-data messages expire; persistent messages stay until dismissed and can be expanded to read the full text. Settings categories retain their text labels and accessible names at the minimum window size. Both History and Settings confirm clearing history.
 

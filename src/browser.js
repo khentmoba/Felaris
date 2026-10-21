@@ -13,7 +13,47 @@
     }
     return window.Felaris.searchUrl + encodeURIComponent(text);
   }
-  window.Felaris = { send, resolveAddress, navigate: url => send('navigate', { url }), searchUrl: 'https://search.brave.com/search?q=', searchName: 'Brave Search' };
+  function suggestions(value,state={},historyEntries=[]) {
+    const query=value.trim();
+    const needle=query.toLowerCase();
+    const target=Felaris.resolveAddress(query);
+    const options=[];
+    const seen=new Set();
+    const norm=u=>(u||'').replace(/\/+$/,'').toLowerCase();
+    if(target) {
+     const search=target===Felaris.searchUrl+encodeURIComponent(query);
+     options.push({title:query,detail:search?'Search with '+Felaris.searchName.replace(/ Search$/,''):'Open in a new tab',url:target,search});
+     seen.add(norm(target));
+    }
+    for(const tab of (state.tabs||[]).filter(tab=>!['felaris://newtab','felaris://blank'].includes(tab.url)&&(!needle||(tab.title+' '+tab.url).toLowerCase().includes(needle))).slice(0,6)) {
+     const workspace=(state.workspaces||[]).find(space=>space.id===tab.workspace_id);
+     options.push({title:tab.title||tab.url,detail:`Switch to tab${workspace?' · '+workspace.name:''} · ${tab.url}`,id:tab.id,url:tab.url,favicon:tab.favicon});
+     seen.add(norm(tab.url));
+    }
+    for(const entry of (state.bookmarks||[])) {
+     if(options.length>=8) break;
+     if(!entry?.url||seen.has(norm(entry.url))) continue;
+     if(needle&&!((entry.title||'')+' '+entry.url).toLowerCase().includes(needle)) continue;
+     seen.add(norm(entry.url));
+     options.push({title:entry.title||entry.url,detail:`Bookmark · ${entry.url}`,url:entry.url,bookmark:true});
+    }
+    for(const entry of historyEntries) {
+     if(options.length>=8) break;
+     if(!entry?.url||seen.has(norm(entry.url))) continue;
+     if(needle&&!((entry.title||'')+' '+entry.url).toLowerCase().includes(needle)) continue;
+     seen.add(norm(entry.url));
+     options.push({title:entry.title||entry.url,detail:`History · ${entry.url}`,url:entry.url,history:true});
+    }
+    for(const item of (state.shortcuts||[])) {
+     if(options.length>=8) break;
+     if(!item?.url||seen.has(norm(item.url))) continue;
+     if(needle&&!((item.title||'')+' '+item.url).toLowerCase().includes(needle)) continue;
+     seen.add(norm(item.url));
+     options.push({title:item.title||item.url,detail:`Shortcut · ${item.url}`,url:item.url,favicon:item.favicon,shortcut:true});
+    }
+    return options;
+  }
+  window.Felaris = { send, resolveAddress, suggestions, navigate: url => send('navigate', { url }), searchUrl: 'https://search.brave.com/search?q=', searchName: 'Brave Search' };
   const postShortcut = window.ipc?.postMessage.bind(window.ipc);
   const stringify = JSON.stringify;
   window.addEventListener('keydown', event => {

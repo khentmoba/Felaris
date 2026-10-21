@@ -32,7 +32,7 @@ pub fn allowed_url(value: &str) -> bool {
 pub fn is_internal(value: &str) -> bool {
     matches!(
         value,
-        "felaris://newtab" | "felaris://settings" | "felaris://history"
+        "felaris://newtab" | "felaris://blank" | "felaris://settings" | "felaris://history"
     )
 }
 

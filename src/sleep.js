@@ -2,6 +2,8 @@
   let edited = false;
   let beforeUnload = false;
   let captures = 0;
+  // Chromium only shows a beforeunload prompt after the user clicked or typed in the frame or one of its children.
+  let activated = false;
   let reported;
   const activeMedia = new Set();
   // Child frames report their own state to the top frame, which keeps the tab awake while any frame is busy.
@@ -13,13 +15,13 @@
       field.type === 'checkbox' || field.type === 'radio' ? field.checked !== field.defaultChecked
         : field.options ? [...field.options].some(option => option.selected !== option.defaultSelected)
           : field.value !== field.defaultValue);
-  const busy = () => edited || beforeUnload || Boolean(window.onbeforeunload) || captures > 0 || activeMedia.size > 0 || restored();
+  const busy = () => edited || (activated && (beforeUnload || Boolean(window.onbeforeunload))) || captures > 0 || activeMedia.size > 0 || restored();
   const report = () => {
     if (top) return;
-    const state = busy();
-    if (state === reported) return;
-    reported = state;
-    window.top.postMessage({ felarisFrameBusy: reported }, '*');
+    const state = { felarisFrameBusy: busy(), felarisFrameActivated: activated };
+    if (JSON.stringify(state) === reported) return;
+    reported = JSON.stringify(state);
+    window.top.postMessage(state, '*');
   };
   const listen = window.addEventListener.bind(window);
   if (top) listen('message', event => {
@@ -27,8 +29,10 @@
     event.stopImmediatePropagation();
     // The source is null once its frame is gone.
     if (event.source) frames.set(event.source, event.data.felarisFrameBusy);
+    if (event.data.felarisFrameActivated === true) activated = true;
   }, true);
   listen('load', report);
+  for (const type of ['pointerdown', 'keydown']) listen(type, event => { if (event.isTrusted) { activated = true; report(); } }, true);
   listen('input', () => { edited = true; report(); }, true);
   listen('change', () => { edited = true; report(); }, true);
   listen('play', event => { activeMedia.add(event.target); report(); }, true);

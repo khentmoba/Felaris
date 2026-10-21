@@ -982,6 +982,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         )?,
     );
     let mut palette_open = false;
+    let mut palette_shown = true;
     let mut palette_needs_open = false;
     let mut visible_id = None;
     let mut last_content_bounds = None;
@@ -1426,7 +1427,10 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             desktop::raise(&topbar);
         }
         let _ = palette.set_bounds(overlay_bounds);
-        let _ = palette.set_visible(palette_open);
+        if palette_shown != palette_open {
+            desktop::show(&palette, palette_open);
+            palette_shown = palette_open;
+        }
         if palette_open {
             desktop::raise(&palette);
             desktop::raise(&sidebar);

@@ -145,7 +145,7 @@ impl Prompt {
             pending: None,
             ready: false,
             dirty: false,
-            visible: false,
+            visible: true,
         })
     }
 
@@ -216,7 +216,7 @@ impl Prompt {
             if !visible {
                 let _ = self.view.evaluate_script("window.hidePermission()");
             }
-            let _ = self.view.set_visible(visible);
+            desktop::show(&self.view, visible);
             if !headless && visible {
                 let _ = self.view.focus();
             }

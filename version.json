@@ -1,6 +1,6 @@
 {
-  "version": "0.2.4",
-  "release_url": "https://github.com/khentmoba/Felaris/releases/tag/v0.2.4",
-  "download_url": "https://github.com/khentmoba/Felaris/releases/download/v0.2.4/felaris.exe",
+  "version": "0.3.0",
+  "release_url": "https://github.com/khentmoba/Felaris/releases/tag/v0.3.0",
+  "download_url": "https://github.com/khentmoba/Felaris/releases/download/v0.3.0/felaris.exe",
   "summary": "- Add search and browsing suggestions to Home and the sidebar address bar.\n- Remember dismissed Home recommendations.\n- Reduce memory use in hidden tabs and put idle tabs to sleep after 30 minutes.\n- Let tabs with idle embedded frames sleep while protecting active input and media.\n- Fix download completion tracking and keyboard input when waking sleeping tabs.\n- Show a larger standalone Felaris logo on Home."
 }

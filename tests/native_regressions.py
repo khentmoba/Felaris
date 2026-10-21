@@ -108,8 +108,8 @@ def main():
         message = json.dumps({'action': action, **payload})
         sidebar(f'window.ipc.postMessage({json.dumps(message)});true')
 
-    def content(url, expression):
-        result = subprocess.run(['node', str(Path(__file__).with_name('native_command.mjs')), str(content_port), expression, url],
+    def content(url, expression, text=None):
+        result = subprocess.run(['node', str(Path(__file__).with_name('native_command.mjs')), str(content_port), expression, url, *([text] if text else [])],
                                 timeout=20, capture_output=True, text=True, encoding='utf-8')
         if result.returncode:
             raise AssertionError(f'Content command failed:\n{result.stderr}')
@@ -302,7 +302,7 @@ def main():
                     pages = json.load(response)
                 assert len([page for page in pages if page['type'] == 'page']) == 1, 'restore must create only the active WebView'
                 latencies = [switch(1), switch(2)]
-                content(f'{origin}/capacity/2', "document.getElementById('note').value='protected draft';true")
+                content(f'{origin}/capacity/2', "document.getElementById('note').focus();true", 'protected draft')
                 latencies.append(switch(3))
                 assert content(f'{origin}/capacity/3', f"(async()=>{{window.media=new Audio('{origin}/tone.wav');media.muted=true;media.loop=true;document.body.append(media);await media.play();return !media.paused}})()")
                 content(f'{origin}/capacity/3', 'window.mediaMarker="retained playback";true')
@@ -312,10 +312,17 @@ def main():
                 loaded(origin + '/slow')
                 content(origin + '/slow', "document.getElementById('download').click();true")
                 wait(lambda snapshot: sidebar('currentState.active_downloads') == 1, 'capacity download starts')
-                latencies.extend(switch(id) for id in range(5, 31))
-                settled = wait(lambda snapshot: len(snapshot['tabs']) == count and sum(not tab['is_sleeping'] for tab in snapshot['tabs']) <= 12,
-                               f'{count} tabs settle to the live budget')
-                for id in (1, 2, 3, 4):
+                frame = origin.replace('127.0.0.1', 'localhost') + '/next'
+                for id in (5, 6):
+                    latencies.append(switch(id))
+                    assert content(f'{origin}/capacity/{id}', f"new Promise(r=>document.body.append(Object.assign(document.createElement('iframe'),{{src:'{frame}?{id}',onload:()=>r(true)}})))")
+                content(f'{frame}?5', "document.getElementById('note').focus();true", 'cross-origin draft')
+                latencies.extend(switch(id) for id in range(7, 31))
+                settled = wait(lambda snapshot: len(snapshot['tabs']) == count and sum(not tab['is_sleeping'] for tab in snapshot['tabs']) <= 12
+                               and next(tab for tab in snapshot['tabs'] if tab['id'] == 6)['is_sleeping'],
+                               f'{count} tabs settle to the live budget and the idle iframe tab sleeps')
+                assert content(f'{frame}?5', "document.getElementById('note').value") == 'cross-origin draft'
+                for id in (1, 2, 3, 4, 5):
                     assert not next(tab for tab in settled['tabs'] if tab['id'] == id)['is_sleeping'], f'protected tab {id} slept'
                 assert content(f'{origin}/capacity/2', "document.getElementById('note').value") == 'protected draft'
                 assert content(f'{origin}/capacity/3', 'window.mediaMarker') == 'retained playback'
@@ -345,7 +352,7 @@ def main():
                 assert next(tab for tab in recovered['tabs'] if tab['id'] == 1)['is_pinned']
                 print(f'Capacity {count}: {capacity[-1]}', flush=True)
             (artifacts / 'capacity.json').write_text(json.dumps(capacity, indent=2), encoding='utf-8')
-            checks.append('100/300/500-tab sessions restore lazily, bound actual WebViews, protect drafts/media/pins/downloads, wake sleepers, and recover after forced exit')
+            checks.append('100/300/500-tab sessions restore lazily, bound actual WebViews, protect drafts (including cross-origin iframe drafts)/media/pins/downloads, sleep idle iframe pages, wake sleepers, and recover after forced exit')
         (artifacts / 'results.json').write_text(json.dumps({'success': True, 'checks': checks}, indent=2), encoding='utf-8')
         print('\n'.join(checks))
         print(f'Headless regression tests passed. Evidence: {artifacts}')

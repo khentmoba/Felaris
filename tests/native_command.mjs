@@ -1,4 +1,4 @@
-const [port, expression, targetUrl] = process.argv.slice(2);
+const [port, expression, targetUrl, text] = process.argv.slice(2);
 let lastError;
 const deadline = Date.now() + 10000;
 while (Date.now() < deadline) {
@@ -11,7 +11,7 @@ while (Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, 100));
     continue;
   }
-  for (const target of targets.filter(target => target.type === 'page' && (!targetUrl || target.url === targetUrl))) {
+  for (const target of targets.filter(target => (target.type === 'page' || targetUrl && target.type === 'iframe') && (!targetUrl || target.url === targetUrl))) {
     const socket = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
     let id = 0;
@@ -21,14 +21,17 @@ while (Date.now() < deadline) {
       pending.get(message.id)?.(message);
       pending.delete(message.id);
     };
-    const evaluate = expression => new Promise(resolve => {
+    const send = (method, params) => new Promise(resolve => {
       const request = ++id;
       pending.set(request, resolve);
-      socket.send(JSON.stringify({ id: request, method: 'Runtime.evaluate', params: { expression, returnByValue: true, awaitPromise: true, userGesture: true } }));
+      socket.send(JSON.stringify({ id: request, method, params }));
     });
+    const evaluate = expression => send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, userGesture: true });
     const probe = await evaluate(targetUrl ? 'true' : "Boolean(document.getElementById('url-input') && window.ipc?.postMessage && window.updateState)");
     if (probe.result?.result?.value) {
       const response = await evaluate(expression);
+      // Type like a user into whatever the expression focused.
+      if (text) await send('Input.insertText', { text });
       socket.close();
       if (response.error || response.result?.exceptionDetails) throw Error(JSON.stringify(response));
       console.log(JSON.stringify(response.result.result.value ?? null));

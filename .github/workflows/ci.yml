@@ -29,6 +29,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Windows branding consistency
+        run: |
+          python -m pip install Pillow==12.2.0
+          python scripts/generate-icons.py --check
       - name: Release pipeline guards
         run: python -B tests/release.test.py
       - name: Incremental Windows version resources

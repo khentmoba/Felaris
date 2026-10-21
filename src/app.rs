@@ -18,6 +18,9 @@ use tao::{
 };
 use wry::{NewWindowResponse, PageLoadEvent, Rect, WebContext, WebView, WebViewBuilder};
 
+/// Hidden tabs past this sleep even under the live-WebView budget, releasing their renderer.
+const IDLE_SLEEP: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Command {
@@ -981,11 +984,13 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         )?,
     );
     let mut palette_open = false;
+    let mut palette_shown = true;
     let mut palette_needs_open = false;
     let mut visible_id = None;
     let mut last_content_bounds = None;
     let mut last_sidebar_state = String::new();
     let mut sleep_pending = HashSet::new();
+    let mut hidden_at: HashMap<usize, std::time::Instant> = HashMap::new();
     let mut focus_address = false;
     let mut downloads: HashMap<usize, usize> = HashMap::new();
     let mut check_busy = false;
@@ -1117,7 +1122,8 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             }
                         }
                         let live: HashSet<_> = views.keys().copied().collect();
-                        for tab in state.sleep_candidates(&live, &downloads, 12) {
+                        let idle: HashSet<_> = hidden_at.iter().filter(|(_, at)| at.elapsed() >= IDLE_SLEEP).map(|(id, _)| *id).collect();
+                        for tab in state.sleep_candidates(&live, &idle, &downloads, 12) {
                             if !sleep_pending.insert((tab.id, tab.generation)) { continue; }
                             let (id, generation, last_active, url) = (tab.id, tab.generation, tab.last_active, tab.url.clone());
                             let checked = proxy.clone();
@@ -1136,7 +1142,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                     },
                     UserEvent::SleepChecked(id, generation, last_active, url, safe) => {
                         sleep_pending.remove(&(id, generation));
-                        if safe && views.len() > 12 && id != state.active_tab_id
+                        if safe && (views.len() > 12 || hidden_at.get(&id).is_some_and(|at| at.elapsed() >= IDLE_SLEEP)) && id != state.active_tab_id
                             && downloads.get(&id).copied().unwrap_or(0) == 0
                             && views.get(&id).is_some_and(desktop::quiet)
                             && let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id
@@ -1382,6 +1388,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             }
         }
         zooms.retain(|id, _| views.contains_key(id));
+        hidden_at.retain(|id, _| views.contains_key(id));
         state.zoom = zooms.get(&active_id).copied().unwrap_or(100);
         let now = std::time::Instant::now();
         let dt = if animating { now.duration_since(last_frame).as_secs_f64().min(0.05) } else { 0. };
@@ -1408,8 +1415,8 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             last_content_bounds = Some(geometry);
         }
         if visible_id != Some(active_id) || created {
-            if let Some(view) = visible_id.and_then(|id| views.get(&id)) { let _ = view.set_visible(false); }
-            if let Some(view) = views.get(&active_id) { let _ = view.set_visible(true); }
+            if let Some(id) = visible_id && let Some(view) = views.get(&id) { desktop::show(view, false); hidden_at.entry(id).or_insert(now); }
+            if let Some(view) = views.get(&active_id) { desktop::show(view, true); hidden_at.remove(&active_id); }
         }
         let physical = content_bounds.size.to_physical::<u32>(window.scale_factor());
         let radius = if window.is_maximized() || window.fullscreen().is_some() { 0 } else { (ui::CONTENT_RADIUS * window.scale_factor()) as i32 };
@@ -1422,7 +1429,10 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             desktop::raise(&topbar);
         }
         let _ = palette.set_bounds(overlay_bounds);
-        let _ = palette.set_visible(palette_open);
+        if palette_shown != palette_open {
+            desktop::show(&palette, palette_open);
+            palette_shown = palette_open;
+        }
         if palette_open {
             desktop::raise(&palette);
             desktop::raise(&sidebar);

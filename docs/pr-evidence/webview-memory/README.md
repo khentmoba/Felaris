@@ -39,6 +39,26 @@ The worst case is unchanged, so the cost is at most one 16 ms frame when switchi
 
 Before this change, sessions under 12 tabs never slept.
 
+## The hidden palette and permission prompt also get `Low` (10 tabs, two runs each)
+
+| Sample | Before | After |
+|---|---|---|
+| 1 tab | 247 / 437–442 | 226–228 / 441–445 |
+| 10 tabs, idle 60 s | 537 / 936–939 | 525–527 / 927–938 |
+
+UI renderers drop from 54–55 to 36 MiB at startup. Commit does not change. Tab load medians were
+149–169 ms across six runs, plus one 232 ms outlier, against 140–155 ms before. This change does not touch
+tab views. Paint-on-show max was 4.1–7 ms. The popup bar is left alone: it lives in its own hidden window
+and is never toggled.
+
+## Real sites: the sleep guards block nearly every page
+
+20 popular sites (Wikipedia, GitHub, YouTube, CNN, NYT, Reddit, and others), 30 s after loading:
+17 WebViews stayed live, over the 12 budget, at 2,458 MiB, and none of the 17 could sleep.
+15 had iframes (`window.frames.length`, 1 to 26 per page), two had script-set form values
+(CNN range slider, ESPN nav select), and Apple and GitHub failed for a reason the probe could not see
+(likely a `beforeunload` listener added through `addEventListener`). Not changed in this PR.
+
 ## Measured and not shipped
 
 - `--renderer-process-limit=1` for the UI environment: no change (807 vs 802 MiB), because site isolation

@@ -127,7 +127,7 @@ def main():
                 time.sleep(30)
                 print(second + 30, footprint(process.pid), flush=True)
             samples[f'{args.tabs} tabs idle {args.idle}s'] = footprint(process.pid)
-            tabs = sidebar('currentState.tabs')
+            tabs = [tab for tab in sidebar('currentState.tabs') if '.localhost:' in tab['url']]
             ids = [tab['id'] for tab in tabs]
             switches = [switch(id) for id in ids[-12:-1]]  # recent hidden tabs, normally still live
             time.sleep(1)

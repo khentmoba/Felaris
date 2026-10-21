@@ -2,5 +2,5 @@
   "version": "0.3.1",
   "release_url": "https://github.com/khentmoba/Felaris/releases/tag/v0.3.1",
   "download_url": "https://github.com/khentmoba/Felaris/releases/download/v0.3.1/felaris.exe",
-  "summary": "- Reorder tabs by dragging or using Alt+Shift+Up/Down keyboard shortcuts.\n- Mute and unmute tabs directly from the speaker icon in the sidebar.\n- Inspect HTTPS security and clear cookies or site data from the address bar lock icon.\n- Display site favicons in sidebar address bar suggestions.\n- Automatically dismiss empty tabs opened only for file downloads.\n- Regenerate high-resolution application and taskbar icons for Windows."
+  "summary": "- Reorder tabs by dragging or using Alt+Shift+Up/Down keyboard shortcuts.\n- Mute and unmute tabs directly from the speaker icon in the sidebar.\n- Inspect HTTPS security and clear cookies or site data from the address bar lock icon.\n- Remember site permission choices in your profile across visits.\n- Display site favicons in sidebar address bar suggestions.\n- Automatically dismiss empty tabs opened only for file downloads.\n- Regenerate high-resolution application and taskbar icons for Windows."
 }

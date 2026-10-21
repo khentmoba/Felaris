@@ -44,6 +44,11 @@ pub fn normalize_url(value: &str) -> Option<String> {
     matches!(url.scheme(), "http" | "https" | "file").then(|| url.into())
 }
 
+pub fn web_origin(value: &str) -> Option<String> {
+    let url = url::Url::parse(value).ok()?;
+    matches!(url.scheme(), "http" | "https").then(|| url.origin().ascii_serialization())
+}
+
 pub fn is_auth_url(value: &str) -> bool {
     let Ok(url) = url::Url::parse(value) else {
         return false;

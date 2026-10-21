@@ -1,0 +1,97 @@
+import assert from 'node:assert/strict';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { connect } from './native_cdp.mjs';
+
+async function until(probe, label) {
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    try { if (await probe()) return; }
+    catch (error) { if (!error.message.includes('Execution context was destroyed')) throw error; }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw Error('Timed out: ' + label);
+}
+
+export async function checkBrowserControls(sidebar, command, origin, port, artifacts) {
+  await command('create_profile', { name: 'Controls test' });
+  await until(() => sidebar.evaluate('currentState.workspaces.some(w=>w.name==="Controls test"&&w.id===currentState.active_workspace_id)'), 'workspace creation');
+  const workspace = await sidebar.evaluate('currentState.active_workspace_id');
+  const destination = await sidebar.evaluate('currentState.workspaces.find(w=>!w.private&&w.id!==currentState.active_workspace_id).id');
+  await command('new_tab', { url: origin + '/controls-a' });
+  const page = await connect(target => target.url === origin + '/controls-a', port);
+  await until(() => page.evaluate('document.readyState==="complete"'), 'controls page');
+  const a = await sidebar.evaluate('currentState.active_tab_id');
+  await page.evaluate(`document.body.insertAdjacentHTML('beforeend','<input id="preserved-draft" value="Keep this draft">');localStorage.setItem('controls','preserved');document.cookie='controls=preserved;path=/';true`);
+  await page.evaluate(`document.head.insertAdjacentHTML('beforeend','<link rel="icon" href="${origin}/assets/favicon.svg">');true`);
+  await until(()=>sidebar.evaluate(`currentState.tabs.find(t=>t.id===${a}).favicon===${JSON.stringify(origin+'/assets/favicon.svg')}`),'native site favicon captured');
+  await sidebar.evaluate(`window.focusAddress();const input=document.getElementById('url-input');input.value='controls';input.dispatchEvent(new Event('input'));true`);
+  await until(()=>sidebar.evaluate(`document.querySelector('#address-results .address-option-icon img')?.naturalWidth>0`),'address suggestion site logo loaded');
+  assert.equal(await sidebar.evaluate(`document.querySelector('#address-results .address-option-icon img').referrerPolicy`),'no-referrer');
+  if(artifacts) {
+    const screenshot=await sidebar.call('Page.captureScreenshot',{format:'png'});
+    await writeFile(join(artifacts,'address-suggestion-logos.png'),Buffer.from(screenshot.data,'base64'));
+  }
+  await sidebar.evaluate(`document.getElementById('url-input').blur();true`);
+  await command('new_tab', { url: origin + '/controls-b' });
+  await until(() => sidebar.evaluate(`currentState.tabs.some(t=>t.url===${JSON.stringify(origin + '/controls-b')}&&t.id===currentState.active_tab_id)`), 'second controls tab');
+  const b = await sidebar.evaluate('currentState.active_tab_id');
+  await command('reorder_tab', { id: b, target: a, after: false });
+  await until(() => sidebar.evaluate(`currentState.tabs.findIndex(t=>t.id===${b})<currentState.tabs.findIndex(t=>t.id===${a})`), 'native reorder');
+  await sidebar.evaluate(`document.querySelector('.tab-main[data-tab-id="${b}"]').focus();true`);
+  for (const type of ['keyDown','keyUp']) await sidebar.call('Input.dispatchKeyEvent',{type,key:'ArrowDown',windowsVirtualKeyCode:40,modifiers:9});
+  await until(() => sidebar.evaluate(`currentState.tabs.findIndex(t=>t.id===${a})<currentState.tabs.findIndex(t=>t.id===${b})`), 'native keyboard reorder');
+  await sidebar.evaluate(`document.getElementById('profiles').open=true;document.getElementById('rename-workspace').click();document.getElementById('profile-name').value='Research';document.getElementById('profile-form').requestSubmit();true`);
+  await until(() => sidebar.evaluate(`currentState.workspaces.some(w=>w.id===${workspace}&&w.name==='Research')`), 'workspace rename');
+  await command('toggle_mute', { id: a });
+  await until(() => sidebar.evaluate(`currentState.tabs.find(t=>t.id===${a}).is_muted`), 'native mute');
+  await page.call('Runtime.evaluate', { expression: `window.controlsAudio=new AudioContext();window.controlsTone=controlsAudio.createOscillator();controlsTone.connect(controlsAudio.destination);controlsTone.start();controlsAudio.resume();true`, userGesture: true });
+  await until(() => sidebar.evaluate(`currentState.tabs.find(t=>t.id===${a}).is_playing_audio`), 'native playing-audio event');
+  await sidebar.evaluate(`document.querySelector('.audio-toggle[data-tab-id="${a}"]').click();true`);
+  await until(() => sidebar.evaluate(`!currentState.tabs.find(t=>t.id===${a}).is_muted`), 'unmute control');
+  await command('toggle_mute', { id: a });
+  await page.evaluate('controlsTone.stop();controlsAudio.close();true');
+  await command('toggle_pin', { id: a });
+  await sidebar.evaluate(`document.getElementById('profiles').open=true;document.getElementById('delete-workspace').click();document.getElementById('workspace-destination').value='${destination}';document.getElementById('confirm-delete-workspace').click();true`);
+  await until(() => sidebar.evaluate(`!currentState.workspaces.some(w=>w.id===${workspace})&&currentState.tabs.find(t=>t.id===${a}).workspace_id===${destination}`), 'workspace deletion preserves tabs');
+  assert.equal(await page.evaluate('document.getElementById("preserved-draft").value'), 'Keep this draft');
+  assert.equal(await sidebar.evaluate(`currentState.tabs.find(t=>t.id===${a}).is_pinned`), true);
+
+  const otherOrigin = origin.replace('127.0.0.1', 'localhost');
+  assert.notEqual(otherOrigin, origin);
+  await command('new_tab', { url: otherOrigin + '/other-storage' });
+  const other = await connect(target => target.url === otherOrigin + '/other-storage', port);
+  await until(() => other.evaluate('document.readyState==="complete"'), 'other origin');
+  await other.evaluate(`localStorage.setItem('controls','keep-other');document.cookie='controls=keep-other;path=/';true`);
+  await command('switch_tab', { id: a });
+  await until(() => sidebar.evaluate(`currentState.active_tab_id===${a}`), 'site controls target');
+  await command('clear_site_data', { id: a, origin: otherOrigin });
+  assert.equal(await page.evaluate('localStorage.getItem("controls")'), 'preserved', 'mismatched origin must be rejected');
+  await sidebar.evaluate(`document.getElementById('security').click();true`);
+  assert.equal(await sidebar.evaluate('document.getElementById("site-origin").textContent'), origin);
+  if (artifacts) {
+    const screenshot = await sidebar.call('Page.captureScreenshot', { format: 'png' });
+    await writeFile(join(artifacts, 'site-controls.png'), Buffer.from(screenshot.data, 'base64'));
+  }
+  await sidebar.evaluate(`document.getElementById('clear-site').click();document.getElementById('cancel-clear-site').click();true`);
+  assert.equal(await page.evaluate('localStorage.getItem("controls")'), 'preserved');
+  await sidebar.evaluate(`document.getElementById('clear-site').click();document.getElementById('confirm-clear-site').click();true`);
+  await until(() => sidebar.evaluate(`currentState.update_status===${JSON.stringify('Site data cleared for ' + origin + '.')}`), 'native clear completion');
+  await until(() => page.evaluate('document.readyState==="complete"&&localStorage.getItem("controls")===null'), 'origin storage cleared and reloaded');
+  assert.equal(await page.evaluate('document.cookie.includes("controls=")'), false);
+  assert.equal(await other.evaluate('localStorage.getItem("controls")'), 'keep-other');
+  assert.equal(await other.evaluate('document.cookie.includes("controls=keep-other")'), true);
+  assert.equal(await sidebar.evaluate(`currentState.tabs.find(t=>t.id===${a}).is_muted`), true, 'mute survives reload');
+  await command('switch_tab',{id:b});
+  await until(()=>sidebar.evaluate(`currentState.active_tab_id===${b}`),'leave muted tab');
+  await command('toggle_sleep',{id:a});
+  await until(()=>sidebar.evaluate(`currentState.tabs.find(t=>t.id===${a}).is_sleeping`),'sleep muted tab');
+  await command('switch_tab',{id:a});
+  const awakened=await connect(target=>target.url===origin+'/controls-a',port);
+  await until(()=>awakened.evaluate('document.readyState==="complete"'),'wake muted tab');
+  await awakened.call('Runtime.evaluate',{expression:'window.recreatedAudio=new AudioContext();window.recreatedTone=recreatedAudio.createOscillator();recreatedTone.connect(recreatedAudio.destination);recreatedTone.start();recreatedAudio.resume();true',userGesture:true});
+  await until(()=>sidebar.evaluate(`currentState.tabs.find(t=>t.id===${a}).is_playing_audio`),'audio event from recreated view');
+  assert.equal(await sidebar.evaluate(`currentState.tabs.find(t=>t.id===${a}).is_muted`),true,'native mute is reapplied before loading a recreated page');
+  await awakened.evaluate('recreatedTone.stop();recreatedAudio.close();true');
+  console.log('Native tab ordering, workspace rename/delete with live draft retention, audio/mute events, and origin-scoped cookie/storage clearing passed.');
+}

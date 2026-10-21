@@ -46,6 +46,7 @@ def main():
 
             source = (tests / 'native_ui.mjs').read_text(encoding='utf-8')
             source = source.replace("from './native_cdp.mjs'", f'from {json.dumps((tests / "native_cdp.mjs").as_uri())}')
+            source = source.replace("from './native_controls.mjs'", f'from {json.dumps((tests / "native_controls.mjs").as_uri())}')
             menu_marker = '  const menuOpacity = await sidebar.evaluate('
             key_marker = "  await press(restored, 'B', 10);"
             command_marker = '  const command = '

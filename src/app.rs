@@ -76,6 +76,26 @@ pub enum Command {
         id: usize,
         workspace_id: usize,
     },
+    ReorderTab {
+        id: usize,
+        target: usize,
+        after: bool,
+    },
+    RenameWorkspace {
+        id: usize,
+        name: String,
+    },
+    DeleteWorkspace {
+        id: usize,
+        destination: usize,
+    },
+    ToggleMute {
+        id: usize,
+    },
+    ClearSiteData {
+        id: usize,
+        origin: String,
+    },
     FocusAddress,
     AddressSuggestions,
     CloseActiveTab,
@@ -170,6 +190,8 @@ struct ContentCommand {
 
 #[derive(Debug)]
 pub enum UserEvent {
+    Audio(usize, u64, bool, bool),
+    SiteDataCleared(usize, u64, String, Result<(), String>),
     Maintenance,
     SessionSaved(Result<(), String>),
     SleepChecked(usize, u64, u64, String, bool),
@@ -575,6 +597,9 @@ fn content(
     }
     let view = builder.build_as_child(window)?;
     desktop::attach(&view, id, generation, proxy.clone())?;
+    if let Some(tab) = state.tabs.iter().find(|tab| tab.id == id) {
+        let _ = desktop::mute(&view, tab.is_muted);
+    }
     if failed {
         view.load_html(include_str!("error.html"))?;
     } else {
@@ -1110,8 +1135,25 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         | Command::TogglePin { .. } | Command::CycleTab { .. } | Command::FocusAddress
                         | Command::OpenSettings | Command::OpenHistory | Command::DuplicateTab { .. }
                         | Command::MoveTabToWorkspace { .. } | Command::ExpandPopup { .. }
+                        | Command::ReorderTab { .. } | Command::RenameWorkspace { .. } | Command::DeleteWorkspace { .. } | Command::ToggleMute { .. }
                         | Command::ToggleBookmark { .. } | Command::NewPrivateTab));
                 match event {
+                    UserEvent::Audio(id, generation, playing, muted) => {
+                        if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id && tab.generation == generation) {
+                            tab.is_playing_audio = playing; tab.is_muted = muted;
+                        }
+                    },
+                    UserEvent::SiteDataCleared(id, generation, origin, result) => {
+                        state.update_status = Some(match result {
+                            Ok(()) => {
+                                if let Some(tab) = state.tabs.iter().find(|tab| tab.id == id && tab.generation == generation)
+                                    && profile::web_origin(tab.pending_url.as_ref().unwrap_or(&tab.url)).as_deref() == Some(&origin)
+                                    && let Some(view) = views.get(&id) { let _ = view.reload(); }
+                                format!("Site data cleared for {origin}.")
+                            },
+                            Err(error) => format!("Could not clear site data: {error}"),
+                        });
+                    },
                     UserEvent::Maintenance => {
                         let current_downloads = desktop::download_counts(&views);
                         let downloads_changed = current_downloads != downloads;
@@ -1291,6 +1333,30 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             Command::MoveTabToWorkspace { id, workspace_id } => {
                                 state.move_tab_to_workspace(id, workspace_id);
                             },
+                            Command::ReorderTab { id, target, after } => state.reorder_tab(id, target, after),
+                            Command::RenameWorkspace { id, name } => {
+                                if let Err(error) = state.rename_workspace(id, &name) { state.update_status = Some(error); }
+                            },
+                            Command::DeleteWorkspace { id, destination } => {
+                                if let Err(error) = state.delete_workspace(id, destination) { state.update_status = Some(error); }
+                            },
+                            Command::ToggleMute { id } => {
+                                if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id) {
+                                    let muted = !tab.is_muted;
+                                    match views.get(&id).map_or(Ok(()), |view| desktop::mute(view, muted)) {
+                                        Ok(()) => tab.is_muted = muted,
+                                        Err(error) => state.update_status = Some(format!("Could not change tab audio: {error}")),
+                                    }
+                                }
+                            },
+                            Command::ClearSiteData { id, origin } => {
+                                if let Some(tab) = state.active_tab().filter(|tab| tab.id == id
+                                    && profile::web_origin(tab.pending_url.as_ref().unwrap_or(&tab.url)).as_deref() == Some(&origin))
+                                    && let Some(view) = views.get(&id)
+                                    && let Err(error) = desktop::clear_site_data(view, id, tab.generation, &origin, proxy.clone()) {
+                                        state.update_status = Some(format!("Could not clear site data: {error}"));
+                                    }
+                            },
                             Command::CycleTab { backwards } => { state.cycle_tab(backwards); },
                             Command::FocusAddress => { state.sidebar_collapsed = false; focus_address = true; },
                             Command::AddressSuggestions => {
@@ -1372,6 +1438,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         state.active_downloads = downloads.values().sum();
         let awake: HashSet<_> = state.tabs.iter().filter(|tab| !tab.is_sleeping).map(|tab| tab.id).collect();
         views.retain(|id,_| awake.contains(id));
+        for tab in &mut state.tabs { if !views.contains_key(&tab.id) { tab.is_playing_audio = false; } }
         downloads.retain(|id, count| *count > 0 || awake.contains(id));
         sleep_pending.retain(|(id, _)| views.contains_key(id));
         let active_id = state.active_tab_id;

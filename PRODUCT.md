@@ -16,7 +16,7 @@ Everyday desktop navigation, web search, vertical tabs, and switching between Ge
 
 ## Capabilities and Constraints
 
-Preserve the existing Rust/wry/tao stack, sidebar, workspaces, new-tab shortcuts, tab restoration, and background-tab sleep controls. No new UI framework or external font/network dependency. Live tabs use independent WebViews and a shared persistent WebView2 profile. Tabs, workspaces, pins, and recent closed tabs are saved with backup recovery. Sleeping drops a page; waking or restarting reloads its saved URL. Native downloads, error recovery, site permission prompts, single-instance link handoff, and Windows default-browser registration are supported. Brave Search is the single search provider, explicitly chosen by the user. Search queries use `https://search.brave.com/search?q=` with URL encoding; suggestions remain local open tabs, with no remote autocomplete.
+Preserve the existing Rust/wry/tao stack, sidebar, workspaces, new-tab shortcuts, tab restoration, and background-tab sleep controls. No new UI framework or external font/network dependency. Live tabs use independent WebViews and a shared persistent WebView2 profile. Tabs, workspaces, pins, and recent closed tabs are saved with backup recovery. Sleeping drops a page; waking or restarting reloads its saved URL. Native downloads, error recovery, site permission prompts, single-instance link handoff, and Windows default-browser registration are supported. Brave Search is the single search provider, explicitly chosen by the user. Search queries use `https://search.brave.com/search?q=` with URL encoding; suggestions use open tabs, bookmarks, saved history, and shortcuts; no remote autocomplete is used.
 
 ## Brand Commitments
 

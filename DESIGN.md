@@ -55,6 +55,8 @@ The address connection icon opens site controls with the complete origin, an HTT
 
 Status and undo feedback share one compact area. Routine download completion and clear-data messages expire; persistent messages stay until dismissed and can be expanded to read the full text. Settings categories retain their text labels and accessible names at the minimum window size. Both History and Settings confirm clearing history.
 
+A download-only navigation with no committed document removes its unpinned empty tab and selects its surviving opener within the same workspace. The native download owner stays hidden until the transfer can be released; active/resumable owners and at most one completed owner remain available to Downloads. Existing documents, including Home, stay open and recover their committed address after a download navigation. Automatic cleanup never creates a recently closed tab or an Undo message.
+
 ## Motion
 
 The focal interaction is the floating search palette: each invocation resolves into focus over a dimmed page in 220ms, and exits in 100ms before the native overlay hides. A new invocation cancels a pending exit so stale dismiss/submit IPC cannot fire. Reduced-motion mode skips these spatial effects and never delays submission or cancellation.

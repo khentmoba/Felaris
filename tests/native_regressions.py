@@ -262,6 +262,9 @@ def main():
             assert (profile / 'smoke-download.txt').read_bytes() == b'x' * 65536
             subprocess.run(['node', str(Path(__file__).with_name('native_ui.mjs')), str(port), str(content_port), origin, str(artifacts)],
                            check=True, timeout=120)
+            subprocess.run(['node', str(Path(__file__).with_name('native_downloads.mjs')), str(port), str(content_port), origin, str(artifacts)],
+                           check=True, timeout=90)
+            checks.append('Download-only tabs close without cancelling transfers; source documents, drafts, redirects, and Home survive')
             checks.append('Native keyboard, pointer selection, site permission decisions, default browser state, and DOM checks at desktop and minimum sizes')
 
             source = next(tab['id'] for tab in sidebar('currentState.tabs') if tab['url'] == origin + '/next')

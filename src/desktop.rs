@@ -38,6 +38,10 @@ pub fn download_counts(
     counts
 }
 
+pub fn download_hosts() -> std::collections::HashSet<usize> {
+    DOWNLOADS.with_borrow(|downloads| downloads.iter().map(|(id, _)| *id).collect())
+}
+
 pub fn is_default_browser() -> bool {
     #[cfg(windows)]
     {
@@ -446,7 +450,7 @@ pub fn attach(
         )?;
         let download_proxy = proxy.clone();
         webview.cast::<ICoreWebView2_4>()?.add_DownloadStarting(
-            &DownloadStartingEventHandler::create(Box::new(move |_, args| {
+            &DownloadStartingEventHandler::create(Box::new(move |view, args| {
                 if let Some(args) = args {
                     let operation = args.DownloadOperation()?;
                     let complete = download_proxy.clone();
@@ -458,6 +462,8 @@ pub fn attach(
                                 let _ = complete.send_event(UserEvent::DownloadsChanged);
                                 if state != COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS {
                                     let _ = complete.send_event(UserEvent::DownloadFinished(
+                                        id,
+                                        generation,
                                         state == COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED,
                                     ));
                                 }
@@ -467,6 +473,15 @@ pub fn attach(
                         &mut 0,
                     )?;
                     DOWNLOADS.with_borrow_mut(|downloads| downloads.push((id, operation)));
+                    let mut source = PWSTR::null();
+                    let document = view
+                        .and_then(|view| view.Source(&mut source).ok().map(|_| take_pwstr(source)));
+                    let blank = document
+                        .as_deref()
+                        .is_some_and(|url| url.is_empty() || url == "about:blank");
+                    let document = document.and_then(|url| crate::profile::normalize_url(&url));
+                    let _ = download_proxy
+                        .send_event(UserEvent::DownloadStarted(id, generation, blank, document));
                     let _ = download_proxy.send_event(UserEvent::DownloadsChanged);
                 }
                 Ok(())

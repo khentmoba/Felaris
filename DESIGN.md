@@ -22,6 +22,7 @@ User-requested black theme: sidebar `#101011`, page `#0c0c0e`, neutral accent `#
 - The sidebar stays above the search overlay, retaining hover and clickable New tab controls. Opening search does not count as leaving the sidebar; moving the pointer away still hides a floating sidebar after its normal delay.
 
 - Blurred HTTPS addresses display the complete hostname; focus exposes and selects the full URL. HTTP keeps its scheme visible. State updates must not overwrite an in-progress address edit or discard a focused tab button.
+- The sidebar address field shows local suggestions for open tabs, bookmarks, history, and shortcuts on focus and while typing. Arrow keys and pointer hover select a result; Enter or a click switches to an existing tab or navigates the current tab. Escape or leaving the field dismisses the list. IME composition never submits a draft.
 - Pinning is workspace-scoped and protects a tab from Close Others. Closing others affects only the current workspace and retains restoration history.
 - Search filters tab titles and URLs within the selected workspace; Escape clears the filter and returns focus to its trigger.
 - The compact rail uses title tooltips. Opening its actions menu expands the rail first rather than clipping a menu into a narrow WebView. Ctrl+L also expands it and focuses the address field.

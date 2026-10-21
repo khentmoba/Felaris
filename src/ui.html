@@ -18,6 +18,14 @@ svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7;
 .address { position:relative; display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:10px; min-height:42px; padding:0 10px; }
 .address:focus-within { border-color:var(--accent); } #btn-bookmark[aria-pressed="true"] svg { fill:currentColor; color:var(--accent); } #security.insecure { color:#f2b8b5; } .address>svg { color:var(--muted); width:16px; } #url-input:focus-visible { outline:none; } #url-input { width:100%; height:40px; outline:0; border:0; background:transparent; font-size:12px; user-select:text; } .address .icon { width:26px; height:28px; } .address .icon svg { width:14px; }
 .workspace-heading { display:flex; align-items:center; gap:9px; padding:8px 4px 0; } .workspace-heading svg { width:16px; color:var(--accent); } #workspace-name { font-weight:600; flex:1; } .count { color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+.address-results { position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:20; max-height:min(360px,calc(100vh - 130px)); overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:var(--line) transparent; padding:4px; background:var(--surface); border:1px solid var(--line); border-radius:10px; }
+.address-option { display:flex; align-items:center; gap:8px; padding:10px 8px; border-radius:6px; cursor:pointer; }
+.address-option[aria-selected="true"] { background:var(--active); }
+.address-option svg { width:16px; height:16px; color:var(--muted); }
+.address-option-text { min-width:0; display:flex; flex-direction:column; gap:3px; }
+.address-option-title,.address-option-detail { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.address-option-title { font-size:12px; } .address-option-detail { font-size:11px; color:var(--muted); }
+@media(forced-colors:active) { .address-option[aria-selected="true"] { outline:1px solid Highlight; } }
 .tab-tools { display:flex; gap:4px; align-items:center; } .new-tab { flex:1; display:flex; gap:10px; align-items:center; height:36px; color:var(--muted); text-align:left; padding:0 10px; } .new-tab svg { width:16px; } kbd { font:11px "Segoe UI",sans-serif; color:var(--muted); } .new-tab kbd { margin-left:auto; }
 #tab-search { width:100%; background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:9px 10px; outline-offset:0; }
 [hidden] { display:none!important; }
@@ -86,9 +94,10 @@ button:active:not(:disabled),summary:active { transform:scale(.96); }
 </nav>
 <form class="address" id="address-form" aria-label="Address bar">
 <svg id="security" role="img" aria-label="Search"><use href="#search"/></svg>
-<input id="url-input" aria-label="Search or enter address" placeholder="Search or enter address" autocomplete="off" spellcheck="false">
+<input id="url-input" role="combobox" aria-autocomplete="list" aria-controls="address-results" aria-expanded="false" aria-label="Search or enter address" placeholder="Search or enter address" autocomplete="off" spellcheck="false">
 <button type="button" class="icon" id="btn-bookmark" title="Bookmark this page (Ctrl+D)" aria-label="Bookmark this page" aria-pressed="false"><svg><use href="#star"/></svg></button>
 <button type="button" class="icon" id="btn-copy-url" title="Copy address" aria-label="Copy address"><svg><use href="#copy"/></svg></button>
+<div id="address-results" class="address-results" role="listbox" aria-label="Address suggestions" hidden></div>
 </form>
 <div class="workspace-heading"><svg aria-hidden="true"><use id="workspace-icon" href="#home"/></svg><span id="workspace-name">General</span><span class="count" id="tab-count">1 tab</span></div>
 <div class="tab-tools"><button class="new-tab" id="btn-add-tab" title="New tab (Ctrl+T)" aria-label="New tab"><svg><use href="#plus"/></svg><span>New tab</span><kbd>Ctrl T</kbd></button><button class="icon" id="btn-search-tabs" title="Search tabs" aria-label="Search tabs" aria-expanded="false"><svg><use href="#search"/></svg></button></div>
@@ -239,6 +248,7 @@ window.updateState = state => {
  $('app-reopen').disabled=!state.can_restore_closed_tab;
  $('zoom-level').textContent=(state.zoom||100)+'%';
  const active=activeTab();
+ if(previous.active_tab_id!==state.active_tab_id) closeAddressResults();
  if(document.activeElement!==$('url-input') || previous.active_tab_id!==state.active_tab_id) $('url-input').value=displayAddress(active?.url);
  const scheme=(()=>{ try { return new URL(active?.url).protocol; } catch { return ''; } })();
  const [securityIcon,securityLabel]=scheme==='https:'?['lock','Connection is secure']:scheme==='http:'?['warn','Not secure: this site does not use HTTPS']:['search','Search'];
@@ -281,10 +291,69 @@ window.focusAddress=()=>{ let tries=0; const focus=()=>{ $('url-input').focus();
 for(const [id,action] of Object.entries({'btn-back':'back','btn-forward':'forward','btn-reload':'reload','btn-add-tab':'new_tab','btn-toggle-sidebar':'toggle_sidebar','btn-reopen-tab':'restore_closed_tab'})) $(id).onclick=()=>Felaris.send(action);
 $('btn-reload').onclick=()=>Felaris.send(currentState.is_loading?'stop':'reload');
 $('btn-home').onclick=()=>Felaris.navigate('felaris://newtab');
-$('address-form').onsubmit=e=>{ e.preventDefault(); const url=Felaris.resolveAddress($('url-input').value); if(url) { Felaris.navigate(url); $('url-input').blur(); } };
-$('url-input').onfocus=()=>{ const active=activeTab(); if(!$('url-input').value || $('url-input').value===displayAddress(active?.url)) $('url-input').value=active?.url==='felaris://newtab'?'':active?.url||''; $('url-input').select(); };
-$('url-input').onblur=()=>{ $('url-input').value=displayAddress(activeTab()?.url); };
-$('url-input').onkeydown=e=>{ if(e.key==='Escape') { const active=activeTab(); $('url-input').value=active?.url==='felaris://newtab'?'':active?.url||''; $('url-input').blur(); } };
+let addressOptions=[],addressSelected=-1,addressHistory=[],addressComposing=false,addressQuery='';
+function closeAddressResults() {
+ $('address-results').hidden=true;
+ $('url-input').setAttribute('aria-expanded','false');
+ $('url-input').removeAttribute('aria-activedescendant');
+ addressOptions=[]; addressSelected=-1;
+}
+function selectAddressOption(index,scroll=true) {
+ addressSelected=index;
+ [...$('address-results').children].forEach((row,i)=>row.setAttribute('aria-selected',String(i===index)));
+ const row=$('address-results').children[index];
+ if(row) { $('url-input').setAttribute('aria-activedescendant',row.id); if(scroll) row.scrollIntoView({block:'nearest'}); }
+ else $('url-input').removeAttribute('aria-activedescendant');
+}
+function renderAddressResults() {
+ addressQuery=$('url-input').value;
+ addressOptions=Felaris.suggestions(addressQuery,currentState,addressHistory);
+ const results=$('address-results'); results.replaceChildren();
+ addressOptions.forEach((option,index)=>{
+  const row=document.createElement('div'); row.id='address-option-'+index; row.className='address-option'; row.setAttribute('role','option');
+  const text=document.createElement('span'); text.className='address-option-text';
+  const title=document.createElement('span'); title.className='address-option-title'; title.textContent=option.title;
+  const detail=document.createElement('span'); detail.className='address-option-detail'; detail.textContent=option.detail==='Open in a new tab'?'Open address':option.detail;
+  text.append(title,detail); row.append(icon(option.search?'search':option.id!=null?'sidebar':option.history?'clock':option.bookmark?'star':'globe'),text);
+  row.onpointermove=()=>selectAddressOption(index,false);
+  row.onmousedown=e=>e.preventDefault();
+  row.onclick=()=>{ selectAddressOption(index,false); submitAddress(); };
+  results.append(row);
+ });
+ results.hidden=!addressOptions.length;
+ $('url-input').setAttribute('aria-expanded',String(addressOptions.length>0));
+ selectAddressOption(addressQuery.trim()?0:-1,false);
+}
+window.updateAddressHistory=entries=>{
+ addressHistory=Array.isArray(entries)?entries:[];
+ if(document.activeElement===$('url-input')&&!addressComposing) {
+  const selected=addressOptions[addressSelected];
+  renderAddressResults();
+  if(selected) selectAddressOption(addressOptions.findIndex(option=>option.url===selected.url&&option.id===selected.id),false);
+ }
+};
+function submitAddress() {
+ if(addressComposing) return;
+ const option=addressQuery===$('url-input').value?addressOptions[addressSelected]:null;
+ const url=option?.url||Felaris.resolveAddress($('url-input').value);
+ if(!url) return;
+ if(option?.id!=null) Felaris.send('switch_tab',{id:option.id}); else Felaris.navigate(url);
+ $('url-input').blur(); closeAddressResults();
+}
+$('address-form').onsubmit=e=>{ e.preventDefault(); submitAddress(); };
+$('url-input').onfocus=()=>{ const active=activeTab(); if(!$('url-input').value || $('url-input').value===displayAddress(active?.url)) $('url-input').value=active?.url==='felaris://newtab'?'':active?.url||''; $('url-input').select(); renderAddressResults(); Felaris.send('address_suggestions'); };
+$('url-input').oninput=()=>{if(!addressComposing)renderAddressResults();};
+$('url-input').addEventListener('compositionstart',()=>{addressComposing=true;closeAddressResults();});
+$('url-input').addEventListener('compositionend',()=>{addressComposing=false;if(document.activeElement===$('url-input'))renderAddressResults();});
+$('url-input').onblur=()=>{ closeAddressResults(); $('url-input').value=displayAddress(activeTab()?.url); };
+$('url-input').onkeydown=e=>{
+ if(e.isComposing||addressComposing) return;
+ if(e.key==='Escape') { e.preventDefault(); $('url-input').blur(); }
+ else if(['ArrowDown','ArrowUp'].includes(e.key)) {
+  e.preventDefault(); if($('address-results').hidden)renderAddressResults();
+  if(addressOptions.length) selectAddressOption(addressSelected<0?(e.key==='ArrowDown'?0:addressOptions.length-1):(addressSelected+(e.key==='ArrowDown'?1:-1)+addressOptions.length)%addressOptions.length);
+ }
+};
 $('btn-copy-url').onclick=async()=>{ try { await navigator.clipboard.writeText(activeTab()?.url||''); showToast('Address copied'); } catch { window.focusAddress(); showToast('Could not copy. Select the address and press Ctrl+C.'); } };
 $('btn-search-tabs').onclick=()=>{ const show=$('tab-search').hidden; $('tab-search').hidden=!show; $('btn-search-tabs').setAttribute('aria-expanded',String(show)); if(show) $('tab-search').focus(); else { $('tab-search').value=''; renderTabs(); } };
 $('tab-search').oninput=renderTabs;

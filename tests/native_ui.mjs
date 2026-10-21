@@ -1,3 +1,4 @@
+import { checkBrowserControls } from './native_controls.mjs';
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -169,6 +170,7 @@ try {
         return null;
       }
     }, 'DOM fixture completion');
+    assert.ok(result.endsWith('checks passed'), `${width}x${height}, ${motion}: ${result}`);
     const checkCount = await fixture.evaluate('window.checkResults.length');
     assert.equal(result, `${checkCount} checks passed`, `${width}x${height}, ${motion}`);
     console.log(`${result}: ${width}x${height}, ${motion}`);
@@ -184,6 +186,15 @@ try {
       return { hidden: document.getElementById('set-default-browser').hidden, selected: document.getElementById('default-browser-status').textContent === 'Felaris is your default browser.' };
     })()`), { hidden: selected, selected });
   }
+  await settings.call('Emulation.setDeviceMetricsOverride', { width: 640, height: 480, deviceScaleFactor: 1, mobile: false });
+  assert.equal(await settings.evaluate('[...document.querySelectorAll(".nav-item")].every(button=>button.getAttribute("aria-label")&&getComputedStyle(button.querySelector("span")).display!=="none")'), true, 'narrow Settings categories retain visible and accessible names');
+  assert.equal(await settings.evaluate('document.documentElement.scrollWidth<=innerWidth'), true, 'Settings fits the minimum viewport');
+  assert.equal(await settings.evaluate(`document.querySelector('[data-section="search"] .note').textContent.includes('bookmarks, history, and shortcuts')`), true);
+  assert.equal(await settings.evaluate(`(() => {
+    let requested=0; const original=Felaris.send,originalConfirm=window.confirm;
+    try { Felaris.send=()=>requested++; window.confirm=()=>false; document.querySelector('[data-send="clear_history"]').click(); return requested===0; }
+    finally { Felaris.send=original; window.confirm=originalConfirm; }
+  })()`), true, 'cancelling Settings history confirmation keeps history');
   console.log('Default browser actions and settings reflect the detected Windows association and both UI states.');
   await command('open_history');
   const history = await connect(page => page.title === 'History and bookmarks', contentPort);
@@ -213,6 +224,7 @@ try {
     return document.querySelector('#list .site-icon img').src === '${origin}/favicon.ico';
   })()`), true);
   console.log('History and bookmarks show saved site icons, retry the site favicon, and keep a globe fallback for missing or invalid images.');
+  await checkBrowserControls(sidebar, command, origin, contentPort, artifacts);
 } catch (error) {
   if (artifacts) {
     try { await writeDiagnostics([chromePort, contentPort], artifacts, error); }

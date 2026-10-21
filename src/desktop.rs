@@ -153,6 +153,50 @@ pub fn quiet(view: &WebView) -> bool {
     }
 }
 
+pub fn mute(view: &WebView, muted: bool) -> Result<(), String> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_8;
+    use windows::core::Interface;
+    use wry::WebViewExtWindows;
+    unsafe {
+        view.webview()
+            .cast::<ICoreWebView2_8>()
+            .and_then(|view| view.SetIsMuted(muted))
+            .map_err(|error| error.to_string())
+    }
+}
+
+pub fn clear_site_data(
+    view: &WebView,
+    id: usize,
+    generation: u64,
+    origin: &str,
+    proxy: EventLoopProxy<UserEvent>,
+) -> Result<(), String> {
+    use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
+    use windows::core::HSTRING;
+    use wry::WebViewExtWindows;
+    let parameters = serde_json::json!({"origin": origin, "storageTypes": "cookies,local_storage,indexeddb,websql,file_systems,cache_storage,service_workers"}).to_string();
+    let origin = origin.to_owned();
+    unsafe {
+        view.webview()
+            .CallDevToolsProtocolMethod(
+                &HSTRING::from("Storage.clearDataForOrigin"),
+                &HSTRING::from(parameters),
+                &CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |result, _| {
+                    let result = result.map_err(|error| error.to_string());
+                    let _ = proxy.send_event(UserEvent::SiteDataCleared(
+                        id,
+                        generation,
+                        origin.clone(),
+                        result,
+                    ));
+                    Ok(())
+                })),
+            )
+            .map_err(|error| error.to_string())
+    }
+}
+
 pub fn message(title: &str, text: &str, confirm: bool) -> bool {
     if std::env::var_os("FELARIS_SMOKE_TEST").is_some() {
         eprintln!("{title}: {text}");
@@ -196,6 +240,48 @@ pub fn attach(
     let mut token = 0;
     let history = proxy.clone();
     unsafe {
+        if let Ok(audio) = webview.cast::<ICoreWebView2_8>() {
+            let playing_proxy = proxy.clone();
+            audio.add_IsDocumentPlayingAudioChanged(
+                &IsDocumentPlayingAudioChangedEventHandler::create(Box::new(move |view, _| {
+                    if let Some(view) = view
+                        && let Ok(audio) = view.cast::<ICoreWebView2_8>()
+                    {
+                        let (mut playing, mut muted) = (BOOL::default(), BOOL::default());
+                        audio.IsDocumentPlayingAudio(&mut playing)?;
+                        audio.IsMuted(&mut muted)?;
+                        let _ = playing_proxy.send_event(UserEvent::Audio(
+                            id,
+                            generation,
+                            playing.as_bool(),
+                            muted.as_bool(),
+                        ));
+                    }
+                    Ok(())
+                })),
+                &mut token,
+            )?;
+            let muted_proxy = proxy.clone();
+            audio.add_IsMutedChanged(
+                &IsMutedChangedEventHandler::create(Box::new(move |view, _| {
+                    if let Some(view) = view
+                        && let Ok(audio) = view.cast::<ICoreWebView2_8>()
+                    {
+                        let (mut playing, mut muted) = (BOOL::default(), BOOL::default());
+                        audio.IsDocumentPlayingAudio(&mut playing)?;
+                        audio.IsMuted(&mut muted)?;
+                        let _ = muted_proxy.send_event(UserEvent::Audio(
+                            id,
+                            generation,
+                            playing.as_bool(),
+                            muted.as_bool(),
+                        ));
+                    }
+                    Ok(())
+                })),
+                &mut token,
+            )?;
+        }
         let keys = proxy.clone();
         view.controller().add_AcceleratorKeyPressed(
             &AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {

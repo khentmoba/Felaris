@@ -212,6 +212,12 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout), [str(ROOT / 'scripts/build.py'), '--summary',
                          'Release notes with spaces', '--prepare', '--skip-discord', '--skip-github', '--dry-run'])
 
+    def test_windows_icons_match_canonical_branding(self):
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/generate-icons.py'), '--check'],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('match', result.stdout)
+
 
 if __name__ == '__main__':
     unittest.main()

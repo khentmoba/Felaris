@@ -77,7 +77,7 @@ const expectedAssets = [
   'logo.svg',
 ];
 assert.deepEqual(fs.readdirSync('assets').sort(), expectedAssets, 'assets/ must contain only canonical branding files');
-for (const required of ['scripts/build.py', 'scripts/notify_discord.py', '.agents/skills/discord-release/SKILL.md']) {
+for (const required of ['scripts/build.py', 'scripts/generate-icons.py', 'scripts/notify_discord.py', '.agents/skills/discord-release/SKILL.md']) {
   assert.ok(fs.existsSync(required), `Missing tracked release file: ${required}`);
 }
 assert.ok(

@@ -77,6 +77,7 @@ pub enum Command {
         workspace_id: usize,
     },
     FocusAddress,
+    AddressSuggestions,
     CloseActiveTab,
     CycleTab {
         backwards: bool,
@@ -1292,6 +1293,11 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             },
                             Command::CycleTab { backwards } => { state.cycle_tab(backwards); },
                             Command::FocusAddress => { state.sidebar_collapsed = false; focus_address = true; },
+                            Command::AddressSuggestions => {
+                                if let Ok(json) = serde_json::to_string(&history::all()) {
+                                    let _ = sidebar.evaluate_script(&format!("window.updateAddressHistory?.({json})"));
+                                }
+                            },
                             Command::OpenDownloads => {
                                 let id = downloads.iter().find(|(_, count)| **count > 0).map(|(id,_)| *id).unwrap_or(state.active_tab_id);
                                 if let Some(view) = views.get(&id) && let Err(error) = desktop::downloads(view) { state.update_status = Some(error); }

@@ -2,17 +2,42 @@
   let edited = false;
   let beforeUnload = false;
   let captures = 0;
+  let reported;
   const activeMedia = new Set();
+  // Child frames report their own state to the top frame, which keeps the tab awake while any frame is busy.
+  const frames = new Map();
+  const top = window.top === window;
+  // Back/forward navigations restore form drafts without firing input events.
+  const restored = () => performance.getEntriesByType('navigation')[0]?.type === 'back_forward'
+    && [...document.querySelectorAll('input,textarea,select')].some(field =>
+      field.type === 'checkbox' || field.type === 'radio' ? field.checked !== field.defaultChecked
+        : field.options ? [...field.options].some(option => option.selected !== option.defaultSelected)
+          : field.value !== field.defaultValue);
+  const busy = () => edited || beforeUnload || Boolean(window.onbeforeunload) || captures > 0 || activeMedia.size > 0 || restored();
+  const report = () => {
+    if (top) return;
+    const state = busy();
+    if (state === reported) return;
+    reported = state;
+    window.top.postMessage({ felarisFrameBusy: reported }, '*');
+  };
   const listen = window.addEventListener.bind(window);
-  listen('input', () => { edited = true; }, true);
-  listen('change', () => { edited = true; }, true);
-  listen('play', event => { activeMedia.add(event.target); }, true);
+  if (top) listen('message', event => {
+    if (typeof event.data?.felarisFrameBusy !== 'boolean') return;
+    event.stopImmediatePropagation();
+    // The source is null once its frame is gone.
+    if (event.source) frames.set(event.source, event.data.felarisFrameBusy);
+  }, true);
+  listen('load', report);
+  listen('input', () => { edited = true; report(); }, true);
+  listen('change', () => { edited = true; report(); }, true);
+  listen('play', event => { activeMedia.add(event.target); report(); }, true);
   // WebView2 can pause muted media when hidden; keep its playback state alive.
-  listen('pause', event => { if (!document.hidden) activeMedia.delete(event.target); }, true);
-  listen('ended', event => { activeMedia.delete(event.target); }, true);
+  listen('pause', event => { if (!document.hidden) activeMedia.delete(event.target); report(); }, true);
+  listen('ended', event => { activeMedia.delete(event.target); report(); }, true);
   const addListener = window.addEventListener;
   window.addEventListener = function(type, ...args) {
-    if (type === 'beforeunload') beforeUnload = true;
+    if (type === 'beforeunload') { beforeUnload = true; report(); }
     return addListener.call(this, type, ...args);
   };
   const devices = navigator.mediaDevices;
@@ -21,28 +46,27 @@
     const original = devices[method].bind(devices);
     devices[method] = (...args) => {
       captures++;
+      report();
       return original(...args).then(stream => {
         const tracks = stream.getTracks();
         captures--;
         for (const track of tracks) {
           captures++;
-          track.addEventListener('ended', () => { captures--; }, { once: true });
+          track.addEventListener('ended', () => { captures--; report(); }, { once: true });
         }
+        report();
         return stream;
-      }, error => { captures--; throw error; });
+      }, error => { captures--; report(); throw error; });
     };
   }
   Object.defineProperty(window, '__felarisCanSleep', { value: () => {
-    if (document.readyState !== 'complete' || edited || beforeUnload || window.onbeforeunload || captures || activeMedia.size || window.frames.length) return false;
+    if (document.readyState !== 'complete' || busy()) return false;
+    for (const [frame, frameBusy] of frames) {
+      if (frame.closed) frames.delete(frame);
+      else if (frameBusy) return false;
+    }
     for (const media of document.querySelectorAll('audio,video')) {
       if (!media.paused && !media.ended) return false;
-    }
-    for (const field of document.querySelectorAll('input,textarea,select')) {
-      if (field.type === 'checkbox' || field.type === 'radio') {
-        if (field.checked !== field.defaultChecked) return false;
-      } else if (field.options) {
-        if ([...field.options].some(option => option.selected !== option.defaultSelected)) return false;
-      } else if (field.value !== field.defaultValue) return false;
     }
     return true;
   } });

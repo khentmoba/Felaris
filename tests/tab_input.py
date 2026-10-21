@@ -99,7 +99,23 @@ try {{
  if(await page.evaluate('window.testClicks')!==1) throw Error('Woken tab did not receive a click');
 }} finally {{closeConnections();}}"""
                 subprocess.run(['node', '--input-type=module', '-e', click], check=True, timeout=20)
-            print(f'Tab sleep/wake releases native windows and preserves pointer input across six cycles. Evidence: {app.artifacts}')
+            frame = origin.replace('127.0.0.1', 'localhost') + '/next'
+            typing = f"""import {{ connect, closeConnections }} from './tests/native_cdp.mjs';
+try {{
+ const page=await connect(target=>target.url==={json.dumps(origin + '/')}, {app.content_port});
+ await page.evaluate(`new Promise(r=>{{const frame=document.createElement('iframe');frame.src={json.dumps(frame)};frame.style='position:fixed;top:0;left:0;width:400px;height:300px';frame.onload=r;document.body.prepend(frame);}})`);
+ await new Promise(r=>setTimeout(r,500));
+ if(await page.evaluate('__felarisCanSleep()')!==true) throw Error('An idle cross-origin iframe blocked sleep');
+ const child=await connect(target=>target.type==='iframe'&&target.url==={json.dumps(frame)}, {app.content_port});
+ const point=await child.evaluate(`(()=>{{const r=document.getElementById('note').getBoundingClientRect();return {{x:r.x+r.width/2,y:r.y+r.height/2}};}})()`);
+ for(const type of ['mouseMoved','mousePressed','mouseReleased']) await page.call('Input.dispatchMouseEvent',{{type,...point,...(type==='mouseMoved'?{{}}:{{button:'left',clickCount:1}})}});
+ await page.call('Input.insertText',{{text:'iframe draft'}});
+ if(await child.evaluate("document.getElementById('note').value")!=='iframe draft') throw Error('Typing did not reach the cross-origin iframe');
+ await new Promise(r=>setTimeout(r,500));
+ if(await page.evaluate('__felarisCanSleep()')!==false) throw Error('Typing in a cross-origin iframe did not block sleep');
+}} finally {{closeConnections();}}"""
+            subprocess.run(['node', '--input-type=module', '-e', typing], check=True, timeout=20)
+            print(f'Tab sleep/wake releases native windows and preserves pointer input across six cycles; cross-origin iframe typing blocks sleep. Evidence: {app.artifacts}')
     finally:
         app.close()
         server.shutdown()

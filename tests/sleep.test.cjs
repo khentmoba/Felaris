@@ -2,18 +2,53 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const script = fs.readFileSync('src/sleep.js', 'utf8');
-function page({ fields = [], media = [], frames = [], devices } = {}) {
+function page({ fields = [], media = [], devices, top, navigation = 'navigate' } = {}) {
   const listeners = {};
-  const window = { frames, addEventListener(type, listener) { listeners[type] = listener; } };
+  const window = { addEventListener(type, listener) { listeners[type] = listener; } };
+  window.top = top ?? window;
   const document = { readyState: 'complete', querySelectorAll: selector => selector === 'audio,video' ? media : fields };
-  vm.runInNewContext(script, { window, document, navigator: { mediaDevices: devices } });
+  const performance = { getEntriesByType: () => [{ type: navigation }] };
+  vm.runInNewContext(script, { window, document, performance, navigator: { mediaDevices: devices } });
   return { safe: window.__felarisCanSleep, window, document, listeners };
 }
 assert.equal(page().safe(), true);
-assert.equal(page({ frames: [{}] }).safe(), false);
-assert.equal(page({ fields: [{ value: 'draft', defaultValue: '' }] }).safe(), false);
-assert.equal(page({ fields: [{ type: 'checkbox', checked: true, defaultChecked: false }] }).safe(), false);
-assert.equal(page({ fields: [{ options: [{ selected: true, defaultSelected: false }] }] }).safe(), false);
+const scripted = [{ value: 'set by page', defaultValue: '' }, { type: 'checkbox', checked: true, defaultChecked: false },
+  { options: [{ selected: true, defaultSelected: false }] }];
+assert.equal(page({ fields: scripted }).safe(), true, 'values set by page scripts must not block sleep');
+for (const field of scripted) {
+  assert.equal(page({ fields: [field], navigation: 'back_forward' }).safe(), false, 'drafts restored by back/forward stay awake');
+}
+const host = page();
+const message = (data, source = { closed: false }) => {
+  let stopped = false;
+  host.listeners.message({ data, source, stopImmediatePropagation: () => { stopped = true; } });
+  return { source, stopped };
+};
+assert.equal(message('page message').stopped, false, 'page messages reach page listeners');
+const idleFrame = message({ felarisFrameBusy: false });
+assert.equal(idleFrame.stopped, true, 'frame reports stay invisible to page listeners');
+assert.equal(host.safe(), true, 'an idle iframe must not block sleep');
+const busyFrame = message({ felarisFrameBusy: true });
+assert.equal(host.safe(), false, 'a busy iframe keeps the tab awake');
+message({ felarisFrameBusy: false }, busyFrame.source);
+assert.equal(host.safe(), true, 'a frame that becomes idle releases the tab');
+message({ felarisFrameBusy: true }, busyFrame.source);
+busyFrame.source.closed = true;
+assert.equal(host.safe(), true, 'removed frames stop blocking sleep');
+message({ felarisFrameBusy: true }, null);
+assert.equal(host.safe(), true, 'reports from frames gone before delivery are ignored');
+const posted = [];
+const child = page({ top: { postMessage: data => posted.push(data.felarisFrameBusy) } });
+child.listeners.load();
+child.listeners.input();
+child.listeners.input();
+assert.deepEqual(posted, [false, true], 'frames report state changes once');
+const childMedia = {};
+const playing = page({ top: { postMessage: data => posted.push(data.felarisFrameBusy) } });
+posted.length = 0;
+playing.listeners.play({ target: childMedia });
+playing.listeners.ended({ target: childMedia });
+assert.deepEqual(posted, [true, false], 'frames report their own playback');
 assert.equal(page({ media: [{ paused: false, ended: false }] }).safe(), false);
 assert.equal(page({ media: [{ paused: true, ended: false }] }).safe(), true);
 const autoPaused = page();

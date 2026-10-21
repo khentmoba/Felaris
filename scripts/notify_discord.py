@@ -15,7 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_AVATAR = "https://cdn.discordapp.com/avatars/1561759821349523456/b3cd8c6639f5a31b7ac863859670c423.png"
+DEFAULT_AVATAR = "https://cdn.discordapp.com/avatars/1561759821349523456/311acf046e18671fb9c62e839bec09d1.png"
 
 
 def get_webhook_url(explicit_url=None):

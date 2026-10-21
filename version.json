@@ -1,6 +1,6 @@
 {
-  "version": "0.3.0",
-  "release_url": "https://github.com/khentmoba/Felaris/releases/tag/v0.3.0",
-  "download_url": "https://github.com/khentmoba/Felaris/releases/download/v0.3.0/felaris.exe",
-  "summary": "- Add search and browsing suggestions to Home and the sidebar address bar.\n- Remember dismissed Home recommendations.\n- Reduce memory use in hidden tabs and put idle tabs to sleep after 30 minutes.\n- Let tabs with idle embedded frames sleep while protecting active input and media.\n- Fix download completion tracking and keyboard input when waking sleeping tabs.\n- Show a larger standalone Felaris logo on Home."
+  "version": "0.3.1",
+  "release_url": "https://github.com/khentmoba/Felaris/releases/tag/v0.3.1",
+  "download_url": "https://github.com/khentmoba/Felaris/releases/download/v0.3.1/felaris.exe",
+  "summary": "- Reorder tabs by dragging or using Alt+Shift+Up/Down keyboard shortcuts.\n- Mute and unmute tabs directly from the speaker icon in the sidebar.\n- Inspect HTTPS security and clear cookies or site data from the address bar lock icon.\n- Display site favicons in sidebar address bar suggestions.\n- Automatically dismiss empty tabs opened only for file downloads.\n- Regenerate high-resolution application and taskbar icons for Windows."
 }

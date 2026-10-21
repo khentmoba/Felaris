@@ -426,7 +426,9 @@ fn open_popup(
 
 fn load(view: &WebView, state: &BrowserState, url: &str) -> wry::Result<()> {
     if url == "felaris://newtab" {
-        view.load_html(&start_page::get_start_page_html(&state.top_shortcuts()))
+        view.load_html(&start_page::get_start_page_html(state))
+    } else if url == "felaris://blank" {
+        view.load_html(&format!("<!DOCTYPE html><html lang=\"en\"><meta charset=\"UTF-8\"><title>New Tab</title><style>:root{{color-scheme:dark}}body{{margin:0;background:#0c0c0e}}</style><script>{}</script></html>", ui::script()))
     } else if url == "felaris://settings" {
         view.load_html(&ui::get_settings_html())
     } else if url == "felaris://history" {

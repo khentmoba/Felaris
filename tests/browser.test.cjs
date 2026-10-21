@@ -16,6 +16,18 @@ for (const [input, expected] of [
   ['rust & café #東京', 'https://search.brave.com/search?q=rust%20%26%20caf%C3%A9%20%23%E6%9D%B1%E4%BA%AC'],
   ['javascript:alert(1)', 'https://search.brave.com/search?q=javascript%3Aalert(1)'],
 ]) assert.equal(resolve(input), expected, input);
+context.Felaris=window.Felaris;
+const suggest=window.Felaris.suggestions;
+const sources={tabs:[{id:1,title:'YouTube tab',url:'https://youtube.com'}],bookmarks:[{title:'Duplicate',url:'https://youtube.com/'}],shortcuts:[{title:'YouTube',url:'https://youtube.com'},{title:'GitHub',url:'https://github.com'}]};
+const suggestions=suggest('you',sources,[{title:'YouTube Studio',url:'https://studio.youtube.com'}]);
+assert.equal(suggestions[0].url,'https://search.brave.com/search?q=you');
+assert.equal(suggestions[1].id,1);
+assert.equal(suggestions[2].title,'YouTube Studio');
+assert.equal(suggestions.length,3,'Deduplicate suggestions');
+assert.equal(suggest('',{shortcuts:sources.shortcuts})[0].title,'YouTube');
+assert.equal(suggest('no match',sources).length,1);
+assert.equal(suggest('github.com',{})[0].url,'https://github.com');
+assert.equal(suggest('',{shortcuts:Array.from({length:12},(_,i)=>({title:String(i),url:'https://example.com/'+i}))}).length,8);
 function press(key, modifiers = {}) {
   let prevented = false;
   keydown({ key, isTrusted: true, ...modifiers, preventDefault() { prevented = true; } });

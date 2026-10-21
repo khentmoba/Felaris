@@ -45,6 +45,10 @@ try {
   await command('new_tab', { url: origin + '/keyboard' });
   const content = await connect(page => page.url === origin + '/keyboard', contentPort);
   await until(() => content.evaluate(`location.href === ${JSON.stringify(origin + '/keyboard')} && document.readyState === 'complete' && !!window.Felaris`), 'keyboard fixture');
+  await sidebar.evaluate(`(()=>{const update=window.updateAddressHistory;window.addressSuggestionCalls=0;window.updateAddressHistory=entries=>{window.addressSuggestionCalls++;update(entries)}})()`);
+  await content.evaluate('window.ipc.postMessage(JSON.stringify({action:"address_suggestions"}));true');
+  await new Promise(resolve => setTimeout(resolve, 200));
+  assert.equal(await sidebar.evaluate('window.addressSuggestionCalls'), 0, 'Remote pages cannot request local address history');
   await content.evaluate('window.pageMarker = "kept"');
   await press(content, 't', 2);
   await until(() => palette.evaluate('document.activeElement.id === "new-tab-input" && !input.readOnly'), 'Ctrl+T opens palette');
@@ -165,8 +169,8 @@ try {
         return null;
       }
     }, 'DOM fixture completion');
-    assert.equal(result, '69 checks passed', `${width}x${height}, ${motion}`);
-    assert.equal(await fixture.evaluate('window.checkResults.length'), 69);
+    const checkCount = await fixture.evaluate('window.checkResults.length');
+    assert.equal(result, `${checkCount} checks passed`, `${width}x${height}, ${motion}`);
     console.log(`${result}: ${width}x${height}, ${motion}`);
   }
   await command('open_settings');

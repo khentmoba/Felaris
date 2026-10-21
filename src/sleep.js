@@ -19,8 +19,9 @@
   const report = () => {
     if (top) return;
     const state = { felarisFrameBusy: busy(), felarisFrameActivated: activated };
-    if (JSON.stringify(state) === reported) return;
-    reported = JSON.stringify(state);
+    const key = JSON.stringify(state);
+    if (key === reported) return;
+    reported = key;
     window.top.postMessage(state, '*');
   };
   const listen = window.addEventListener.bind(window);

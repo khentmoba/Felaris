@@ -14,6 +14,7 @@ from urllib.request import urlopen
 
 from native_smoke import Fixture
 from native_app import NativeApp
+from native_cache import check_cache_recovery
 from tab_recovery import check_recovery
 from tab_input import check_tab_input
 from update_restore import check_update_restore
@@ -65,6 +66,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--exe', default='target/debug/felaris.exe')
     args = parser.parse_args()
+    check_cache_recovery(args.exe)
     check_tab_input(args.exe)
     check_recovery(args.exe)
     check_update_restore(args.exe)

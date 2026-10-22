@@ -71,7 +71,8 @@
       else if (key === 'l' && !event.shiftKey) action = 'focus_address';
       else if (key === 'j' && !event.shiftKey) action = 'open_downloads';
       else if (key === 'h' && !event.shiftKey) action = 'open_history';
-      else if (key === 'r' && !event.shiftKey) action = 'reload';
+      else if (key === 'r') action = event.shiftKey ? 'reload_fresh' : 'reload';
+      else if (key === 'f5') action = 'reload_fresh';
       else if (key === 'tab') { action = 'cycle_tab'; payload = { backwards: event.shiftKey }; }
       else if (key === '=' || key === '+') { action = 'zoom'; payload = { delta: 10 }; }
       else if (key === '-' || key === '_') { action = 'zoom'; payload = { delta: -10 }; }
@@ -89,5 +90,16 @@
       event.preventDefault();
       postShortcut?.(stringify({ __proto__: null, action, ...payload, shortcut_token: '__SHORTCUT_TOKEN__' }));
     }
+  }, true);
+  let resourceFailureReported = false;
+  window.addEventListener('error', event => {
+    if (resourceFailureReported || !event.isTrusted || window.top !== window
+      || event.target?.tagName !== 'SCRIPT' || !event.target.src
+      || !navigator.serviceWorker?.controller) return;
+    const resource = new URL(event.target.src, location.href);
+    if (!['http:', 'https:'].includes(resource.protocol) || resource.origin !== location.origin) return;
+    resourceFailureReported = true;
+    postShortcut?.(stringify({ __proto__: null, action: 'resource_load_failed', document_url: location.href,
+      resource_url: resource.href, shortcut_token: '__SHORTCUT_TOKEN__' }));
   }, true);
 })();

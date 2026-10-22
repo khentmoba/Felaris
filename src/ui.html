@@ -92,6 +92,7 @@ button:active:not(:disabled),summary:active { transform:scale(.96); }
 <button data-action="new_tab"><span class="item"><svg><use href="#plus"/></svg>New tab</span><kbd>Ctrl T</kbd></button>
 <button data-action="new_private_tab"><span class="item"><svg><use href="#private"/></svg>New private tab</span><kbd>Ctrl Shift N</kbd></button>
 <button id="app-reopen" data-action="restore_closed_tab"><span class="item"><svg><use href="#reload"/></svg>Reopen closed tab</span></button>
+<button id="app-reload-fresh" data-action="reload_fresh" title="Refresh this site's cached files and reload. Keeps your sign-in and saved site data."><span class="item"><svg><use href="#reload"/></svg>Reload fresh site files</span><kbd>Ctrl Shift R</kbd></button>
 <hr>
 <button data-action="open_history"><span class="item"><svg><use href="#clock"/></svg>History and bookmarks</span><kbd>Ctrl H</kbd></button>
 <button data-action="open_downloads"><span class="item"><svg><use href="#download"/></svg>Downloads</span><kbd>Ctrl J</kbd></button>
@@ -306,6 +307,7 @@ window.updateState = state => {
  const [securityIcon,securityLabel]=scheme==='https:'?['lock','Connection is secure']:scheme==='http:'?['warn','Not secure: this site does not use HTTPS']:['search','Search'];
  $('security').querySelector('use').setAttribute('href','#'+securityIcon); $('security').setAttribute('aria-label','Site controls: '+securityLabel); $('security').title='Site controls: '+securityLabel; $('security').classList.toggle('insecure',securityIcon==='warn');
  $('security').disabled=!['https:','http:'].includes(scheme);
+ $('app-reload-fresh').disabled=!['https:','http:'].includes(scheme)||!!active?.is_loading;
  if(siteTarget&&(siteTarget.id!==active?.id||siteTarget.origin!==webOrigin(active?.pending_url||active?.url))) closeSitePanel(false);
  const bookmarked=!!active&&(state.bookmarks||[]).some(b=>b.url===active.url);
  $('btn-bookmark').disabled=!['https:','http:','file:'].includes(scheme);

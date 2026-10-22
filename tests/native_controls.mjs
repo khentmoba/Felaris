@@ -20,7 +20,7 @@ export async function checkBrowserControls(sidebar, command, origin, port, artif
   const destination = await sidebar.evaluate('currentState.workspaces.find(w=>!w.private&&w.id!==currentState.active_workspace_id).id');
   await command('new_tab', { url: origin + '/controls-a' });
   const page = await connect(target => target.url === origin + '/controls-a', port);
-  await until(() => page.evaluate('document.readyState==="complete"'), 'controls page');
+  await until(() => page.evaluate(`location.href===${JSON.stringify(origin + '/controls-a')} && document.readyState==="complete"`), 'controls page');
   const a = await sidebar.evaluate('currentState.active_tab_id');
   await page.evaluate(`document.body.insertAdjacentHTML('beforeend','<input id="preserved-draft" value="Keep this draft">');localStorage.setItem('controls','preserved');document.cookie='controls=preserved;path=/';true`);
   await page.evaluate(`document.head.insertAdjacentHTML('beforeend','<link rel="icon" href="${origin}/assets/favicon.svg">');true`);

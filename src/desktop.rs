@@ -176,24 +176,75 @@ pub fn clear_site_data(
     origin: &str,
     proxy: EventLoopProxy<UserEvent>,
 ) -> Result<(), String> {
+    let parameters = serde_json::json!({"origin": origin, "storageTypes": "cookies,local_storage,indexeddb,websql,file_systems,cache_storage,service_workers"}).to_string();
+    let origin = origin.to_owned();
+    devtools(
+        view,
+        "Storage.clearDataForOrigin",
+        &parameters,
+        move |result| {
+            let _ = proxy.send_event(UserEvent::SiteDataCleared(
+                id,
+                generation,
+                origin.clone(),
+                result,
+            ));
+        },
+    )
+}
+
+pub fn clear_site_files(
+    view: &WebView,
+    page: crate::recovery::Page,
+    proxy: EventLoopProxy<UserEvent>,
+) -> Result<(), String> {
+    let origin = crate::profile::web_origin(&page.url).ok_or("This page has no web origin.")?;
+    let parameters =
+        serde_json::json!({"origin": origin, "storageTypes": "cache_storage,service_workers"})
+            .to_string();
+    devtools(
+        view,
+        "Storage.clearDataForOrigin",
+        &parameters,
+        move |result| {
+            let _ = proxy.send_event(UserEvent::SiteFilesCleared(page.clone(), result));
+        },
+    )
+}
+
+pub fn reload_fresh(
+    view: &WebView,
+    page: crate::recovery::Page,
+    proxy: EventLoopProxy<UserEvent>,
+) -> Result<(), String> {
+    devtools(
+        view,
+        "Page.reload",
+        r#"{"ignoreCache":true}"#,
+        move |result| {
+            if let Err(error) = result {
+                let _ = proxy.send_event(UserEvent::FreshReloadFailed(page.clone(), error));
+            }
+        },
+    )
+}
+
+fn devtools(
+    view: &WebView,
+    method: &str,
+    parameters: &str,
+    completed: impl Fn(Result<(), String>) + 'static,
+) -> Result<(), String> {
     use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
     use windows::core::HSTRING;
     use wry::WebViewExtWindows;
-    let parameters = serde_json::json!({"origin": origin, "storageTypes": "cookies,local_storage,indexeddb,websql,file_systems,cache_storage,service_workers"}).to_string();
-    let origin = origin.to_owned();
     unsafe {
         view.webview()
             .CallDevToolsProtocolMethod(
-                &HSTRING::from("Storage.clearDataForOrigin"),
+                &HSTRING::from(method),
                 &HSTRING::from(parameters),
                 &CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |result, _| {
-                    let result = result.map_err(|error| error.to_string());
-                    let _ = proxy.send_event(UserEvent::SiteDataCleared(
-                        id,
-                        generation,
-                        origin.clone(),
-                        result,
-                    ));
+                    completed(result.map_err(|error| error.to_string()));
                     Ok(())
                 })),
             )

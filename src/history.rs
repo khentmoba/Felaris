@@ -121,6 +121,23 @@ pub fn clear() {
     changed();
 }
 
+/// Removes visits from the last `range_ms` milliseconds; `None` removes everything.
+pub fn clear_recent(range_ms: Option<u64>) {
+    let mut entries = log();
+    retain_older(
+        &mut entries,
+        range_ms.map(|range| now().saturating_sub(range)),
+    );
+    changed();
+}
+
+fn retain_older(entries: &mut Vec<Entry>, cutoff: Option<u64>) {
+    match cutoff {
+        Some(cutoff) => entries.retain(|entry| entry.time < cutoff),
+        None => entries.clear(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,6 +152,19 @@ mod tests {
         assert_eq!(entries[0].title, "B");
         assert_eq!(entries[0].time, 3);
         assert_eq!(entries[1].url, "https://a.test/");
+    }
+
+    #[test]
+    fn recent_clearing_keeps_older_visits() {
+        let mut entries = Vec::new();
+        for (n, time) in [10, 20, 30].into_iter().enumerate() {
+            record(&mut entries, &format!("https://{n}.test/"), "t", time);
+        }
+        retain_older(&mut entries, Some(20));
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].time, 10);
+        retain_older(&mut entries, None);
+        assert!(entries.is_empty());
     }
 
     #[test]

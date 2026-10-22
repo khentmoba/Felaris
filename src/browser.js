@@ -73,6 +73,7 @@
       else if (key === 'h' && !event.shiftKey) action = 'open_history';
       else if (key === 'r') action = event.shiftKey ? 'reload_fresh' : 'reload';
       else if (key === 'f5') action = 'reload_fresh';
+      else if (key === 'delete' && event.shiftKey) { action = 'open_settings'; payload = { section: 'privacy' }; }
       else if (key === 'tab') { action = 'cycle_tab'; payload = { backwards: event.shiftKey }; }
       else if (key === '=' || key === '+') { action = 'zoom'; payload = { delta: 10 }; }
       else if (key === '-' || key === '_') { action = 'zoom'; payload = { delta: -10 }; }
@@ -84,6 +85,7 @@
       else if (/^[1-9]$/.test(key)) { action = 'switch_profile'; payload = { index: Number(key) }; }
     } else if (!event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
       if (key === 'f5') action = 'reload';
+      else if (key === 'f9') action = 'toggle_reader';
       else if (key === 'f11') action = 'toggle_fullscreen';
     }
     if (action) {

@@ -19,10 +19,13 @@
 - **Native downloads:** WebView2 provides download progress and file actions; Felaris reports completion and warns before closing active downloads.
 - **Automatic tab sleeping:** Targets 12 live pages by unloading older background tabs. Pinned tabs stay awake, as do active downloads, playing media, capture sessions, and pages with detected edits or unload handlers. Pages with frames or failed safety checks stay awake too, so protected work can exceed the budget. Manual sleeping is still available. Selecting a sleeping tab reloads its saved URL; unsaved form state and page history do not survive sleeping or an app restart.
 - **Ad blocking built in:** uBlock Origin Lite is downloaded on first launch (SHA-256 checked) and loaded into every tab as a WebView2 extension. Turn it off in **Settings > Privacy and security**.
-- **Bookmarks:** Press `Ctrl + D` or the star in the address bar. Bookmarks appear first in new-tab suggestions and at the top of History, where you can remove them.
+- **Bookmarks:** Press `Ctrl + D` or the star in the address bar. Bookmarks appear first in new-tab suggestions and at the top of History, where you can remove them. **Settings > General > Import bookmarks** copies web bookmarks from Chrome, Edge, Brave, Vivaldi, Opera, or Opera GX on the same computer, reading their local bookmark files only.
+- **Reader view:** Press `F9` (or **Reader view** in the app menu) on an article to read it in a clean, dark serif layout with adjustable text size. It runs only when you ask for it, and closing it leaves the page exactly as it was.
+- **Tracking prevention and privacy controls:** WebView2's built-in tracking prevention (Basic, Balanced, or Strict) works with or without the ad blocker. Password saving is off by default, form autofill can be turned off, and `Ctrl + Shift + Delete` opens **Clear browsing data** for history, cookies and site data, cached files, or passwords and form data over the last hour, day, week, four weeks, or all time.
+- **Screenshots:** **Save screenshot** in the app menu saves the visible page as a PNG in `Pictures\Felaris`.
 - **Private tabs:** `Ctrl + Shift + N` (or **New private tab** in the app menu) opens a tab in the Private workspace. Its pages use an InPrivate WebView2 profile, and none of their tabs, history, or top sites are saved. Ad blocking may not apply to private pages.
 - **Connection security:** The address bar shows a lock for HTTPS pages and a warning for plain HTTP. WebView2 blocks pages with certificate errors.
-- **App menu and Settings:** The button at the top-left of the sidebar opens the app menu (new tab, downloads, print, zoom, settings, updates, exit). Settings (`felaris://settings`) covers search engine, ad blocker, updates, extensions, and shortcuts.
+- **App menu and Settings:** The button at the top-left of the sidebar opens the app menu (new tab, downloads, reader view, screenshot, print, zoom, settings, updates, exit). Settings (`felaris://settings`) covers search engine, tracking prevention, passwords and autofill, clearing browsing data, bookmark import, ad blocker, updates, extensions, and shortcuts.
 - **Built-in Upstream Sync & Conflict Inspector:** Includes an automated local tool and agent skill to fetch upstream sources, compare local changes, and simulate pre-merge conflict status in memory before applying.
 
 ---
@@ -74,6 +77,8 @@
 | `Ctrl + D` | Bookmark / unbookmark the current page |
 | `Ctrl + Shift + N` | Open a private tab |
 | `Ctrl + F` | Find in page |
+| `F9` | Open or close reader view |
+| `Ctrl + Shift + Delete` | Clear browsing data |
 | `Ctrl + J` | Open Downloads |
 | `Ctrl + +` / `Ctrl + -` / `Ctrl + 0` | Zoom in, zoom out, or reset zoom |
 | `F11` | Toggle full screen |

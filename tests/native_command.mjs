@@ -1,4 +1,4 @@
-const [port, expression, targetUrl, text] = process.argv.slice(2);
+const [port, expression, targetUrl, text, probeExpression] = process.argv.slice(2);
 let lastError;
 const deadline = Date.now() + 10000;
 while (Date.now() < deadline) {
@@ -27,7 +27,7 @@ while (Date.now() < deadline) {
       socket.send(JSON.stringify({ id: request, method, params }));
     });
     const evaluate = expression => send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, userGesture: true });
-    const probe = await evaluate(targetUrl ? 'true' : "Boolean(document.getElementById('url-input') && window.ipc?.postMessage && window.updateState)");
+    const probe = await evaluate(probeExpression || (targetUrl ? 'true' : "Boolean(document.getElementById('url-input') && window.ipc?.postMessage && window.updateState)"));
     if (probe.result?.result?.value) {
       const response = await evaluate(expression);
       // Type like a user into whatever the expression focused.

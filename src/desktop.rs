@@ -8,8 +8,8 @@ thread_local! {
     static DOWNLOADS: std::cell::RefCell<Vec<(usize, webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadOperation)>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-pub fn download_counts(
-    views: &std::collections::HashMap<usize, WebView>,
+pub fn download_counts<V>(
+    views: &std::collections::HashMap<usize, V>,
 ) -> std::collections::HashMap<usize, usize> {
     let mut counts = std::collections::HashMap::new();
     #[cfg(windows)]

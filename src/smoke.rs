@@ -1,5 +1,6 @@
 use crate::{
     app::{Command, UserEvent},
+    engine::TabView,
     profile,
     state::BrowserState,
 };
@@ -49,12 +50,15 @@ impl Smoke {
         let _ = proxy.send_event(UserEvent::Command(command));
     }
 
-    fn probe(&self, view: &WebView, script: &str, proxy: &EventLoopProxy<UserEvent>) {
+    fn probe(&self, view: &dyn TabView, script: &str, proxy: &EventLoopProxy<UserEvent>) {
         let phase = self.phase;
         let proxy = proxy.clone();
-        let _ = view.evaluate_script_with_callback(script, move |result| {
-            let _ = proxy.send_event(UserEvent::SmokeResult(phase, result == "true"));
-        });
+        let _ = view.evaluate_script_with_callback(
+            script,
+            Box::new(move |result| {
+                let _ = proxy.send_event(UserEvent::SmokeResult(phase, result == "true"));
+            }),
+        );
     }
 
     pub fn result(
@@ -116,7 +120,7 @@ impl Smoke {
     pub fn tick(
         &mut self,
         state: &BrowserState,
-        views: &HashMap<usize, WebView>,
+        views: &HashMap<usize, Box<dyn TabView>>,
         sidebar: &WebView,
         palette: &WebView,
         proxy: &EventLoopProxy<UserEvent>,
@@ -132,7 +136,7 @@ impl Smoke {
         let Some(tab) = state.active_tab() else {
             return false;
         };
-        let Some(view) = views.get(&tab.id) else {
+        let Some(view) = views.get(&tab.id).map(|view| &**view) else {
             return false;
         };
         if self.restore && self.phase == 0 {

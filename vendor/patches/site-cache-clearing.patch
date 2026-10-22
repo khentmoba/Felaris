@@ -1,0 +1,148 @@
+diff --git a/servo-net-traits/lib.rs b/servo-net-traits/lib.rs
+index 3fddbb5..742ba45 100644
+--- a/servo-net-traits/lib.rs
++++ b/servo-net-traits/lib.rs
+@@ -587,6 +587,16 @@ impl ResourceThreads {
+         let _ = receiver.recv();
+     }
+ 
++    /// Clears the cache entries for `sites` and their subdomains. Like [`Self::clear_cache`],
++    /// this is handled synchronously on the backend, so waiting cannot deadlock.
++    pub fn clear_cache_for_sites(&self, sites: Vec<String>) {
++        let (sender, receiver) = generic_channel::channel().unwrap();
++        let _ = self
++            .core_thread
++            .send(CoreResourceMsg::ClearCacheForSites(sites, sender));
++        let _ = receiver.recv();
++    }
++
+     pub fn cookies(&self) -> Vec<SiteDescriptor> {
+         let (sender, receiver) = generic_channel::channel().unwrap();
+         let _ = self.core_thread.send(CoreResourceMsg::ListCookies(sender));
+@@ -827,6 +837,9 @@ pub enum CoreResourceMsg {
+     GetCacheEntries(GenericSender<Vec<CacheEntryDescriptor>>),
+     /// Clear the network cache.
+     ClearCache(Option<GenericSender<()>>),
++    /// Clear the network cache entries for these sites (hosts or registrable domains) and
++    /// their subdomains.
++    ClearCacheForSites(Vec<String>, GenericSender<()>),
+     /// Send the service worker network mediator for an origin to CoreResourceThread
+     NetworkMediator(GenericSender<CustomResponseMediator>, ImmutableOrigin),
+     /// Message forwarded to file manager's handler
+diff --git a/servo-net/disk_cache.rs b/servo-net/disk_cache.rs
+index 3ebfbd4..a570b51 100644
+--- a/servo-net/disk_cache.rs
++++ b/servo-net/disk_cache.rs
+@@ -365,6 +365,38 @@ impl DiskCache {
+         }
+     }
+ 
++    /// Removes the entries whose key matches `matches`.
++    /// Should only be called in sync context and will panic.
++    pub(crate) fn remove_matching(&self, matches: impl Fn(&CacheKey) -> bool) {
++        let mut inner = self.inner.blocking_lock();
++        let mut keys_to_delete = vec![];
++        let mut removed_size = 0;
++        inner.entries.retain(|metadata| {
++            if !matches(&metadata.key) {
++                return true;
++            }
++            removed_size += metadata.size;
++            keys_to_delete.push(metadata.key.clone());
++            false
++        });
++        if keys_to_delete.is_empty() {
++            return;
++        }
++        inner.size = inner.size.saturating_sub(removed_size);
++        let keys_ref = keys_to_delete.iter().map(|key| key.as_ref());
++        let (query, values) = Query::delete()
++            .from_table(DiskCacheTable::Table)
++            .and_where(Expr::col(DiskCacheTable::Key).is_in(keys_ref))
++            .build_rusqlite(SqliteQueryBuilder);
++        if inner
++            .db
++            .execute(query.as_str(), &*values.as_params())
++            .is_err()
++        {
++            error!("Could not remove disk cache entries");
++        }
++    }
++
+     /// Clears the disk cache.
+     /// Should only be called in sync context and will panic.
+     #[servo_tracing::instrument(skip(self))]
+diff --git a/servo-net/http_cache.rs b/servo-net/http_cache.rs
+index 9782d51..336caa7 100644
+--- a/servo-net/http_cache.rs
++++ b/servo-net/http_cache.rs
+@@ -115,6 +115,20 @@ impl AsRef<str> for CacheKey {
+ }
+ 
+ impl CacheKey {
++    /// Whether this key's host is one of `sites` or a subdomain of one.
++    pub(crate) fn belongs_to_any(&self, sites: &[String]) -> bool {
++        let Some(host) = self.url.host_str() else {
++            return false;
++        };
++        let host = host.to_ascii_lowercase();
++        sites.iter().any(|site| {
++            let site = site.to_ascii_lowercase();
++            host == site ||
++                host.strip_suffix(site.as_str())
++                    .is_some_and(|prefix| prefix.ends_with('.'))
++        })
++    }
++
+     /// Create a cache-key from a request.
+     pub fn new(request: &Request) -> CacheKey {
+         CacheKey {
+@@ -1080,6 +1094,15 @@ impl HttpCache {
+         }
+     }
+ 
++    /// Clear the entries whose URL host is one of `sites` or a subdomain of one.
++    pub(crate) fn clear_sites(&self, sites: &[String]) {
++        let matches = |key: &CacheKey| key.belongs_to_any(sites);
++        self.entries.retain(|key, _| !matches(key));
++        if let Some(disk_cache) = &self.disk_cache {
++            disk_cache.remove_matching(matches);
++        }
++    }
++
+     /// Insert a response for `request` into the cache (used by tests that need direct access).
+     pub async fn store(&self, request: &Request, response: &Response) {
+         let guard = self.get_or_guard(CacheKey::new(request)).await;
+diff --git a/servo-net/resource_thread.rs b/servo-net/resource_thread.rs
+index e821d0c..c050449 100644
+--- a/servo-net/resource_thread.rs
++++ b/servo-net/resource_thread.rs
+@@ -646,6 +646,10 @@ impl ResourceChannelManager {
+                     sender.send_or_ignore(());
+                 }
+             },
++            CoreResourceMsg::ClearCacheForSites(sites, sender) => {
++                http_state.http_cache.clear_sites(&sites);
++                sender.send_or_ignore(());
++            },
+             CoreResourceMsg::ToFileManager(msg) => self.resource_manager.filemanager.handle(msg),
+             CoreResourceMsg::TotalSizeOfInFlightKeepAliveRecords(pipeline_id, sender) => {
+                 let total = self
+diff --git a/servo/network_manager.rs b/servo/network_manager.rs
+index 4f28a86..d24373f 100644
+--- a/servo/network_manager.rs
++++ b/servo/network_manager.rs
+@@ -76,4 +76,13 @@ impl NetworkManager {
+         self.public_resource_threads.clear_cache();
+         self.private_resource_threads.clear_cache();
+     }
++
++    /// Clears the network (HTTP) cache entries for the given sites (hosts or registrable
++    /// domains) and their subdomains, for both public and private browsing contexts.
++    pub fn clear_cache_for_sites(&self, sites: &[&str]) {
++        let sites: Vec<String> = sites.iter().map(|site| site.to_string()).collect();
++        self.public_resource_threads
++            .clear_cache_for_sites(sites.clone());
++        self.private_resource_threads.clear_cache_for_sites(sites);
++    }
+ }

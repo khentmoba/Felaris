@@ -17,10 +17,20 @@ struct Request {
     generation: u64,
     origin: String,
     kind: &'static str,
-    args: ICoreWebView2PermissionRequestedEventArgs,
-    deferral: Option<ICoreWebView2Deferral>,
+    answer: Answer,
     proxy: EventLoopProxy<UserEvent>,
 }
+
+enum Answer {
+    WebView2 {
+        args: ICoreWebView2PermissionRequestedEventArgs,
+        deferral: Option<ICoreWebView2Deferral>,
+    },
+    #[cfg(feature = "servo")]
+    Servo(Option<servo::PermissionRequest>),
+}
+
+static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 impl Request {
     fn current(&self, state: &BrowserState) -> bool {
@@ -34,16 +44,27 @@ impl Request {
     }
 
     fn finish(&mut self, allow: bool, save: bool) {
-        if let Some(deferral) = self.deferral.take() {
+        #[cfg(feature = "servo")]
+        if let Answer::Servo(request) = &mut self.answer {
+            if let Some(request) = request.take() {
+                if allow {
+                    request.allow();
+                } else {
+                    request.deny();
+                }
+            }
+            return;
+        }
+        #[allow(irrefutable_let_patterns)]
+        let Answer::WebView2 { args, deferral } = &mut self.answer else {
+            return;
+        };
+        if let Some(deferral) = deferral.take() {
             unsafe {
-                if let Ok(args) = self
-                    .args
-                    .cast::<ICoreWebView2PermissionRequestedEventArgs3>()
-                {
+                if let Ok(args) = args.cast::<ICoreWebView2PermissionRequestedEventArgs3>() {
                     let _ = args.SetSavesInProfile(save);
                 }
-                let granted = self
-                    .args
+                let granted = args
                     .SetState(if allow {
                         COREWEBVIEW2_PERMISSION_STATE_ALLOW
                     } else {
@@ -75,7 +96,6 @@ pub fn request(
     kind: &'static str,
     proxy: EventLoopProxy<UserEvent>,
 ) -> windows::core::Result<()> {
-    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     unsafe {
         if let Ok(args) = args.cast::<ICoreWebView2PermissionRequestedEventArgs3>() {
             args.SetSavesInProfile(false)?;
@@ -86,8 +106,10 @@ pub fn request(
             generation,
             origin,
             kind,
-            args: args.clone(),
-            deferral: Some(args.GetDeferral()?),
+            answer: Answer::WebView2 {
+                args: args.clone(),
+                deferral: Some(args.GetDeferral()?),
+            },
             proxy: proxy.clone(),
         };
         REQUESTS.with_borrow_mut(|requests| requests.push_back(request));
@@ -96,6 +118,31 @@ pub fn request(
         }
     }
     Ok(())
+}
+
+/// Queues a Servo permission using the same origin and tab checks as WebView2.
+#[cfg(feature = "servo")]
+pub fn servo_request(
+    request: servo::PermissionRequest,
+    tab: usize,
+    generation: u64,
+    origin: String,
+    kind: &'static str,
+    proxy: EventLoopProxy<UserEvent>,
+) {
+    let pending = Request {
+        token: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        tab,
+        generation,
+        origin,
+        kind,
+        answer: Answer::Servo(Some(request)),
+        proxy: proxy.clone(),
+    };
+    REQUESTS.with_borrow_mut(|requests| requests.push_back(pending));
+    if proxy.send_event(UserEvent::PermissionRequested).is_err() {
+        REQUESTS.with_borrow_mut(|requests| requests.clear());
+    }
 }
 
 #[derive(Deserialize)]

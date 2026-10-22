@@ -1,0 +1,38 @@
+diff --git a/servo-script/dom/html/form_controls/input_type/color_input_type.rs b/servo-script/dom/html/form_controls/input_type/color_input_type.rs
+index 02d5965..2552224 100644
+--- a/servo-script/dom/html/form_controls/input_type/color_input_type.rs
++++ b/servo-script/dom/html/form_controls/input_type/color_input_type.rs
+@@ -23,7 +23,7 @@ use crate::dom::bindings::str::{DOMString, FromInputValueString};
+ use crate::dom::document_embedder_controls::ControlElement;
+ use crate::dom::element::attributes::storage::AttrRef;
+ use crate::dom::element::{AttributeMutation, CustomElementCreationMode, Element, ElementCreator};
+-use crate::dom::event::Event;
++use crate::dom::event::{Event, EventBubbles, EventCancelable, EventComposed};
+ use crate::dom::eventtarget::EventTarget;
+ use crate::dom::html::form_controls::htmlinputelement::HTMLInputElement;
+ use crate::dom::html::form_controls::input_type::{SpecificInputActivationType, SpecificInputType};
+@@ -56,7 +56,23 @@ impl ColorInputType {
+             "#{:0>2x}{:0>2x}{:0>2x}",
+             selected_color.red, selected_color.green, selected_color.blue
+         );
+-        let _ = input.SetValue(cx, formatted_color.into());
++        let formatted_color = DOMString::from(formatted_color);
++        if input.Value() == formatted_color {
++            return;
++        }
++        let _ = input.SetValue(cx, formatted_color);
++
++        // <https://html.spec.whatwg.org/multipage/#color-state-(type=color)>: once the user
++        // commits a new color, fire `input` and then `change` at the element.
++        let target = input.upcast::<EventTarget>();
++        target.fire_event_with_params(
++            cx,
++            atom!("input"),
++            EventBubbles::Bubbles,
++            EventCancelable::NotCancelable,
++            EventComposed::Composed,
++        );
++        target.fire_bubbling_event(cx, atom!("change"));
+     }
+ 
+     /// Get the shadow tree for this [`HTMLInputElement`], if it is created and valid, otherwise

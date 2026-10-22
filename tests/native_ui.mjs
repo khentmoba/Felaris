@@ -197,9 +197,27 @@ try {
   assert.equal(await settings.evaluate(`document.querySelector('[data-section="search"] .note').textContent.includes('bookmarks, history, and shortcuts')`), true);
   assert.equal(await settings.evaluate(`(() => {
     let requested=0; const original=Felaris.send,originalConfirm=window.confirm;
-    try { Felaris.send=()=>requested++; window.confirm=()=>false; document.querySelector('[data-send="clear_history"]').click(); return requested===0; }
+    try { Felaris.send=()=>requested++; window.confirm=()=>false; document.getElementById('clear-range').value='all'; document.getElementById('clear-data-button').click(); return requested===0; }
     finally { Felaris.send=original; window.confirm=originalConfirm; }
-  })()`), true, 'cancelling Settings history confirmation keeps history');
+  })()`), true, 'cancelling the all-time Clear browsing data confirmation keeps data');
+  assert.deepEqual(await settings.evaluate(`(() => {
+    let sent; const original=Felaris.send;
+    try {
+      Felaris.send=(action,payload)=>sent={action,...payload};
+      document.getElementById('clear-range').value='hour';
+      for (const box of document.querySelectorAll('[data-kind]')) box.checked=box.dataset.kind==='cache';
+      document.getElementById('clear-data-button').click();
+      window.dataCleared(true);
+      return sent;
+    } finally { Felaris.send=original; }
+  })()`), { action: 'clear_browsing_data', range: 'hour', kinds: { history: false, site_data: false, cache: true, passwords: false } });
+  assert.equal(await settings.evaluate(`(() => { window.showSection('privacy'); return document.getElementById('title').textContent; })()`), 'Privacy and security');
+  assert.equal(await settings.evaluate(`document.getElementById('tracking').querySelectorAll('[aria-checked="true"]').length`), 1, 'one tracking prevention level is selected');
+  await settings.evaluate(`window.scrollTo(0, 0)`);
+  await writeFile(join(artifacts, 'settings-privacy.png'), Buffer.from((await settings.call('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
+  await settings.evaluate(`document.getElementById('clear-data').scrollIntoView()`);
+  await writeFile(join(artifacts, 'settings-clear-data.png'), Buffer.from((await settings.call('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
+  await settings.evaluate(`window.showSection('general')`);
   console.log('Default browser actions and settings reflect the detected Windows association and both UI states.');
   await command('open_history');
   const history = await connect(page => page.title === 'History and bookmarks', contentPort);
@@ -229,6 +247,38 @@ try {
     return document.querySelector('#list .site-icon img').src === '${origin}/favicon.ico';
   })()`), true);
   console.log('History and bookmarks show saved site icons, retry the site favicon, and keep a globe fallback for missing or invalid images.');
+  await command('open_settings', { section: 'privacy' });
+  await until(() => settings.evaluate(`document.getElementById('title').textContent === 'Privacy and security'`), 'Ctrl+Shift+Delete opens Settings at Privacy');
+  await command('new_tab', { url: origin + '/reader-article' });
+  const article = await connect(page => page.url === origin + '/reader-article', contentPort);
+  await until(() => article.evaluate('document.readyState === "complete"'), 'reader fixture loaded');
+  await article.evaluate(`(() => {
+    const paragraph = 'Reader view keeps the article, drops the clutter, and lets long text breathe on a calm page, which matters for anyone reading at length. ';
+    document.body.innerHTML = '<nav><a href="/">Home</a><a href="/about">About</a></nav><article><h1>Reader fixture</h1>'
+      + Array.from({ length: 8 }, () => '<p>' + paragraph.repeat(3) + '<script>window.injected=true<\\/script></p>').join('')
+      + '<p><a href="javascript:alert(1)">bad link</a></p></article><aside>Sidebar promo</aside>';
+    return true;
+  })()`);
+  await command('toggle_reader');
+  await until(() => article.evaluate(`!!document.getElementById('__felaris-reader') && document.documentElement.style.overflow === 'hidden'`), 'reader view opens over the page');
+  await writeFile(join(artifacts, 'reader-view.png'), Buffer.from((await article.call('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
+  assert.equal(await article.evaluate(`document.querySelector('nav') !== null && document.querySelector('article p') !== null`), true, 'reader view leaves the page DOM in place');
+  await command('toggle_reader');
+  await until(() => article.evaluate(`!document.getElementById('__felaris-reader') && document.documentElement.style.overflow === ''`), 'reader view closes and restores scrolling');
+  await article.evaluate(`document.body.innerHTML = '<p>Too short.</p>'; true`);
+  await command('toggle_reader');
+  await until(() => sidebar.evaluate(`(currentState.update_status || '').startsWith("Reader view isn't available")`), 'short pages report reader view is unavailable');
+  assert.equal(await article.evaluate(`document.getElementById('__felaris-reader')`), null);
+  console.log('Settings opens at Privacy, and reader view opens over an article, closes cleanly, and declines short pages.');
+  await article.evaluate(`localStorage.setItem('felaris-clear', '1'); true`);
+  await command('set_setting', { key: 'tracking_prevention', value: 'strict' });
+  await command('set_setting', { key: 'save_passwords', value: true });
+  assert.equal(await sidebar.evaluate(`(currentState.update_status || '').startsWith('This setting needs')`), false, 'privacy settings apply to live tabs');
+  await command('clear_browsing_data', { range: 'hour', kinds: { site_data: true, cache: true } });
+  await until(() => sidebar.evaluate(`currentState.update_status === 'Browsing data from the last hour was cleared.'`), 'Clear browsing data reports success');
+  await article.evaluate('location.reload(); true');
+  await until(() => article.evaluate(`document.readyState === 'complete' && localStorage.getItem('felaris-clear') === null`), 'cleared site storage stays cleared');
+  console.log('Privacy settings apply without errors and Clear browsing data removes recent site storage.');
   await checkBrowserControls(sidebar, command, origin, contentPort, artifacts);
 } catch (error) {
   if (artifacts) {

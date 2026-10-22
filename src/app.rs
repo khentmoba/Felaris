@@ -118,7 +118,9 @@ pub enum Command {
     ApplyUpdate,
     OpenDownloads,
     DefaultBrowser,
-    OpenSettings,
+    OpenSettings {
+        section: Option<String>,
+    },
     OpenHistory,
     DeleteHistory {
         url: String,
@@ -130,6 +132,15 @@ pub enum Command {
     },
     InstallAdBlocker,
     OpenExtensionsFolder,
+    ClearBrowsingData {
+        range: String,
+        kinds: desktop::DataKinds,
+    },
+    ImportBookmarks {
+        browser: String,
+    },
+    ToggleReader,
+    Screenshot,
     Zoom {
         delta: i32,
     },
@@ -164,6 +175,9 @@ pub fn shortcut(key: u32, ctrl: bool, shift: bool, alt: bool) -> Option<Command>
             (Some('R'), _, true) | (_, 0x74, _) => Command::ReloadFresh,
             (Some('D'), _, false) => Command::ToggleBookmark { url: None },
             (_, 0x09, _) => Command::CycleTab { backwards: shift },
+            (_, 0x2E, true) => Command::OpenSettings {
+                section: Some("privacy".into()),
+            },
             (_, 0xBB | 0x6B, _) => Command::Zoom { delta: 10 },
             (_, 0xBD | 0x6D, _) => Command::Zoom { delta: -10 },
             (Some('0'), _, false) | (_, 0x60, false) => Command::Zoom { delta: 0 },
@@ -180,6 +194,7 @@ pub fn shortcut(key: u32, ctrl: bool, shift: bool, alt: bool) -> Option<Command>
         },
         (false, false) if !shift => match key {
             0x74 => Command::Reload,
+            0x78 => Command::ToggleReader,
             0x7A => Command::ToggleFullscreen,
             _ => return None,
         },
@@ -234,6 +249,9 @@ pub enum UserEvent {
     Status(String),
     UpdateFailed(String),
     AdBlockerInstalled(Result<(), String>),
+    BrowsingDataCleared(Result<(), String>, &'static str),
+    ScreenshotSaved(Result<std::path::PathBuf, String>),
+    ReaderToggled(usize, String),
 }
 
 fn bounds(window: &Window, state: &BrowserState, side: f64, top: f64) -> (Rect, Rect, Rect, Rect) {
@@ -571,6 +589,8 @@ fn content(
                             | Command::OpenExtensionsFolder
                             | Command::DefaultBrowser
                             | Command::CheckUpdates
+                            | Command::ClearBrowsingData { .. }
+                            | Command::ImportBookmarks { .. }
                             | Command::ToggleBookmark { url: Some(_) }
                     ))
                     || (trusted
@@ -595,6 +615,8 @@ fn content(
                                 | Command::ToggleFullscreen
                                 | Command::ToggleBookmark { url: None }
                                 | Command::NewPrivateTab
+                                | Command::ToggleReader
+                                | Command::OpenSettings { .. }
                         ))
                 {
                     let _ = ipc.send_event(UserEvent::Command(message.command));
@@ -622,6 +644,8 @@ fn content(
     }
     let view = builder.build_as_child(window)?;
     desktop::attach(&view, id, generation, proxy.clone())?;
+    // Older WebView2 runtimes lack some of these settings; pages still work without them.
+    let _ = desktop::apply_privacy(&view, &settings::get());
     if let Some(tab) = state.tabs.iter().find(|tab| tab.id == id) {
         let _ = desktop::mute(&view, tab.is_muted);
     }
@@ -754,6 +778,19 @@ fn tab_event(
         }
         _ => {}
     }
+}
+
+/// A Clear browsing data range: its length in milliseconds (`None` is all time) and a label.
+fn clear_range(range: &str) -> Option<(Option<u64>, &'static str)> {
+    const HOUR: u64 = 60 * 60 * 1000;
+    Some(match range {
+        "hour" => (Some(HOUR), "the last hour"),
+        "day" => (Some(24 * HOUR), "the last 24 hours"),
+        "week" => (Some(7 * 24 * HOUR), "the last 7 days"),
+        "month" => (Some(28 * 24 * HOUR), "the last 4 weeks"),
+        "all" => (None, "all time"),
+        _ => return None,
+    })
 }
 
 fn may_exit(state: &BrowserState, session: &SessionWriter) -> bool {
@@ -1164,7 +1201,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         | Command::ToggleSleep { .. } | Command::SleepInactiveTabs | Command::ClearUnpinnedTabs
                         | Command::ToggleSidebar | Command::SwitchWorkspace { .. } | Command::SwitchProfile { .. } | Command::CreateProfile { .. } | Command::RestoreClosedTab
                         | Command::TogglePin { .. } | Command::CycleTab { .. } | Command::FocusAddress
-                        | Command::OpenSettings | Command::OpenHistory | Command::DuplicateTab { .. }
+                        | Command::OpenSettings { .. } | Command::OpenHistory | Command::ImportBookmarks { .. } | Command::DuplicateTab { .. }
                         | Command::MoveTabToWorkspace { .. } | Command::ExpandPopup { .. }
                         | Command::ReorderTab { .. } | Command::RenameWorkspace { .. } | Command::DeleteWorkspace { .. } | Command::ToggleMute { .. }
                         | Command::ToggleBookmark { .. } | Command::NewPrivateTab));
@@ -1445,7 +1482,16 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                     .or(last_download_host.filter(|id| views.contains_key(id))).unwrap_or(state.active_tab_id);
                                 if let Some(view) = views.get(&id) && let Err(error) = desktop::downloads(view) { state.update_status = Some(error); }
                             },
-                            Command::OpenSettings => { state.open_internal("felaris://settings"); palette_open = false; },
+                            Command::OpenSettings { section } => {
+                                let live = state.tabs.iter().find(|tab| tab.url == "felaris://settings").and_then(|tab| views.get(&tab.id));
+                                if let Some(section) = section.filter(|section| ui::SETTINGS_SECTIONS.contains(&section.as_str())) {
+                                    match live {
+                                        Some(view) => { let _ = view.evaluate_script(&format!("window.showSection?.({section:?})")); },
+                                        None => ui::open_settings_at(section),
+                                    }
+                                }
+                                state.open_internal("felaris://settings"); palette_open = false;
+                            },
                             Command::OpenHistory => { state.open_internal("felaris://history"); palette_open = false; },
                             Command::DeleteHistory { url } => history::remove(&url),
                             Command::ClearHistory => history::clear(),
@@ -1456,6 +1502,10 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                         let _ = sidebar.evaluate_script(&script);
                                         let _ = palette.evaluate_script(&script);
                                         for view in views.values() { let _ = view.evaluate_script(&script); }
+                                    } else if matches!(key.as_str(), "tracking_prevention" | "save_passwords" | "autofill") {
+                                        if let Some(error) = views.values().find_map(|view| desktop::apply_privacy(view, &current).err()) {
+                                            state.update_status = Some(format!("This setting needs a newer WebView2 Runtime: {error}"));
+                                        }
                                     } else if key == "ad_blocker" {
                                         if current.ad_blocker { start_ad_blocker_install(&proxy); }
                                         state.update_status = Some("Ad blocker changes apply after you restart Felaris.".into());
@@ -1464,6 +1514,52 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                 Err(error) => { state.update_status = Some(error); },
                             },
                             Command::InstallAdBlocker => { start_ad_blocker_install(&proxy); },
+                            Command::ClearBrowsingData { range, kinds } => if let Some((range, label)) = clear_range(&range) {
+                                if kinds.history { history::clear_recent(range); }
+                                let profile_data = kinds.site_data || kinds.cache || kinds.passwords;
+                                // Private tabs use a separate in-memory profile, so clear through a regular one.
+                                let regular = views.iter().find(|(id, _)| !state.is_private(**id)).map(|(_, view)| view);
+                                let cleared = proxy.clone();
+                                let report = move |result| { let _ = cleared.send_event(UserEvent::BrowsingDataCleared(result, label)); };
+                                match regular {
+                                    Some(view) => if let Err(error) = desktop::clear_browsing_data(view, kinds, range, report) {
+                                        let _ = proxy.send_event(UserEvent::BrowsingDataCleared(Err(error), label));
+                                    },
+                                    None if profile_data => report(Err("Open a regular tab, then try again.".into())),
+                                    None => report(Ok(())),
+                                }
+                            },
+                            Command::ImportBookmarks { browser } => {
+                                let name = crate::import::name(&browser).unwrap_or("that browser");
+                                state.update_status = Some(match crate::import::read(&browser) {
+                                    Ok(found) => {
+                                        let total = found.len();
+                                        match state.import_bookmarks(found) {
+                                            0 if total == 0 => format!("{name} has no web bookmarks to import."),
+                                            0 => format!("All {total} bookmarks from {name} are already in Felaris."),
+                                            1 => format!("Imported 1 bookmark from {name}."),
+                                            added => format!("Imported {added} bookmarks from {name}."),
+                                        }
+                                    },
+                                    Err(error) => error,
+                                });
+                            },
+                            Command::ToggleReader => if let Some(tab) = state.active_tab() {
+                                if profile::web_origin(&tab.url).is_none() || tab.error.is_some() {
+                                    state.update_status = Some("Reader view works on web articles.".into());
+                                } else if let Some(view) = views.get(&tab.id) {
+                                    let (id, toggled) = (tab.id, proxy.clone());
+                                    let _ = view.evaluate_script_with_callback(include_str!("reader.js"), move |result| {
+                                        let _ = toggled.send_event(UserEvent::ReaderToggled(id, result));
+                                    });
+                                }
+                            },
+                            Command::Screenshot => if let Some(tab) = state.active_tab() && let Some(view) = views.get(&tab.id) {
+                                let saved = proxy.clone();
+                                if let Err(error) = desktop::screenshot(view, &tab.title, move |result| { let _ = saved.send_event(UserEvent::ScreenshotSaved(result)); }) {
+                                    state.update_status = Some(format!("Could not save a screenshot: {error}"));
+                                }
+                            },
                             Command::OpenExtensionsFolder => {
                                 let _ = std::fs::create_dir_all(extensions::directory());
                                 if let Err(error) = std::process::Command::new("explorer.exe").arg(extensions::directory()).spawn() { state.update_status = Some(format!("Could not open the extensions folder: {error}")); }
@@ -1527,6 +1623,27 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         Err(error) => { state.update_status = Some(format!("Ad blocker install failed: {error} Try again from Settings.")); },
                     },
                     UserEvent::UpdateFailed(status) => { state.update_busy = false; state.update_status = Some(status); },
+                    UserEvent::BrowsingDataCleared(result, label) => {
+                        let ok = result.is_ok();
+                        state.update_status = Some(match result {
+                            Ok(()) => format!("Browsing data from {label} was cleared."),
+                            Err(error) => format!("Could not clear browsing data: {error}"),
+                        });
+                        for tab in state.tabs.iter().filter(|tab| tab.url == "felaris://settings") {
+                            if let Some(view) = views.get(&tab.id) { let _ = view.evaluate_script(&format!("window.dataCleared?.({ok})")); }
+                        }
+                    },
+                    UserEvent::ScreenshotSaved(result) => {
+                        state.update_status = Some(match result {
+                            Ok(path) => format!("Screenshot saved to Pictures\\Felaris as {}.", path.file_name().map(|name| name.to_string_lossy()).unwrap_or_default()),
+                            Err(error) => format!("Could not save a screenshot: {error}"),
+                        });
+                    },
+                    UserEvent::ReaderToggled(id, result) => {
+                        if id == state.active_tab_id && result.trim_matches('"') == "unavailable" {
+                            state.update_status = Some("Reader view isn't available on this page. It works best on articles and blog posts.".into());
+                        } else { return; }
+                    },
                 }
                 session_dirty |= persistent;
             }
@@ -1664,6 +1781,11 @@ mod tests {
         );
         assert_eq!(action(0x25, false, false, true), "Some(Back)");
         assert_eq!(action(0x7A, false, false, false), "Some(ToggleFullscreen)");
+        assert_eq!(action(0x78, false, false, false), "Some(ToggleReader)");
+        assert_eq!(
+            action(0x2E, true, true, false),
+            "Some(OpenSettings { section: Some(\"privacy\") })"
+        );
         // Save, find, copy, plain typing, and AltGr (Ctrl+Alt) belong to the page.
         for (key, ctrl, shift, alt) in [
             (0x53, true, false, false),
@@ -1671,8 +1793,30 @@ mod tests {
             (0x43, true, false, false),
             (0x54, false, false, false),
             (0x54, true, false, true),
+            (0x2E, true, false, false),
+            (0x78, true, false, false),
         ] {
             assert_eq!(action(key, ctrl, shift, alt), "None");
         }
+    }
+
+    #[test]
+    fn clear_browsing_data_requests_parse_and_ranges_are_fixed() {
+        let command: Command = serde_json::from_str(
+            r#"{"action":"clear_browsing_data","range":"day","kinds":{"history":true,"cache":true}}"#,
+        )
+        .unwrap();
+        let Command::ClearBrowsingData { range, kinds } = command else {
+            panic!("wrong command");
+        };
+        assert!(kinds.history && kinds.cache && !kinds.site_data && !kinds.passwords);
+        assert_eq!(
+            clear_range(&range),
+            Some((Some(86_400_000), "the last 24 hours"))
+        );
+        assert_eq!(clear_range("all"), Some((None, "all time")));
+        assert_eq!(clear_range("forever"), None);
+        let settings: Command = serde_json::from_str(r#"{"action":"open_settings"}"#).unwrap();
+        assert!(matches!(settings, Command::OpenSettings { section: None }));
     }
 }

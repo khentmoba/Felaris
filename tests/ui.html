@@ -167,6 +167,10 @@ window.runChecks=async()=>{
  d.querySelector('#app-menu [data-action="open_history"]').click();check('app menu opens History',messages.at(-1).action==='open_history');
  d.getElementById('app-menu').open=true;
  d.querySelector('#app-menu [data-action="open_settings"]').click();check('app menu opens Settings and closes',messages.at(-1).action==='open_settings'&&!d.getElementById('app-menu').open);
+ d.getElementById('app-menu').open=true;
+ d.querySelector('#app-menu [data-action="toggle_reader"]').click();check('app menu toggles reader view',messages.at(-1).action==='toggle_reader'&&!d.getElementById('app-menu').open);
+ d.getElementById('app-menu').open=true;
+ d.querySelector('#app-menu [data-action="screenshot"]').click();check('app menu saves a screenshot',messages.at(-1).action==='screenshot'&&!d.getElementById('app-menu').open);
  w.updateState(structuredClone(fixtureState));
  palette.hidden=false;
  const n=palette.contentWindow,nd=n.document,ni=nd.getElementById('new-tab-input');

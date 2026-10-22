@@ -13,6 +13,9 @@ pub const ENGINES: [(&str, &str, &str); 4] = [
     ("bing", "Bing", "https://www.bing.com/search?q="),
 ];
 
+/// WebView2 tracking prevention levels offered in Settings.
+pub const TRACKING_LEVELS: [&str; 3] = ["basic", "balanced", "strict"];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -20,6 +23,9 @@ pub struct Settings {
     pub ad_blocker: bool,
     pub auto_update: bool,
     pub save_history: bool,
+    pub tracking_prevention: String,
+    pub save_passwords: bool,
+    pub autofill: bool,
 }
 
 impl Default for Settings {
@@ -29,6 +35,9 @@ impl Default for Settings {
             ad_blocker: true,
             auto_update: true,
             save_history: true,
+            tracking_prevention: "balanced".into(),
+            save_passwords: false,
+            autofill: true,
         }
     }
 }
@@ -73,6 +82,13 @@ pub fn set(key: &str, value: &Value) -> Result<Settings, String> {
         ("ad_blocker", Value::Bool(on)) => settings.ad_blocker = *on,
         ("auto_update", Value::Bool(on)) => settings.auto_update = *on,
         ("save_history", Value::Bool(on)) => settings.save_history = *on,
+        ("tracking_prevention", Value::String(level))
+            if TRACKING_LEVELS.contains(&level.as_str()) =>
+        {
+            settings.tracking_prevention = level.clone()
+        }
+        ("save_passwords", Value::Bool(on)) => settings.save_passwords = *on,
+        ("autofill", Value::Bool(on)) => settings.autofill = *on,
         _ => return Err(format!("Unknown setting: {key}")),
     }
     let bytes = serde_json::to_vec_pretty(&settings).map_err(|error| error.to_string())?;
@@ -92,11 +108,15 @@ mod tests {
         let settings: Settings = serde_json::from_str(r#"{"search_engine":"google"}"#).unwrap();
         assert_eq!(settings.search_engine, "google");
         assert!(settings.ad_blocker && settings.auto_update && settings.save_history);
+        assert_eq!(settings.tracking_prevention, "balanced");
+        assert!(!settings.save_passwords && settings.autofill);
     }
 
     #[test]
     fn unknown_engines_and_keys_are_rejected() {
         assert!(set("search_engine", &Value::String("evil".into())).is_err());
+        assert!(set("tracking_prevention", &Value::String("none".into())).is_err());
+        assert!(set("save_passwords", &Value::String("yes".into())).is_err());
         assert!(set("nope", &Value::Bool(true)).is_err());
         assert!(set("ad_blocker", &Value::String("yes".into())).is_err());
     }

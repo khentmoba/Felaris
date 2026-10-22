@@ -4,6 +4,7 @@ mod app;
 mod desktop;
 mod extensions;
 mod history;
+mod import;
 mod instance;
 mod permission;
 mod profile;

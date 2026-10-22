@@ -169,6 +169,197 @@ pub fn mute(view: &WebView, muted: bool) -> Result<(), String> {
     }
 }
 
+/// Applies the Settings privacy choices to a content WebView and its profile.
+pub fn apply_privacy(view: &WebView, settings: &crate::settings::Settings) -> Result<(), String> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::*;
+    use windows::core::Interface;
+    use wry::WebViewExtWindows;
+    let level = match settings.tracking_prevention.as_str() {
+        "basic" => COREWEBVIEW2_TRACKING_PREVENTION_LEVEL_BASIC,
+        "strict" => COREWEBVIEW2_TRACKING_PREVENTION_LEVEL_STRICT,
+        _ => COREWEBVIEW2_TRACKING_PREVENTION_LEVEL_BALANCED,
+    };
+    let webview = view.webview();
+    (|| unsafe {
+        let options = webview.Settings()?.cast::<ICoreWebView2Settings4>()?;
+        options.SetIsPasswordAutosaveEnabled(settings.save_passwords)?;
+        options.SetIsGeneralAutofillEnabled(settings.autofill)?;
+        webview
+            .cast::<ICoreWebView2_13>()?
+            .Profile()?
+            .cast::<ICoreWebView2Profile3>()?
+            .SetPreferredTrackingPreventionLevel(level)
+    })()
+    .map_err(|error| error.to_string())
+}
+
+/// What Settings > Clear browsing data removes.
+#[derive(Debug, Clone, Copy, Default, serde::Deserialize)]
+pub struct DataKinds {
+    #[serde(default)]
+    pub history: bool,
+    #[serde(default)]
+    pub site_data: bool,
+    #[serde(default)]
+    pub cache: bool,
+    #[serde(default)]
+    pub passwords: bool,
+}
+
+/// Clears the WebView2 profile data behind `view` from the last `range_ms` milliseconds.
+pub fn clear_browsing_data(
+    view: &WebView,
+    kinds: DataKinds,
+    range_ms: Option<u64>,
+    completed: impl FnOnce(Result<(), String>) + 'static,
+) -> Result<(), String> {
+    use webview2_com::{ClearBrowsingDataCompletedHandler, Microsoft::Web::WebView2::Win32::*};
+    use windows::core::Interface;
+    use wry::WebViewExtWindows;
+    let mut flags = 0;
+    if kinds.history {
+        flags |= COREWEBVIEW2_BROWSING_DATA_KINDS_BROWSING_HISTORY.0
+            | COREWEBVIEW2_BROWSING_DATA_KINDS_DOWNLOAD_HISTORY.0;
+    }
+    if kinds.site_data {
+        flags |= COREWEBVIEW2_BROWSING_DATA_KINDS_COOKIES.0
+            | COREWEBVIEW2_BROWSING_DATA_KINDS_ALL_DOM_STORAGE.0;
+    }
+    if kinds.cache {
+        flags |= COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE.0;
+    }
+    if kinds.passwords {
+        flags |= COREWEBVIEW2_BROWSING_DATA_KINDS_PASSWORD_AUTOSAVE.0
+            | COREWEBVIEW2_BROWSING_DATA_KINDS_GENERAL_AUTOFILL.0;
+    }
+    if flags == 0 {
+        completed(Ok(()));
+        return Ok(());
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0., |elapsed| elapsed.as_secs_f64());
+    let start = range_ms.map_or(0., |range| (now - range as f64 / 1000.).max(0.));
+    let webview = view.webview();
+    (|| unsafe {
+        webview
+            .cast::<ICoreWebView2_13>()?
+            .Profile()?
+            .cast::<ICoreWebView2Profile2>()?
+            .ClearBrowsingDataInTimeRange(
+                COREWEBVIEW2_BROWSING_DATA_KINDS(flags),
+                start,
+                // A little slack so data written while the request is in flight is included.
+                now + 60.,
+                &ClearBrowsingDataCompletedHandler::create(Box::new(move |result| {
+                    completed(result.map_err(|error| error.to_string()));
+                    Ok(())
+                })),
+            )
+    })()
+    .map_err(|error| error.to_string())
+}
+
+/// Saves the visible part of the page as a PNG in `Pictures\Felaris`.
+pub fn screenshot(
+    view: &WebView,
+    title: &str,
+    completed: impl FnOnce(Result<std::path::PathBuf, String>) + 'static,
+) -> Result<(), String> {
+    use webview2_com::{CapturePreviewCompletedHandler, Microsoft::Web::WebView2::Win32::*};
+    use windows::{
+        Win32::System::Com::{STGM_CREATE, STGM_SHARE_DENY_WRITE, STGM_WRITE},
+        Win32::UI::Shell::SHCreateStreamOnFileEx,
+        core::HSTRING,
+    };
+    use wry::WebViewExtWindows;
+    let folder = pictures_folder().join("Felaris");
+    std::fs::create_dir_all(&folder).map_err(|error| error.to_string())?;
+    let path = folder.join(screenshot_name(title));
+    unsafe {
+        let stream = SHCreateStreamOnFileEx(
+            &HSTRING::from(path.as_os_str()),
+            (STGM_CREATE | STGM_WRITE | STGM_SHARE_DENY_WRITE).0,
+            0,
+            true,
+            None,
+        )
+        .map_err(|error| error.to_string())?;
+        let keep = stream.clone();
+        view.webview()
+            .CapturePreview(
+                COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG,
+                &stream,
+                &CapturePreviewCompletedHandler::create(Box::new(move |result| {
+                    // Closing the stream flushes the file before it is reported.
+                    drop(keep);
+                    if result.is_err() {
+                        let _ = std::fs::remove_file(&path);
+                    }
+                    completed(result.map(|_| path).map_err(|error| error.to_string()));
+                    Ok(())
+                })),
+            )
+            .map_err(|error| error.to_string())
+    }
+}
+
+fn pictures_folder() -> std::path::PathBuf {
+    use windows::Win32::{
+        System::Com::CoTaskMemFree,
+        UI::Shell::{FOLDERID_Pictures, KF_FLAG_DEFAULT, SHGetKnownFolderPath},
+    };
+    unsafe {
+        if let Ok(path) = SHGetKnownFolderPath(&FOLDERID_Pictures, KF_FLAG_DEFAULT, None) {
+            let folder = path.to_string().ok().map(std::path::PathBuf::from);
+            CoTaskMemFree(Some(path.0 as *const _));
+            if let Some(folder) = folder {
+                return folder;
+            }
+        }
+    }
+    std::env::var_os("USERPROFILE")
+        .map(|home| std::path::PathBuf::from(home).join("Pictures"))
+        .unwrap_or_else(crate::profile::directory)
+}
+
+/// A Windows-safe file name stamped with local time, such as `Example 2026-10-22 14.05.09.png`.
+fn screenshot_name(title: &str) -> String {
+    let time = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
+    let stamp = [
+        time.wYear,
+        time.wMonth,
+        time.wDay,
+        time.wHour,
+        time.wMinute,
+        time.wSecond,
+    ];
+    file_name(title, stamp)
+}
+
+fn file_name(title: &str, [year, month, day, hour, minute, second]: [u16; 6]) -> String {
+    let clean: String = title
+        .chars()
+        .map(|c| {
+            if c.is_control() || r#"<>:"/\|?*"#.contains(c) {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect();
+    let clean: String = clean
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(60)
+        .collect();
+    let stem = clean.trim().trim_end_matches('.');
+    let stem = if stem.is_empty() { "Screenshot" } else { stem };
+    format!("{stem} {year:04}-{month:02}-{day:02} {hour:02}.{minute:02}.{second:02}.png")
+}
+
 pub fn clear_site_data(
     view: &WebView,
     id: usize,
@@ -785,5 +976,19 @@ mod tests {
         drop(context);
         // WebView2 may still hold profile files while its child processes exit.
         let _ = std::fs::remove_dir_all(directory);
+    }
+    #[test]
+    fn screenshot_names_are_safe_windows_file_names() {
+        let stamp = [2026, 3, 7, 9, 5, 2];
+        assert_eq!(
+            file_name("Rust: A <Language> / Guide?", stamp),
+            "Rust A Language Guide 2026-03-07 09.05.02.png"
+        );
+        assert_eq!(
+            file_name(" 	... ", stamp),
+            "Screenshot 2026-03-07 09.05.02.png"
+        );
+        let long = file_name(&"x".repeat(200), stamp);
+        assert!(long.starts_with(&"x".repeat(60)) && !long.starts_with(&"x".repeat(61)));
     }
 }

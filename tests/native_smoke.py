@@ -19,6 +19,41 @@ class Fixture(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split('?', 1)[0]
+        if path.startswith('/cache-recovery/'):
+            if path == '/cache-recovery/worker.js':
+                body = b'''self.addEventListener('install', event => event.waitUntil(self.skipWaiting()));
+self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', event => {
+  if (new URL(event.request.url).pathname !== '/cache-recovery/bootstrap.js') return;
+  event.respondWith(caches.open('felaris-poisoned').then(async cache =>
+    await cache.match(event.request) || fetch(event.request)));
+});'''
+                content_type = 'text/javascript'
+            elif path == '/cache-recovery/bootstrap.js':
+                body = b"window.fixtureReady = true; document.body.dataset.state = 'ready';"
+                content_type = 'text/javascript'
+            else:
+                body = b'''<!doctype html><title>Cache recovery fixture</title><body data-state="starting">Getting ready...
+<script>
+(async () => {
+  await navigator.serviceWorker.register('/cache-recovery/worker.js');
+  await navigator.serviceWorker.ready;
+  if (!navigator.serviceWorker.controller) await new Promise(resolve =>
+    navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
+  const script = document.createElement('script');
+  script.src = '/cache-recovery/bootstrap.js';
+  script.onerror = () => { document.body.dataset.state = 'stalled'; };
+  document.head.append(script);
+})();
+</script>'''
+                content_type = 'text/html; charset=utf-8'
+            self.send_response(200)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path == '/redirect-download':
             self.send_response(302)
             self.send_header('Location', '/slow-download')

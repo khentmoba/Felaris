@@ -1,6 +1,6 @@
 use crate::{
-    desktop, extensions, history, instance::Instance, permission, profile, session::SessionWriter,
-    settings, start_page, state::BrowserState, ui, updater,
+    desktop, extensions, history, instance::Instance, permission, profile, recovery,
+    session::SessionWriter, settings, start_page, state::BrowserState, ui, updater,
 };
 use serde::Deserialize;
 use std::{
@@ -30,6 +30,11 @@ pub enum Command {
     Back,
     Forward,
     Reload,
+    ReloadFresh,
+    ResourceLoadFailed {
+        document_url: String,
+        resource_url: String,
+    },
     Stop,
     NewTab {
         url: Option<String>,
@@ -156,6 +161,7 @@ pub fn shortcut(key: u32, ctrl: bool, shift: bool, alt: bool) -> Option<Command>
             (Some('J'), _, false) => Command::OpenDownloads,
             (Some('H'), _, false) => Command::OpenHistory,
             (Some('R'), _, false) => Command::Reload,
+            (Some('R'), _, true) | (_, 0x74, _) => Command::ReloadFresh,
             (Some('D'), _, false) => Command::ToggleBookmark { url: None },
             (_, 0x09, _) => Command::CycleTab { backwards: shift },
             (_, 0xBB | 0x6B, _) => Command::Zoom { delta: 10 },
@@ -192,6 +198,9 @@ struct ContentCommand {
 pub enum UserEvent {
     Audio(usize, u64, bool, bool),
     SiteDataCleared(usize, u64, String, Result<(), String>),
+    SiteFilesCleared(recovery::Page, Result<(), String>),
+    FreshReloadFailed(recovery::Page, String),
+    ResourceLoadFailed(usize, u64, String, String),
     Maintenance,
     SessionSaved(Result<(), String>),
     SleepChecked(usize, u64, u64, String, bool),
@@ -536,6 +545,20 @@ fn content(
                     .is_none_or(|scheme| scheme == "data")
                     || request.uri() == "about:blank";
                 let trusted = message.shortcut_token.as_deref() == Some(&token);
+                if trusted
+                    && let Command::ResourceLoadFailed {
+                        document_url,
+                        resource_url,
+                    } = &message.command
+                {
+                    let _ = ipc.send_event(UserEvent::ResourceLoadFailed(
+                        id,
+                        generation,
+                        document_url.clone(),
+                        resource_url.clone(),
+                    ));
+                    return;
+                }
                 if (local
                     && matches!(
                         message.command,
@@ -556,6 +579,7 @@ fn content(
                             Command::Back
                                 | Command::Forward
                                 | Command::Reload
+                                | Command::ReloadFresh
                                 | Command::Stop
                                 | Command::NewTab { .. }
                                 | Command::CloseActiveTab
@@ -1020,6 +1044,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     let mut last_content_bounds = None;
     let mut last_sidebar_state = String::new();
     let mut sleep_pending = HashSet::new();
+    let mut recovery = recovery::Recovery::default();
     let mut hidden_at: HashMap<usize, std::time::Instant> = HashMap::new();
     let mut focus_address = false;
     let mut downloads: HashMap<usize, usize> = HashMap::new();
@@ -1160,7 +1185,35 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             Err(error) => format!("Could not clear site data: {error}"),
                         });
                     },
+                    UserEvent::ResourceLoadFailed(id, generation, document_url, resource_url) => {
+                        if let Some(tab) = state.tabs.iter().find(|tab| tab.id == id && tab.generation == generation)
+                            && recovery.script_failed(tab, &document_url, &resource_url)
+                            && id == state.active_tab_id {
+                            state.update_status = Some("Some page scripts failed to load. Reload to refresh this site's cached files.".into());
+                        }
+                    },
+                    UserEvent::SiteFilesCleared(page, result) => {
+                        if !recovery.finish(&page, state.active_tab()) { return; }
+                        match result {
+                            Ok(()) => {
+                                if let Some(view) = views.get(&page.id) {
+                                    if let Err(error) = desktop::reload_fresh(view, page, proxy.clone()) {
+                                        state.update_status = Some(format!("Could not reload fresh site files: {error}"));
+                                    } else {
+                                        state.update_status = Some("Site files refreshed. Your sign-in and saved site data were kept.".into());
+                                    }
+                                }
+                            },
+                            Err(error) => state.update_status = Some(format!("Could not refresh site files: {error}")),
+                        }
+                    },
+                    UserEvent::FreshReloadFailed(page, error) => {
+                        if recovery.is_current(&page, state.active_tab()) {
+                            state.update_status = Some(format!("Could not reload fresh site files: {error}"));
+                        }
+                    },
                     UserEvent::Maintenance => {
+                        recovery.retain(&state);
                         let current_downloads = desktop::download_counts(&views);
                         let downloads_changed = current_downloads != downloads;
                         downloads = current_downloads;
@@ -1264,12 +1317,29 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             },
                             Command::Back | Command::Forward => if let Some(view) = views.get(&state.active_tab_id) { desktop::navigate(view, matches!(command, Command::Back)); },
                             Command::Reload | Command::Retry => if let Some(tab) = state.active_tab() {
+                                if recovery.needs_reload(tab) && !tab.is_loading {
+                                    let _ = proxy.send_event(UserEvent::Command(Command::ReloadFresh));
+                                    return;
+                                }
                                 let url = tab.url.clone(); let id = tab.id;
                                 let crashed = tab.error.is_some() && views.get(&id).and_then(|view| view.url().ok()).is_some_and(|url| url == "about:blank" || url.starts_with("data:"));
                                 if crashed { views.remove(&id); }
                                 if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id) { tab.error = None; tab.pending_url = Some(url.clone()); tab.is_loading = true; }
                                 if let Some(view) = views.get(&id) { let _ = if profile::is_internal(&url) { load(view, &state, &url) } else { view.reload() }; }
                             },
+                            Command::ReloadFresh => if let Some(tab) = state.active_tab() {
+                                if profile::web_origin(&tab.url).is_none() || tab.error.is_some() {
+                                    let _ = proxy.send_event(UserEvent::Command(Command::Reload));
+                                } else if let Some(view) = views.get(&tab.id)
+                                    && let Some(page) = recovery.begin(tab) {
+                                        state.update_status = Some("Refreshing this site's cached files. Your sign-in and saved site data are kept.".into());
+                                        if let Err(error) = desktop::clear_site_files(view, page.clone(), proxy.clone()) {
+                                            recovery.finish(&page, state.active_tab());
+                                            state.update_status = Some(format!("Could not refresh site files: {error}"));
+                                        }
+                                }
+                            },
+                            Command::ResourceLoadFailed { .. } => {},
                             Command::Stop => { if let Some(view) = views.get(&state.active_tab_id) { let _ = view.evaluate_script("window.stop()"); }
                                 if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == state.active_tab_id) { tab.is_loading = false; } },
                             Command::NewTab { url: None } => { palette_open = true; palette_needs_open = true; },
@@ -1421,7 +1491,12 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                     }
                     event @ (UserEvent::Title(..) | UserEvent::PageLoad(..) | UserEvent::Source(..)
                         | UserEvent::History(..) | UserEvent::Failed(..) | UserEvent::Favicon(..)
-                        | UserEvent::Crashed(..)) => tab_event(&mut state, &mut views, &mut permission_prompt, event),
+                        | UserEvent::Crashed(..)) => {
+                            if let UserEvent::PageLoad(id, generation, true, _) = &event {
+                                recovery.navigation_started(*id, *generation);
+                            }
+                            tab_event(&mut state, &mut views, &mut permission_prompt, event);
+                        },
                     UserEvent::DownloadsChanged => {},
                     UserEvent::DownloadStarted(id, generation, blank, document) => {
                         if state.tabs.iter().any(|tab| tab.id == id && tab.generation == generation) {
@@ -1576,6 +1651,8 @@ mod tests {
         );
         assert_eq!(action(0x54, true, true, false), "Some(RestoreClosedTab)");
         assert_eq!(action(0x42, true, true, false), "Some(ToggleSidebar)");
+        assert_eq!(action(0x52, true, true, false), "Some(ReloadFresh)");
+        assert_eq!(action(0x74, true, false, false), "Some(ReloadFresh)");
         assert_eq!(
             action(0x09, true, true, false),
             "Some(CycleTab { backwards: true })"

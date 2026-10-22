@@ -7,6 +7,7 @@ mod history;
 mod instance;
 mod permission;
 mod profile;
+mod recovery;
 mod session;
 mod settings;
 mod smoke;

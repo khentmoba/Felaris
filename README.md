@@ -61,6 +61,7 @@
 | `Ctrl + W` | Close active tab |
 | `Ctrl + L` | Focus and highlight address / search bar |
 | `Ctrl + R` / `F5` | Reload current page |
+| `Ctrl + Shift + R` / `Ctrl + F5` | Refresh this site's cached files and reload, keeping sign-in and saved site data |
 | `Alt + Left` | Navigate back |
 | `Alt + Right` | Navigate forward |
 | `Ctrl + Shift + T` | Reopen last closed tab |
@@ -93,6 +94,8 @@ Drag sidebar tabs to reorder them within their pinned or ordinary group, or focu
 Links that open only a download dismiss their empty tab and return to the originating page while the transfer continues. Downloads started from an existing page keep that page, its address, and its form state. Active and resumable downloads retain their native owner in the background; at most one completed download owner remains for the Downloads dialog. Automatically dismissed download tabs do not enter recently closed tabs or trigger Undo.
 
 Click the connection icon beside a website address for its full origin, connection information, and **Clear cookies and site data**. Clearing requires confirmation, clears the selected origin's cookies and stored data, and reloads that page. Regular workspaces share the cleared data; cookies shared with related subdomains may also be removed. Routine download feedback expires, while persistent messages can be expanded or dismissed in the compact feedback area.
+
+For pages stuck during startup, choose **Reload fresh site files** in the app menu or press **Ctrl+Shift+R**. This resets the current origin's service worker and resource cache, then reloads while bypassing the HTTP cache. Cookies, local storage, IndexedDB, and permission decisions are kept. When a same-origin script fails on a service-worker-controlled page, Felaris reports it and gives the next normal **Reload** the same recovery behavior. Resource failures do not reload a page automatically.
 
 **Current engine limits:** Awake tabs preserve page state and navigation history. Sleeping tabs and restored sessions reload saved URLs; unsaved forms and per-tab history do not survive unloading or restart. Automatic sleeping uses conservative checks, but custom app state cannot always be detected; pin tabs whose state must be preserved.
 

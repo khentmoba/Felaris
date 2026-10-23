@@ -228,6 +228,27 @@ impl SiteDataManager {
         }
     }
 
+    /// Clears every cookie, web storage area and cached response held for private browsing,
+    /// leaving public data untouched. Call when the last private webview has closed.
+    pub fn clear_private_data(&self) {
+        self.private_resource_threads.clear_cookies();
+        self.private_resource_threads.clear_cache();
+        for storage_type in [WebStorageType::Local, WebStorageType::Session] {
+            let sites: Vec<String> = self
+                .private_storage_threads
+                .webstorage_origins(storage_type)
+                .into_iter()
+                .filter_map(|origin| {
+                    let url = ServoUrl::parse(&origin.name).ok()?;
+                    registered_domain_name(&url).map(|domain| domain.to_string())
+                })
+                .collect();
+            let sites: Vec<&str> = sites.iter().map(String::as_str).collect();
+            self.private_storage_threads
+                .clear_webstorage_for_sites(storage_type, &sites);
+        }
+    }
+
     /// Clears all cookies from both the public and private cookie jars.
     ///
     /// An optional callback is provided for async operation.

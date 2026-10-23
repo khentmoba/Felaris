@@ -1028,6 +1028,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     let mut downloads: HashMap<usize, usize> = HashMap::new();
     let mut download_only = HashSet::new();
     let mut last_download_host = None;
+    let mut private_open = false;
     let mut check_busy = false;
     let mut zooms: HashMap<usize, u32> = HashMap::new();
     let mut smoke = crate::smoke::Smoke::new();
@@ -1603,6 +1604,9 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         // Active and resumable transfers retain their owner; keep one completed owner for Downloads.
         download_only.retain(|id| download_hosts.contains(id) || last_download_host == Some(*id));
         views.retain(|id,_| awake.contains(id) || download_only.contains(id));
+        let private_now = state.tabs.iter().any(|tab| state.is_private(tab.id));
+        if private_open && !private_now { engine.end_private_session(); }
+        private_open = private_now;
         for tab in &mut state.tabs { if !views.contains_key(&tab.id) { tab.is_playing_audio = false; } }
         downloads.retain(|id, count| *count > 0 || awake.contains(id));
         sleep_pending.retain(|(id, _)| views.contains_key(id));

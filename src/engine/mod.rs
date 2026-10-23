@@ -38,6 +38,8 @@ pub trait Engine {
     fn downloads(&self) -> std::collections::HashMap<usize, usize> {
         std::collections::HashMap::new()
     }
+    /// Discards private browsing data once the last private tab has closed.
+    fn end_private_session(&mut self) {}
 }
 
 /// Commands the app sends to a live tab.

@@ -507,6 +507,10 @@ impl super::Engine for ServoEngine {
         counts
     }
 
+    fn end_private_session(&mut self) {
+        self.servo.site_data_manager().clear_private_data();
+    }
+
     fn wake(&mut self) {
         self.spin();
         self.shared.tabs.paint();

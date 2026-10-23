@@ -18,6 +18,11 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
+# bindgen reads include paths from the clang on PATH, so its libclang must be the same version.
+$clang = Get-Command clang.exe -ErrorAction SilentlyContinue
+if (-not $env:LIBCLANG_PATH -and $clang -and (Test-Path (Join-Path (Split-Path $clang.Source) 'libclang.dll'))) {
+    $env:LIBCLANG_PATH = Split-Path $clang.Source
+}
 if (-not $env:LIBCLANG_PATH) {
     $tools = Join-Path $root 'target/servo-tools'
     $native = Join-Path $tools 'libclang-18.1.1.data/platlib/clang/native'

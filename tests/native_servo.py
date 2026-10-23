@@ -486,6 +486,30 @@ def run(executable, only):
             finally:
                 restored.close()
 
+        if scenario('private-session'):
+            app = App(executable, f'{origin}/')
+            try:
+                app.wait_title('start')
+                app.eval("Felaris.send('new_private_tab'), true")
+                time.sleep(1)
+                app.eval(f"Felaris.send('navigate', {{url:'{origin}/?storage=private'}}), true")
+                results.append(check('private tab writes storage', app.wait_title('storage:empty:empty')))
+                app.eval("Felaris.send('switch_tab', {id:2}), true")
+                app.eval("Felaris.send('close_tab', {id:3}), true")
+                time.sleep(1)
+                before = len(app.titles())
+                app.eval("Felaris.send('new_private_tab'), true")
+                time.sleep(1)
+                app.eval(f"Felaris.send('navigate', {{url:'{origin}/?storage=read'}}), true")
+                deadline = time.time() + 20
+                while time.time() < deadline and not any(t.startswith('storage:') for t in app.titles()[before:]):
+                    time.sleep(0.2)
+                later = [t for t in app.titles()[before:] if t.startswith('storage:')]
+                results.append(check('closing every private tab ends the private session',
+                                     later[-1:] == ['storage:empty:empty'], str(later)))
+            finally:
+                app.close()
+
         if scenario('crash'):
             app = App(executable, f'{origin}/')
             try:
@@ -553,7 +577,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--exe', default=str(REPO / 'target/debug/felaris.exe'))
     parser.add_argument('--only', nargs='*', default=[],
-                        choices=['download', 'cancel', 'stalled', 'memory', 'color', 'cache', 'popup', 'permission', 'privacy', 'crash'])
+                        choices=['download', 'cancel', 'stalled', 'memory', 'color', 'cache', 'popup', 'permission', 'privacy', 'private-session', 'crash'])
     arguments = parser.parse_args()
     DESKTOP_NAME = 'FelarisTests-' + str(uuid.uuid4())
     DESKTOP = user32.CreateDesktopW(DESKTOP_NAME, None, None, 0, 0x1FF, None)

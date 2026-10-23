@@ -14,9 +14,11 @@ for continuing the work, not a release candidate.
 - Permission Allow/Block decisions through Felaris's prompt. Permission-dependent backends remain
   disabled in normal browsing; iframe and worker requests fail closed.
 - Regular cookies and localStorage persist across normal Exit and restart. Private cookies and
-  localStorage are isolated and empty after restart. Forced termination can lose unflushed cookies.
+  localStorage are isolated and empty after restart. Closing the last private tab clears private
+  cookies, web storage and cached responses in the running browser. Forced termination can lose
+  unflushed regular cookies.
 
-The combined tree passes 47 default and 49 Servo-feature Rust tests, 34 isolated-desktop Servo
+The combined tree passes 47 default and 49 Servo-feature Rust tests, 36 isolated-desktop Servo
 runtime checks, JavaScript checks, 18 release guards, and the default WebView2 native smoke suite.
 These results are local evidence. Hosted CI, packaging, and installer results must be assessed
 for the PR's current head.
@@ -29,8 +31,8 @@ for the PR's current head.
 - [ ] Windows accessibility and real IME input validation.
 - [ ] Composed window/dialog screenshots and visual review. The current headless suite proves
       behavior, not appearance or compositor correctness; no Servo screenshot baseline is retained.
-- [ ] Storage coverage beyond cookies/localStorage, plus profile-clearing semantics and private
-      session lifetime within one running browser.
+- [ ] Storage coverage beyond cookies/localStorage (IndexedDB, private auth cache and HSTS state),
+      plus profile-clearing semantics.
 - [ ] Clean-machine Servo build, dependency/license packaging, installer and update verification.
 - [ ] Passing hosted checks for the current PR head and review of remaining findings.
 

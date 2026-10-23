@@ -729,7 +729,7 @@ fn tab_event(
                     tab.error = None;
                 }
                 if tab.url == url && !failed && !private {
-                    history::visit(&tab.url, &tab.title);
+                    history::visit(&tab.url, &tab.title, tab.favicon.as_deref());
                 }
             }
         }
@@ -763,8 +763,11 @@ fn tab_event(
             }
         }
         UserEvent::Favicon(id, generation, uri) => {
-            if current(state, id, generation).is_some() {
+            if let Some(index) = current(state, id, generation) {
                 let web = uri.starts_with("https://") || uri.starts_with("http://");
+                if web && !state.is_private(id) {
+                    history::set_favicon(&state.tabs[index].url, &uri);
+                }
                 state.set_favicon(id, web.then_some(uri));
             }
         }

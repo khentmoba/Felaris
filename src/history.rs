@@ -12,6 +12,8 @@ pub struct Entry {
     pub url: String,
     pub title: String,
     pub time: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub favicon: Option<String>,
 }
 
 static DIRTY: AtomicBool = AtomicBool::new(false);
@@ -58,12 +60,15 @@ fn changed() {
 }
 
 /// Newest first; reloading the page at the top of the list only refreshes it.
-fn record(entries: &mut Vec<Entry>, url: &str, title: &str, time: u64) {
+fn record(entries: &mut Vec<Entry>, url: &str, title: &str, time: u64, favicon: Option<&str>) {
     let title = if title.is_empty() { url } else { title };
     match entries.first_mut() {
         Some(latest) if latest.url == url => {
             latest.title = title.into();
             latest.time = time;
+            if let Some(favicon) = favicon {
+                latest.favicon = Some(favicon.into());
+            }
         }
         _ => {
             entries.insert(
@@ -72,6 +77,7 @@ fn record(entries: &mut Vec<Entry>, url: &str, title: &str, time: u64) {
                     url: url.into(),
                     title: title.into(),
                     time,
+                    favicon: favicon.map(str::to_owned),
                 },
             );
             entries.truncate(MAX_ENTRIES);
@@ -79,7 +85,7 @@ fn record(entries: &mut Vec<Entry>, url: &str, title: &str, time: u64) {
     }
 }
 
-pub fn visit(url: &str, title: &str) {
+pub fn visit(url: &str, title: &str, favicon: Option<&str>) {
     if !matches!(
         url::Url::parse(url)
             .map(|u| u.scheme().to_owned())
@@ -90,7 +96,7 @@ pub fn visit(url: &str, title: &str) {
         return;
     }
     let mut entries = log();
-    record(&mut entries, url, title, now());
+    record(&mut entries, url, title, now(), favicon);
     changed();
 }
 
@@ -103,6 +109,26 @@ pub fn retitle(url: &str, title: &str) {
         latest.title = title.into();
         changed();
     }
+}
+
+pub fn set_favicon(url: &str, favicon: &str) {
+    if !settings::get().save_history {
+        return;
+    }
+    if update_favicon(&mut log(), url, favicon) {
+        changed();
+    }
+}
+
+fn update_favicon(entries: &mut [Entry], url: &str, favicon: &str) -> bool {
+    let mut updated = false;
+    for entry in entries.iter_mut().filter(|entry| entry.url == url) {
+        if entry.favicon.as_deref() != Some(favicon) {
+            entry.favicon = Some(favicon.into());
+            updated = true;
+        }
+    }
+    updated
 }
 
 pub fn all() -> Vec<Entry> {
@@ -145,9 +171,9 @@ mod tests {
     #[test]
     fn newest_visit_leads_and_repeats_only_refresh() {
         let mut entries = Vec::new();
-        record(&mut entries, "https://a.test/", "A", 1);
-        record(&mut entries, "https://b.test/", "", 2);
-        record(&mut entries, "https://b.test/", "B", 3);
+        record(&mut entries, "https://a.test/", "A", 1, None);
+        record(&mut entries, "https://b.test/", "", 2, None);
+        record(&mut entries, "https://b.test/", "B", 3, None);
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].title, "B");
         assert_eq!(entries[0].time, 3);
@@ -158,7 +184,7 @@ mod tests {
     fn recent_clearing_keeps_older_visits() {
         let mut entries = Vec::new();
         for (n, time) in [10, 20, 30].into_iter().enumerate() {
-            record(&mut entries, &format!("https://{n}.test/"), "t", time);
+            record(&mut entries, &format!("https://{n}.test/"), "t", time, None);
         }
         retain_older(&mut entries, Some(20));
         assert_eq!(entries.len(), 1);
@@ -168,10 +194,33 @@ mod tests {
     }
 
     #[test]
+    fn favicons_survive_serialization_and_late_updates() {
+        let mut entries: Vec<Entry> =
+            serde_json::from_str(r#"[{"url":"https://a.test/","title":"A","time":1}]"#).unwrap();
+        assert_eq!(entries[0].favicon, None);
+        let icon = "https://a.test/assets/logo.png";
+        assert!(update_favicon(&mut entries, "https://a.test/", icon));
+        assert!(!update_favicon(&mut entries, "https://a.test/", icon));
+        assert!(!update_favicon(&mut entries, "https://other.test/", icon));
+        record(&mut entries, "https://a.test/", "A", 2, None);
+        assert_eq!(entries[0].favicon.as_deref(), Some(icon));
+        record(&mut entries, "https://b.test/", "B", 3, Some(icon));
+        let restored: Vec<Entry> =
+            serde_json::from_slice(&serde_json::to_vec(&entries).unwrap()).unwrap();
+        assert_eq!(restored, entries);
+    }
+
+    #[test]
     fn history_is_capped() {
         let mut entries = Vec::new();
         for n in 0..MAX_ENTRIES + 5 {
-            record(&mut entries, &format!("https://{n}.test/"), "t", n as u64);
+            record(
+                &mut entries,
+                &format!("https://{n}.test/"),
+                "t",
+                n as u64,
+                None,
+            );
         }
         assert_eq!(entries.len(), MAX_ENTRIES);
         assert_eq!(entries[0].url, format!("https://{}.test/", MAX_ENTRIES + 4));

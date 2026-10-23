@@ -24,6 +24,10 @@ ENUM = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
 user32.CreateDesktopW.argtypes = [wt.LPCWSTR, wt.LPCWSTR, ctypes.c_void_p, wt.DWORD, wt.DWORD, ctypes.c_void_p]
 user32.CreateDesktopW.restype = wt.HANDLE
 user32.CloseDesktop.argtypes = [wt.HANDLE]
+user32.GetProcessWindowStation.restype = wt.HANDLE
+user32.GetThreadDesktop.argtypes = [wt.DWORD]
+user32.GetThreadDesktop.restype = wt.HANDLE
+user32.GetUserObjectInformationW.argtypes = [wt.HANDLE, ctypes.c_int, ctypes.c_void_p, wt.DWORD, ctypes.POINTER(wt.DWORD)]
 user32.EnumDesktopWindows.argtypes = [wt.HANDLE, ENUM, wt.LPARAM]
 user32.GetWindowThreadProcessId.argtypes = [wt.HWND, ctypes.POINTER(wt.DWORD)]
 user32.GetClassNameW.argtypes = [wt.HWND, wt.LPWSTR, ctypes.c_int]
@@ -232,6 +236,19 @@ def launch_on_desktop(arguments, env, log):
     startup = Startup()
     startup.cb = ctypes.sizeof(startup)
     startup.desktop = 'WinSta0\\' + DESKTOP_NAME
+    def object_name(handle):
+        value = ctypes.create_unicode_buffer(512)
+        needed = wt.DWORD()
+        if not user32.GetUserObjectInformationW(handle, 2, value, ctypes.sizeof(value), ctypes.byref(needed)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return value.value
+    log.write('Launcher: ' + json.dumps({
+        'window_station': object_name(user32.GetProcessWindowStation()),
+        'thread_desktop': object_name(user32.GetThreadDesktop(kernel.GetCurrentThreadId())),
+        'created_desktop': object_name(DESKTOP),
+        'requested_desktop': startup.desktop,
+    }) + '\n')
+    log.flush()
     startup.flags = 0x100  # STARTF_USESTDHANDLES
     handle = msvcrt.get_osfhandle(log.fileno())
     os.set_handle_inheritable(handle, True)
@@ -266,10 +283,19 @@ class App:
         self.log_path = self.work / 'app.log'
         self.log = self.log_path.open('w', encoding='utf-8')
         self.pid = launch_on_desktop([str(executable), '--engine=servo', url], env, self.log)
+        try:
+            self.eval('true')
+        except Exception:
+            self.close()
+            raise
 
     def eval(self, expression):
         result = subprocess.run(['node', str(REPO / 'tests/native_command.mjs'), str(self.port), expression],
-                                check=True, timeout=30, capture_output=True, text=True)
+                                timeout=30, capture_output=True, text=True)
+        if result.returncode:
+            self.log.flush()
+            details = self.log_path.read_text(encoding='utf-8', errors='replace')[-4000:]
+            raise RuntimeError(f'Felaris debugger command failed: {result.stderr.strip()}\nApp log: {details}')
         return result.stdout.strip()
 
     def titles(self):

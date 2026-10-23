@@ -881,6 +881,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let (release, wait) = mpsc::channel();
+        let (body_sent, body_received) = mpsc::channel();
         let server = std::thread::spawn(move || {
             loop {
                 let (mut stream, _) = listener.accept().unwrap();
@@ -907,6 +908,7 @@ mod tests {
                 stream.write_all(&[b'x'; 32768]).unwrap();
                 wait.recv_timeout(Duration::from_secs(15)).unwrap();
                 stream.write_all(&[b'x'; 32768]).unwrap();
+                body_sent.send(()).unwrap();
                 break;
             }
         });
@@ -946,7 +948,9 @@ mod tests {
         view.load_url(&format!("http://{address}/download"))
             .unwrap();
         let views = HashMap::from([(7, view)]);
-        let deadline = Instant::now() + Duration::from_secs(15);
+        let observed_at = Instant::now();
+        let deadline = observed_at + Duration::from_secs(15);
+        let mut started_at = None;
         let mut started = false;
         let mut completed = false;
         event_loop.run_return(|_, _, flow| {
@@ -954,6 +958,7 @@ mod tests {
             let counts = download_counts(&views);
             if !started && counts.get(&7) == Some(&1) {
                 started = true;
+                started_at = Some(observed_at.elapsed());
                 release.send(()).unwrap();
             }
             if started && counts.is_empty() {
@@ -964,10 +969,27 @@ mod tests {
             }
         });
         let _ = release.send(());
-        assert!(started, "Download never became active");
+        let operations = DOWNLOADS.with_borrow(|downloads| {
+            downloads.iter().map(|(id, operation)| unsafe {
+                let (mut state, mut reason) = (Default::default(), Default::default());
+                let (mut received, mut total) = (0, 0);
+                let state_result = operation.State(&mut state);
+                let received_result = operation.BytesReceived(&mut received);
+                let total_result = operation.TotalBytesToReceive(&mut total);
+                let reason_result = operation.InterruptReason(&mut reason);
+                format!("tab={id}, state={state:?} ({state_result:?}), bytes={received}/{total} ({received_result:?}, {total_result:?}), interruption={reason:?} ({reason_result:?})")
+            }).collect::<Vec<_>>()
+        });
+        assert!(
+            started,
+            "Download never became active; operations={operations:?}"
+        );
         assert!(
             completed,
-            "Completed download stayed active without a notification"
+            "Completed download stayed active without a notification; started_after={started_at:?}, elapsed={:?}, body_sent={}, destination={:?}, operations={operations:?}",
+            observed_at.elapsed(),
+            body_received.try_recv().is_ok(),
+            std::fs::metadata(&destination).map(|metadata| metadata.len()),
         );
         assert_eq!(std::fs::read(destination).unwrap(), vec![b'x'; 65536]);
         server.join().unwrap();

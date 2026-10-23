@@ -15,7 +15,7 @@ does not accept these patches upstream, so they live here.
 | `patches/site-cache-clearing.patch` | `servo`, `servo-net-traits`, `servo-net` | Adds `NetworkManager::clear_cache_for_sites`, which drops the memory and disk HTTP cache entries for some hosts and their subdomains. |
 | `patches/downloads.patch` | `servo`, `servo-net` | A top-level navigation whose response is an attachment, or has a type Servo cannot display, becomes a download: the page gets `204 No Content` (so it stays), `WebViewDelegate::request_download` picks a file, and the same response body is written there. `notify_download_finished` reports the result. |
 
-| `patches/production-hardening.patch` | `servo`, `servo-embedder-traits`, `servo-script`, `servo-net` | Adds requesting-origin metadata for permissions and hardens downloads with bounded HTTP streaming, asynchronous cancellation and retained file handles. Apply this after the five patches above. |
+| `patches/production-hardening.patch` | `servo`, `servo-constellation`, `servo-embedder-traits`, `servo-script`, `servo-net` | Carries requesting-origin metadata, bounds download streaming with asynchronous cancellation and retained file handles, and reports unexpected script-process exits to the embedder. Apply this after the five patches above. |
 
 ## Upgrading Servo
 

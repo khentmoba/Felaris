@@ -1,7 +1,6 @@
 //! A `cl.exe` that runs the real one (`FELARIS_REAL_CL`) and retries when it fails with
-//! C1056. cl reopens each object file to patch its timestamp (cc passes `-Brepro`), and on
-//! some machines another process briefly holds the new file open, failing a few of ANGLE's
-//! hundreds of compiles. Built and used by `scripts/servo.ps1`.
+//! C1056. ANGLE's full build intermittently failed on this machine, while the same commands
+//! succeeded in isolation. Built and used by `scripts/servo.ps1`.
 
 use std::io::Write;
 use std::process::{Command, exit};

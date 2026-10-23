@@ -262,6 +262,7 @@ impl ServoEngine {
             .preferences(preferences)
             .opts(servo::Opts {
                 config_dir: Some(directory.join("Servo")),
+                hard_fail: false,
                 // Windows provides process separation here, but no Servo sandbox.
                 multiprocess: std::env::var_os("FELARIS_SERVO_SINGLE_PROCESS").is_none(),
                 ..Default::default()

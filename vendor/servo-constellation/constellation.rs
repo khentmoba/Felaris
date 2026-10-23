@@ -1280,7 +1280,12 @@ where
                 self.handle_request_from_background_hang_monitor(message);
             },
             #[cfg(feature = "multiprocess")]
-            Request::RemoveProcess(index) => self.process_manager.remove(index),
+            Request::RemoveProcess(index) => {
+                let event_loop = self.process_manager.remove(index);
+                if !self.shutting_down {
+                    self.handle_panic(event_loop, "The content process exited unexpectedly.".into(), None);
+                }
+            },
             #[cfg(not(feature = "multiprocess"))]
             Request::RemoveProcess(_) => {},
         }
@@ -2569,7 +2574,7 @@ where
 
                     if let Ok(process) = content.spawn_multiprocess() {
                         let crossbeam_receiver = receiver.route_preserving_errors();
-                        self.process_manager.add(crossbeam_receiver, process);
+                        self.process_manager.add(crossbeam_receiver, process, None);
                     } else {
                         return warn!("Failed to spawn process for SW manager.");
                     }

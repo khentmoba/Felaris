@@ -1,3 +1,103 @@
+diff --git a/servo-constellation/constellation.rs b/servo-constellation/constellation.rs
+index 001ea22..8ff9ef7 100644
+--- a/servo-constellation/constellation.rs
++++ b/servo-constellation/constellation.rs
+@@ -1280,7 +1280,12 @@ where
+                 self.handle_request_from_background_hang_monitor(message);
+             },
+             #[cfg(feature = "multiprocess")]
+-            Request::RemoveProcess(index) => self.process_manager.remove(index),
++            Request::RemoveProcess(index) => {
++                let event_loop = self.process_manager.remove(index);
++                if !self.shutting_down {
++                    self.handle_panic(event_loop, "The content process exited unexpectedly.".into(), None);
++                }
++            },
+             #[cfg(not(feature = "multiprocess"))]
+             Request::RemoveProcess(_) => {},
+         }
+@@ -2569,7 +2574,7 @@ where
+ 
+                     if let Ok(process) = content.spawn_multiprocess() {
+                         let crossbeam_receiver = receiver.route_preserving_errors();
+-                        self.process_manager.add(crossbeam_receiver, process);
++                        self.process_manager.add(crossbeam_receiver, process, None);
+                     } else {
+                         return warn!("Failed to spawn process for SW manager.");
+                     }
+diff --git a/servo-constellation/event_loop.rs b/servo-constellation/event_loop.rs
+index 67510e5..e9ddae0 100644
+--- a/servo-constellation/event_loop.rs
++++ b/servo-constellation/event_loop.rs
+@@ -182,7 +182,7 @@ impl EventLoop {
+         let crossbeam_receiver = lifeline_receiver.route_preserving_errors();
+         constellation
+             .process_manager
+-            .add(crossbeam_receiver, process);
++            .add(crossbeam_receiver, process, Some(id));
+ 
+         Ok(Self {
+             script_chan,
+diff --git a/servo-constellation/process_manager.rs b/servo-constellation/process_manager.rs
+index 0701d08..43bf48d 100644
+--- a/servo-constellation/process_manager.rs
++++ b/servo-constellation/process_manager.rs
+@@ -8,6 +8,7 @@ use crossbeam_channel::{Receiver, Select};
+ use log::{debug, warn};
+ use profile_traits::mem::{ProfilerChan, ProfilerMsg};
+ use servo_base::generic_channel::SendError;
++use servo_base::id::ScriptEventLoopId;
+ 
+ pub enum Process {
+     Unsandboxed(Child),
+@@ -38,7 +39,7 @@ impl Process {
+ type ProcessReceiver = Receiver<Result<(), SendError>>;
+ 
+ pub(crate) struct ProcessManager {
+-    processes: Vec<(Process, ProcessReceiver)>,
++    processes: Vec<(Process, ProcessReceiver, Option<ScriptEventLoopId>)>,
+     mem_profiler_chan: ProfilerChan,
+ }
+ 
+@@ -50,25 +51,25 @@ impl ProcessManager {
+         }
+     }
+ 
+-    pub fn add(&mut self, receiver: ProcessReceiver, process: Process) {
++    pub fn add(&mut self, receiver: ProcessReceiver, process: Process, event_loop: Option<ScriptEventLoopId>) {
+         debug!("Adding process pid={}", process.pid());
+-        self.processes.push((process, receiver));
++        self.processes.push((process, receiver, event_loop));
+     }
+ 
+     pub fn register<'a>(&'a self, select: &mut Select<'a>) {
+-        for (_, receiver) in &self.processes {
++        for (_, receiver, _) in &self.processes {
+             select.recv(receiver);
+         }
+     }
+ 
+     pub fn receiver_at(&self, index: usize) -> &ProcessReceiver {
+-        let (_, receiver) = &self.processes[index];
++        let (_, receiver, _) = &self.processes[index];
+         receiver
+     }
+ 
+     #[servo_tracing::instrument(skip_all)]
+-    pub fn remove(&mut self, index: usize) {
+-        let (mut process, _) = self.processes.swap_remove(index);
++    pub fn remove(&mut self, index: usize) -> Option<ScriptEventLoopId> {
++        let (mut process, _, event_loop) = self.processes.swap_remove(index);
+         debug!("Removing process pid={}", process.pid());
+         // Unregister this process system memory profiler
+         self.mem_profiler_chan
+@@ -77,5 +78,6 @@ impl ProcessManager {
+                 process.pid()
+             )));
+         process.wait();
++        event_loop
+     }
+ }
 diff --git a/servo-embedder-traits/lib.rs b/servo-embedder-traits/lib.rs
 index a86f2e5..e1fc64d 100644
 --- a/servo-embedder-traits/lib.rs

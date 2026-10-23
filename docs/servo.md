@@ -83,7 +83,10 @@ Servo patches Felaris carries are in `vendor/`; see `vendor/README.md`.
 
 ## Not supported yet
 
-- Printing and muting. These show a status message. Servo tabs play no audio or video.
+- Printing, page screenshots, and muting. These show a status message. Servo tabs play no audio
+  or video. WebView2 keeps its existing implementations.
+- WebView2 tracking-prevention, password/autofill settings and time-ranged profile clearing.
+  Servo reports these as unsupported rather than claiming a setting or clear operation worked.
 - Download progress in bytes, pausing and resuming transfers.
 - Downloads started by `<a download>` or from a script (`blob:` URLs) rather than by navigating.
 - Notification delivery, location and camera backends. Routing a permission decision does not

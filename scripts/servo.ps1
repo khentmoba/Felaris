@@ -5,7 +5,7 @@
 # Needs libclang for ANGLE's bindgen step. Set LIBCLANG_PATH, or the script downloads the
 # libclang wheel from PyPI into target/servo-tools.
 # -RetryLockedCompiles builds C++ through scripts/cl-retry.rs, which retries compiles that fail
-# with C1056 (another process holding a new object file). Switching it on or off reruns every
+# with C1056. Switching it on or off reruns every
 # C/C++ build script.
 param(
     [switch]$Release,

@@ -177,6 +177,16 @@ const c = document.getElementById('c');
 c.addEventListener('input', () => document.title = 'input:' + c.value);
 c.addEventListener('change', () => document.title += ' change:' + c.value);
 if (q.get('go')) setTimeout(() => { document.title = 'leaving'; location.href = '/' + q.get('go'); }, 1500);
+const storage = q.get('storage');
+if (storage) {
+  const before = localStorage.getItem('servo-test') || 'empty';
+  const cookie = document.cookie.split('; ').find(value => value.startsWith('servo_test='))?.split('=')[1] || 'empty';
+  if (storage !== 'read') {
+    localStorage.setItem('servo-test', storage);
+    document.cookie = 'servo_test=' + storage + '; SameSite=Lax; path=/; Max-Age=3600';
+  }
+  document.title = 'storage:' + before + ':' + cookie;
+}
 if (q.get('permission')) setTimeout(() => {
   Notification.requestPermission().then(answer => { document.title = 'permission:' + answer; });
 }, 500);
@@ -241,14 +251,15 @@ def launch_on_desktop(arguments, env, log):
 
 
 class App:
-    def __init__(self, executable, url):
+    def __init__(self, executable, url, profile=None):
         self.work = REPO / 'target' / 'native-servo' / str(uuid.uuid4())
         self.work.mkdir(parents=True)
         with socket.socket() as s:
             s.bind(('127.0.0.1', 0))
             self.port = s.getsockname()[1]
         env = {k: v for k, v in os.environ.items() if not k.startswith('FELARIS_')}
-        env.update(FELARIS_PROFILE_DIR=str(self.work / 'profile'),
+        self.profile = profile or self.work / 'profile'
+        env.update(FELARIS_PROFILE_DIR=str(self.profile),
                    FELARIS_SMOKE_TEST=str(self.work / 'disabled.json'),
                    FELARIS_SERVO_TEST_PERMISSIONS='1',
                    FELARIS_SMOKE_BROWSER_ARGUMENTS=f'--remote-debugging-port={self.port} --remote-debugging-address=127.0.0.1')
@@ -275,10 +286,29 @@ class App:
             time.sleep(0.2)
         return False
 
-    def close(self):
-        subprocess.run(['taskkill', '/PID', str(self.pid), '/T', '/F'], capture_output=True)
+    def exit_cleanly(self):
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
+        kernel.OpenProcess.restype = wt.HANDLE
+        kernel.WaitForSingleObject.argtypes = [wt.HANDLE, wt.DWORD]
+        kernel.CloseHandle.argtypes = [wt.HANDLE]
+        handle = kernel.OpenProcess(0x100000, False, self.pid)
+        if not handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            self.eval("Felaris.send('exit'), true")
+            exited = kernel.WaitForSingleObject(handle, 10000) == 0
+            self.exited = exited
+            return exited
+        finally:
+            kernel.CloseHandle(handle)
+
+    def close(self, remove_profile=True):
+        if not getattr(self, 'exited', False):
+            subprocess.run(['taskkill', '/PID', str(self.pid), '/T', '/F'], capture_output=True)
         self.log.close()
-        shutil.rmtree(self.work / 'profile', ignore_errors=True)
+        if remove_profile:
+            shutil.rmtree(self.profile, ignore_errors=True)
 
 
 def check(name, condition, detail=''):
@@ -425,6 +455,70 @@ def run(executable, only):
             finally:
                 app.close()
 
+        if scenario('privacy'):
+            app = App(executable, f'{origin}/?storage=public')
+            profile = app.profile
+            try:
+                results.append(check('regular storage starts empty', app.wait_title('storage:empty:empty')))
+                app.eval("Felaris.send('new_private_tab'), true")
+                time.sleep(1)
+                before_private = len(app.titles())
+                app.eval(f"Felaris.send('navigate', {{url:'{origin}/?storage=private'}}), true")
+                deadline = time.time() + 20
+                while time.time() < deadline and not any('storage:empty:empty' in t for t in app.titles()[before_private:]):
+                    time.sleep(0.2)
+                time.sleep(1)
+                results.append(check('private storage cannot read regular cookies or localStorage',
+                                     app.titles()[-1:] == ['storage:empty:empty'], str(app.titles()[-3:])))
+                app.eval("Felaris.send('switch_tab', {id:2}), true")
+                app.eval(f"Felaris.send('navigate', {{url:'{origin}/?storage=read'}}), true")
+                results.append(check('private writes do not alter regular storage', app.wait_title('storage:public:public')))
+                results.append(check('browser exits through its normal command', app.exit_cleanly()))
+            finally:
+                app.close(remove_profile=False)
+            restored = App(executable, f'{origin}/?storage=read', profile=profile)
+            try:
+                results.append(check('regular storage persists after restart', restored.wait_title('storage:public:public')))
+                restored.eval("Felaris.send('new_private_tab'), true")
+                time.sleep(1)
+                restored.eval(f"Felaris.send('navigate', {{url:'{origin}/?storage=read'}}), true")
+                results.append(check('private storage is empty after restart', restored.wait_title('storage:empty:empty')))
+            finally:
+                restored.close()
+
+        if scenario('crash'):
+            app = App(executable, f'{origin}/')
+            try:
+                if not app.wait_title('start'):
+                    raise RuntimeError('Crash fixture did not load')
+                query = f"Get-CimInstance Win32_Process -Filter 'ParentProcessId={app.pid}' | Where-Object {{ $_.CommandLine -match '--content-process' }} | ForEach-Object {{ $_.ProcessId }}"
+                children = subprocess.check_output(['powershell', '-NoProfile', '-Command', query], text=True).split()
+                results.append(check('page content uses child processes', len(children) > 0))
+                killed = 0
+                for child in children:
+                    result = subprocess.run(['taskkill', '/PID', child, '/F'], capture_output=True)
+                    if result.returncode == 0:
+                        killed += 1
+                    else:
+                        remaining = subprocess.check_output(
+                            ['tasklist', '/FI', f'PID eq {child}', '/FO', 'CSV', '/NH'], text=True)
+                        if f'"{child}"' in remaining:
+                            raise RuntimeError(f'Could not terminate owned content process {child}: {result.stderr!r}')
+                results.append(check('at least one live content process was terminated', killed > 0))
+                app.wait_title('Page unavailable', timeout=15)
+                sidebar = app.eval('document.body.innerText')
+                results.append(check('browser survives a content-process crash',
+                                     'Page unavailable' in app.titles() and 'New tab' in sidebar, sidebar[-600:]))
+                before = len(app.titles())
+                app.eval("Felaris.send('reload'), true")
+                deadline = time.time() + 20
+                while time.time() < deadline and 'start' not in app.titles()[before:]:
+                    time.sleep(0.2)
+                results.append(check('reload recovers crashed page', 'start' in app.titles()[before:],
+                                     str(app.titles()[before:]) + app.eval('document.body.innerText')[-600:]))
+            finally:
+                app.close()
+
         if scenario('permission'):
             for button, expected in [('allow', 'granted'), ('block', 'denied')]:
                 app = App(executable, f'{origin}/?permission=1')
@@ -459,7 +553,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--exe', default=str(REPO / 'target/debug/felaris.exe'))
     parser.add_argument('--only', nargs='*', default=[],
-                        choices=['download', 'cancel', 'stalled', 'memory', 'color', 'cache', 'popup', 'permission'])
+                        choices=['download', 'cancel', 'stalled', 'memory', 'color', 'cache', 'popup', 'permission', 'privacy', 'crash'])
     arguments = parser.parse_args()
     DESKTOP_NAME = 'FelarisTests-' + str(uuid.uuid4())
     DESKTOP = user32.CreateDesktopW(DESKTOP_NAME, None, None, 0, 0x1FF, None)

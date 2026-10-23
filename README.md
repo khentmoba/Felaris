@@ -130,6 +130,8 @@ The compiled release executable will be located at:
 target/release/felaris.exe
 ```
 
+An experimental build can render tabs with Servo instead of WebView2. See [docs/servo.md](docs/servo.md).
+
 ---
 
 ## UI Verification

@@ -7,6 +7,39 @@ on:
     branches: [main]
 
 jobs:
+  servo:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: servo
+      - name: Build experimental Servo engine
+        run: powershell -NoProfile -File scripts/servo.ps1 -RetryLockedCompiles
+      - name: Check Servo engine
+        run: powershell -NoProfile -File scripts/servo.ps1 -Check -RetryLockedCompiles
+      - name: Servo runtime regressions on an isolated desktop
+        run: python -u -I tests/native_servo.py
+      - name: Retain Servo test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Felaris-Servo-evidence-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            target/native-servo/*/app.log
+            target/native-servo/results.json
   check:
     runs-on: windows-latest
     steps:

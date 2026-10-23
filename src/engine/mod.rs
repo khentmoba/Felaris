@@ -65,6 +65,28 @@ pub trait TabView {
     fn is_quiet(&self) -> bool;
     fn set_muted(&self, muted: bool) -> Result<(), String>;
     fn open_downloads(&self) -> Result<(), String>;
+    fn apply_privacy(&self, _settings: &crate::settings::Settings) -> Result<(), String> {
+        Err("These privacy settings are not supported by this engine yet.".into())
+    }
+    fn clear_browsing_data(
+        &self,
+        kinds: crate::desktop::DataKinds,
+        _range_ms: Option<u64>,
+        completed: Box<dyn FnOnce(Result<(), String>)>,
+    ) -> Result<(), String> {
+        if kinds.site_data || kinds.cache || kinds.passwords {
+            return Err("Profile data clearing is not supported by this engine yet.".into());
+        }
+        completed(Ok(()));
+        Ok(())
+    }
+    fn screenshot(
+        &self,
+        _title: &str,
+        _completed: Box<dyn FnOnce(Result<std::path::PathBuf, String>)>,
+    ) -> Result<(), String> {
+        Err("Screenshots are not supported by this engine yet.".into())
+    }
     /// Clears cookies and storage for `origin`, then sends `UserEvent::SiteDataCleared`.
     fn clear_site_data(
         &self,

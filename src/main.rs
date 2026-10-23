@@ -5,6 +5,7 @@ mod desktop;
 mod engine;
 mod extensions;
 mod history;
+mod import;
 mod instance;
 mod permission;
 mod profile;

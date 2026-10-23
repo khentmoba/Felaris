@@ -46,8 +46,31 @@ pub fn get_history_html(bookmarks: &[Bookmark], shortcuts: &[Shortcut]) -> Strin
         .replace("__HISTORY__", &data.to_string().replace('<', "\\u003c"))
 }
 
+pub const SETTINGS_SECTIONS: [&str; 6] = [
+    "general",
+    "search",
+    "privacy",
+    "extensions",
+    "shortcuts",
+    "about",
+];
+
+thread_local! {
+    static SETTINGS_SECTION: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Makes the next Settings page open at this section instead of General.
+pub fn open_settings_at(section: String) {
+    SETTINGS_SECTION.with(|pending| *pending.borrow_mut() = Some(section));
+}
+
 pub fn get_settings_html() -> String {
+    let section = SETTINGS_SECTION
+        .with(|pending| pending.borrow_mut().take())
+        .unwrap_or_else(|| "general".into());
     let data = serde_json::json!({
+        "section": section,
+        "importers": crate::import::available(),
         "settings": settings::get(),
         "engines": settings::ENGINES.iter().map(|(id, name, _)| [id, name]).collect::<Vec<_>>(),
         "ublock": extensions::status(),

@@ -24,10 +24,16 @@ section { display:flex; flex-direction:column; gap:12px; } section>h2 { font-siz
 .choices { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; padding:12px; background:var(--surface); border:1px solid var(--line); border-radius:12px; } .choice { display:flex; align-items:center; gap:10px; height:40px; padding:0 12px; border:1px solid transparent; text-align:left; } .choice:hover { background:var(--hover); } .choice[aria-checked="true"] { background:var(--active); border-color:var(--accent); } .dot { width:14px; height:14px; border-radius:50%; border:2px solid var(--muted); flex-shrink:0; } .choice[aria-checked="true"] .dot { border-color:var(--accent); background:radial-gradient(var(--accent) 45%,transparent 50%); }
 .pill { font-size:11px; padding:3px 9px; border-radius:10px; border:1px solid var(--line); color:var(--muted); white-space:nowrap; } .pill.ok { color:var(--ok); border-color:#2d5a40; } .pill.warn { color:var(--warn); border-color:#5a4a2d; }
 .keys { width:100%; border-collapse:collapse; background:var(--surface); border:1px solid var(--line); border-radius:12px; overflow:hidden; font-size:13px; } .keys td { padding:9px 16px; border-bottom:1px solid var(--line); } .keys tr:last-child td { border:0; } .keys td:first-child { width:46%; } kbd { font:12px "Segoe UI",sans-serif; border:1px solid var(--line); border-radius:5px; padding:2px 7px; background:var(--bg); }
+.choices.three { grid-template-columns:repeat(3,minmax(0,1fr)); }
+select { font:inherit; font-size:13px; color:var(--text); background:var(--active); border:1px solid var(--line); border-radius:8px; height:34px; padding:0 10px; cursor:pointer; } select:hover { border-color:var(--muted); } select:disabled { opacity:.5; cursor:default; }
+.panel { display:flex; flex-direction:column; gap:4px; padding:12px; background:var(--surface); border:1px solid var(--line); border-radius:12px; }
+.field { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:4px 4px 10px; font-weight:600; }
+.check { display:flex; align-items:flex-start; gap:12px; padding:10px 8px; border-radius:8px; cursor:pointer; } .check:hover { background:var(--hover); } .check input { margin:2px 0 0; width:16px; height:16px; accent-color:var(--accent); cursor:pointer; } .check b { display:block; font-weight:600; margin-bottom:2px; } .check span { color:var(--muted); font-size:12px; line-height:1.5; } .check b { color:var(--text); font-size:14px; }
+.actions { display:flex; align-items:center; justify-content:flex-end; gap:12px; padding:8px 4px 2px; } .actions .note { flex:1; }
 .note { color:var(--muted); font-size:12px; line-height:1.6; margin:0; } .empty { color:var(--muted); text-align:center; padding:40px 0; }
 .btn,.nav-item,.choice { transition:background-color 140ms ease,border-color 140ms ease,color 140ms ease; }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { transition:none!important; } }
-@media(max-width:760px) { body { grid-template-columns:1fr; padding:20px; gap:16px; } aside { position:static; } aside nav { flex-direction:row; flex-wrap:wrap; } .nav-item { height:auto; min-height:38px; padding:8px 10px; } .choices { grid-template-columns:1fr; } }
+@media(max-width:760px) { body { grid-template-columns:1fr; padding:20px; gap:16px; } aside { position:static; } aside nav { flex-direction:row; flex-wrap:wrap; } .nav-item { height:auto; min-height:38px; padding:8px 10px; } .choices,.choices.three { grid-template-columns:1fr; } }
 @media(forced-colors:active) { .nav-item[aria-current="true"],.choice[aria-checked="true"] { outline:1px solid Highlight; } }
 </style>
 </head>
@@ -43,6 +49,7 @@ section { display:flex; flex-direction:column; gap:12px; } section>h2 { font-siz
 <section data-section="general" data-label="General" data-icon="M3 10l9-7 9 7M5 9v11h5v-6h4v6h5V9">
 <div class="row"><div><h2>Default browser</h2><p id="default-browser-status"></p></div><button class="btn" id="set-default-browser" data-send="default_browser">Open Windows settings</button></div>
 <div class="row"><div><h2>Check for updates automatically</h2><p>Felaris looks for a new version shortly after launch and every 6 hours.</p></div><button class="switch" role="switch" id="auto-update" aria-label="Check for updates automatically"></button></div>
+<div class="row"><div><h2>Import bookmarks</h2><p id="import-detail"></p></div><select id="import-source" aria-label="Browser to import from"></select><button class="btn" id="import-button">Import</button></div>
 <div class="row"><div><h2>Update now</h2><p>Check for a new version of Felaris.</p></div><button class="btn" data-send="check_updates">Check for updates</button></div>
 </section>
 
@@ -55,7 +62,21 @@ section { display:flex; flex-direction:column; gap:12px; } section>h2 { font-siz
 <section data-section="privacy" data-label="Privacy and security" data-icon="M6 11V8a6 6 0 0 1 12 0v3M5 11h14v10H5z">
 <div class="row"><div><h2>Block ads and trackers</h2><p>Runs uBlock Origin Lite in every tab. Turning this on or off applies after you restart Felaris.</p></div><button class="switch" role="switch" id="ad-blocker" aria-label="Block ads and trackers"></button></div>
 <div class="row"><div><h2>Save browsing history</h2><p>Keeps the pages you visit so you can find them again. Open it from the menu or with Ctrl + H.</p></div><button class="switch" role="switch" id="save-history" aria-label="Save browsing history"></button></div>
-<div class="row"><div><h2>Clear history</h2><p>Removes every saved page from History.</p></div><button class="btn" data-send="clear_history">Clear history</button></div>
+<h2>Tracking prevention</h2>
+<div class="choices three" id="tracking" role="radiogroup" aria-label="Tracking prevention"></div>
+<p class="note" id="tracking-note"></p>
+<h2>Passwords and forms</h2>
+<div class="row"><div><h2>Offer to save passwords</h2><p>Saved passwords stay in this Felaris profile on this computer and are filled in when you return to the site.</p></div><button class="switch" role="switch" id="save-passwords" aria-label="Offer to save passwords"></button></div>
+<div class="row"><div><h2>Fill in forms automatically</h2><p>Suggests names, addresses, and other details you typed into forms before.</p></div><button class="switch" role="switch" id="autofill" aria-label="Fill in forms automatically"></button></div>
+<h2>Clear browsing data</h2>
+<div class="panel" id="clear-data">
+<label class="field">Time range <select id="clear-range"><option value="hour">Last hour</option><option value="day">Last 24 hours</option><option value="week">Last 7 days</option><option value="month">Last 4 weeks</option><option value="all" selected>All time</option></select></label>
+<label class="check"><input type="checkbox" data-kind="history" checked><span><b>Browsing history</b>Pages in History and the download list</span></label>
+<label class="check"><input type="checkbox" data-kind="site_data" checked><span><b>Cookies and site data</b>Signs you out of most sites</span></label>
+<label class="check"><input type="checkbox" data-kind="cache" checked><span><b>Cached images and files</b>Some sites load more slowly on your next visit</span></label>
+<label class="check"><input type="checkbox" data-kind="passwords"><span><b>Passwords and form data</b>Saved passwords and autofill entries</span></label>
+<div class="actions"><span class="note" id="clear-status" role="status"></span><button class="btn" id="clear-data-button">Clear data</button></div>
+</div>
 <div class="row"><div><h2>Site permissions</h2><p>Camera, microphone, location, notifications, and clipboard-read requests always ask first and name the site. Other requests are denied.</p></div><span class="pill ok">Always on</span></div>
 </section>
 
@@ -85,7 +106,7 @@ window.setDefaultBrowser=isDefault=>{
 };
 window.setDefaultBrowser(data.is_default_browser);
 const sections=[...document.querySelectorAll('section')];
-const shortcuts=[['New tab','Ctrl + T'],['Close tab','Ctrl + W'],['Address bar','Ctrl + L'],['Reload','Ctrl + R / F5'],['Back / forward','Alt + Left / Right'],['Reopen closed tab','Ctrl + Shift + T'],['Next / previous tab','Ctrl + Tab / Ctrl + Shift + Tab'],['Switch workspace','Alt + 1-9'],['Reorder focused tab','Alt + Shift + Up / Down'],['Collapse sidebar','Ctrl + Shift + B'],['Sleep background tabs','Ctrl + Shift + S'],['History and bookmarks','Ctrl + H'],['Bookmark page','Ctrl + D'],['New private tab','Ctrl + Shift + N'],['Find in page','Ctrl + F'],['Downloads','Ctrl + J'],['Zoom in / out / reset','Ctrl + + / Ctrl + - / Ctrl + 0'],['Full screen','F11']];
+const shortcuts=[['New tab','Ctrl + T'],['Close tab','Ctrl + W'],['Address bar','Ctrl + L'],['Reload','Ctrl + R / F5'],['Back / forward','Alt + Left / Right'],['Reopen closed tab','Ctrl + Shift + T'],['Next / previous tab','Ctrl + Tab / Ctrl + Shift + Tab'],['Switch workspace','Alt + 1-9'],['Reorder focused tab','Alt + Shift + Up / Down'],['Collapse sidebar','Ctrl + Shift + B'],['Sleep background tabs','Ctrl + Shift + S'],['History and bookmarks','Ctrl + H'],['Bookmark page','Ctrl + D'],['New private tab','Ctrl + Shift + N'],['Find in page','Ctrl + F'],['Reader view','F9'],['Clear browsing data','Ctrl + Shift + Delete'],['Downloads','Ctrl + J'],['Zoom in / out / reset','Ctrl + + / Ctrl + - / Ctrl + 0'],['Full screen','F11']];
 $('keys').replaceChildren(...shortcuts.map(([name,keys])=>{ const row=document.createElement('tr'); const a=document.createElement('td'); a.textContent=name; const b=document.createElement('td'); for(const [index,part] of keys.split(' / ').entries()) { if(index) b.append(' / '); const kbd=document.createElement('kbd'); kbd.textContent=part.replace(/ \+ /g,' '); b.append(kbd); } row.append(a,b); return row; }));
 $('version').textContent='Version '+data.version;
 $('extensions-folder').textContent=data.extensions_folder;
@@ -103,7 +124,7 @@ function show(id) {
  const query=$('find').value.trim().toLowerCase();
  let any=false;
  for(const section of sections) {
-  const rows=[...section.querySelectorAll('.row,.choices,.keys,.note')];
+  const rows=[...section.querySelectorAll('.row,.choices,.keys,.panel,:scope>.note')];
   if(query) {
    const hits=rows.filter(row=>(section.dataset.label+' '+row.textContent).toLowerCase().includes(query));
    rows.forEach(row=>row.hidden=!hits.includes(row));
@@ -128,6 +149,37 @@ function toggle(id,key) {
  button.onclick=()=>{ setting(key,!data.settings[key]); button.setAttribute('aria-checked',String(data.settings[key])); renderExtension(); };
 }
 toggle('auto-update','auto_update'); toggle('ad-blocker','ad_blocker'); toggle('save-history','save_history');
+toggle('save-passwords','save_passwords'); toggle('autofill','autofill');
+const tracking=[['basic','Basic','Blocks harmful trackers only. Most sites work as usual.'],['balanced','Balanced','Also blocks trackers from sites you have not visited. Recommended.'],['strict','Strict','Blocks most trackers across sites. Some pages may not work properly.']];
+function renderTracking() {
+ $('tracking').replaceChildren(...tracking.map(([id,name])=>{
+  const button=document.createElement('button'); button.className='choice'; button.setAttribute('role','radio'); button.setAttribute('aria-checked',String(data.settings.tracking_prevention===id));
+  const dot=document.createElement('span'); dot.className='dot'; const label=document.createElement('span'); label.textContent=name;
+  button.append(dot,label); button.onclick=()=>{ setting('tracking_prevention',id); renderTracking(); }; return button;
+ }));
+ $('tracking-note').textContent=(tracking.find(([id])=>id===data.settings.tracking_prevention)||tracking[1])[2]+' Built into Felaris and works without the ad blocker.';
+}
+renderTracking();
+const clearButton=$('clear-data-button'), clearStatus=$('clear-status'), clearBoxes=[...document.querySelectorAll('[data-kind]')];
+const clearReady=()=>{ clearButton.disabled=!clearBoxes.some(box=>box.checked); };
+clearBoxes.forEach(box=>box.onchange=clearReady);
+clearButton.onclick=()=>{
+ const kinds=Object.fromEntries(clearBoxes.map(box=>[box.dataset.kind,box.checked]));
+ const range=$('clear-range');
+ if(range.value==='all'&&(kinds.site_data||kinds.passwords)&&!confirm('Clear the selected data from all time? You will be signed out of most sites.'))return;
+ clearButton.disabled=true; clearStatus.textContent='Clearing…';
+ Felaris.send('clear_browsing_data',{range:range.value,kinds});
+};
+window.dataCleared=ok=>{ clearReady(); clearStatus.textContent=ok?'Cleared.':'Could not clear everything. See the message at the bottom of the window.'; };
+function renderImport() {
+ const select=$('import-source'), button=$('import-button');
+ select.replaceChildren(...data.importers.map(([id,name])=>{ const option=document.createElement('option'); option.value=id; option.textContent=name; return option; }));
+ const none=!data.importers.length;
+ select.hidden=none; button.hidden=none;
+ $('import-detail').textContent=none?'No Chrome, Edge, Brave, Vivaldi, or Opera bookmarks were found on this computer.':'Copies web bookmarks from another browser on this computer. Folders are flattened and existing bookmarks are kept.';
+ button.onclick=()=>Felaris.send('import_bookmarks',{browser:select.value});
+}
+renderImport();
 function renderEngines() {
  $('engines').replaceChildren(...data.engines.map(([id,name])=>{
   const button=document.createElement('button'); button.className='choice'; button.setAttribute('role','radio'); button.setAttribute('aria-checked',String(data.settings.search_engine===id));
@@ -153,7 +205,8 @@ function renderExtension() {
 }
 $('ublock-action').addEventListener('click',()=>{ data.ublock='installing'; renderExtension(); });
 renderExtension();
-show('general');
+window.showSection=id=>{ if(!sections.some(section=>section.dataset.section===id))return; $('find').value=''; show(id); };
+show(sections.some(section=>section.dataset.section===data.section)?data.section:'general');
 </script>
 </body>
 </html>

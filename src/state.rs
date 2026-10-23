@@ -608,6 +608,17 @@ impl BrowserState {
         }
     }
 
+    /// Appends bookmarks that aren't saved yet and returns how many were added.
+    pub fn import_bookmarks(&mut self, bookmarks: Vec<Bookmark>) -> usize {
+        let before = self.bookmarks.len();
+        for bookmark in bookmarks {
+            if !self.is_bookmarked(&bookmark.url) {
+                self.bookmarks.push(bookmark);
+            }
+        }
+        self.bookmarks.len() - before
+    }
+
     pub fn switch_workspace(&mut self, workspace_id: usize) -> Option<&Tab> {
         if !self
             .workspaces
@@ -1221,6 +1232,28 @@ mod tests {
         assert_eq!(restored.bookmarks.len(), 1);
         state.move_tab_to_workspace(private, 1);
         assert!(state.is_private(private));
+    }
+
+    #[test]
+    fn imported_bookmarks_skip_existing_ones() {
+        let mut state = BrowserState::new();
+        state.bookmarks.push(Bookmark {
+            url: "https://a.test/".into(),
+            title: "Mine".into(),
+        });
+        let added = state.import_bookmarks(vec![
+            Bookmark {
+                url: "https://a.test/".into(),
+                title: "Theirs".into(),
+            },
+            Bookmark {
+                url: "https://b.test/".into(),
+                title: "B".into(),
+            },
+        ]);
+        assert_eq!(added, 1);
+        assert_eq!(state.bookmarks[0].title, "Mine");
+        assert_eq!(state.bookmarks[1].url, "https://b.test/");
     }
 
     #[test]

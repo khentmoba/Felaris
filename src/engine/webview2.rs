@@ -103,6 +103,7 @@ impl super::Engine for WebView2 {
             .map_err(|error| error.to_string())?;
         desktop::attach(&view, id, generation, self.proxy.clone())
             .map_err(|error| error.to_string())?;
+        let _ = desktop::apply_privacy(&view, &crate::settings::get());
         let _ = desktop::mute(&view, muted);
         Ok(Box::new(view))
     }
@@ -238,6 +239,27 @@ impl TabView for WebView {
 
     fn set_muted(&self, muted: bool) -> Result<(), String> {
         desktop::mute(self, muted)
+    }
+
+    fn apply_privacy(&self, settings: &crate::settings::Settings) -> Result<(), String> {
+        desktop::apply_privacy(self, settings)
+    }
+
+    fn clear_browsing_data(
+        &self,
+        kinds: desktop::DataKinds,
+        range_ms: Option<u64>,
+        completed: Box<dyn FnOnce(Result<(), String>)>,
+    ) -> Result<(), String> {
+        desktop::clear_browsing_data(self, kinds, range_ms, completed)
+    }
+
+    fn screenshot(
+        &self,
+        title: &str,
+        completed: Box<dyn FnOnce(Result<std::path::PathBuf, String>)>,
+    ) -> Result<(), String> {
+        desktop::screenshot(self, title, completed)
     }
 
     fn open_downloads(&self) -> Result<(), String> {

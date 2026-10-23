@@ -8,8 +8,7 @@ on:
 
 jobs:
   servo:
-    # Compare private-desktop startup against the image that fails with 0x80070578.
-    runs-on: windows-2022
+    runs-on: windows-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4

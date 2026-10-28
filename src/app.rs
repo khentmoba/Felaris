@@ -258,13 +258,14 @@ fn bounds(window: &Window, state: &BrowserState, side: f64, top: f64) -> (Rect, 
     let size = window.inner_size().to_logical::<f64>(window.scale_factor());
     let full = ui::SIDEBAR_WIDTH_EXPANDED;
     let hot = ui::SIDEBAR_HOT_ZONE;
-    let (side_x, side_width, top_left) = if !state.sidebar_collapsed {
-        (0., full, full)
+    let (side_x, side_width) = if !state.sidebar_collapsed {
+        (0., full)
     } else {
         let right = (full * side).max(hot);
         // Keep WebView2 at full width so revealing it never resizes its surface.
-        (right - full, full, if side <= 0. { 0. } else { right })
+        (right - full, full)
     };
+    let top_left = if state.sidebar_collapsed { 0. } else { full };
     let margin = if window.is_maximized() || window.fullscreen().is_some() {
         0.
     } else {
@@ -1720,8 +1721,12 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         for (id, view) in &views { if rounded.get(id) != Some(&shape) { desktop::round(view, shape.0 as i32, shape.1 as i32, radius); rounded.insert(*id, shape); } }
         let _ = topbar.set_bounds(topbar_bounds);
         if !palette_open {
-            if state.sidebar_collapsed { desktop::raise(&sidebar); }
-            desktop::raise(&topbar);
+            if state.sidebar_collapsed {
+                desktop::raise(&sidebar);
+                desktop::below(&topbar, &sidebar);
+            } else {
+                desktop::raise(&topbar);
+            }
         }
         let _ = palette.set_bounds(overlay_bounds);
         if palette_shown != palette_open {

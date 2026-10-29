@@ -58,13 +58,19 @@ function row(entry,label,removeLabel,onRemove) {
   const site=new URL(entry.url);
   if(['https:','http:'].includes(site.protocol)) {
    const root=site.origin+'/favicon.ico';
-   const known=(data.shortcuts||[]).find(item=>{
-    try { return item.favicon&&new URL(item.url).hostname===site.hostname&&['https:','http:'].includes(new URL(item.favicon).protocol); } catch { return false; }
+   const sources=[entry,...(data.shortcuts||[])].flatMap(item=>{
+    try {
+     return new URL(item.url).hostname===site.hostname&&['https:','http:'].includes(new URL(item.favicon).protocol)?[item.favicon]:[];
+    } catch { return []; }
    });
+   const candidates=[...new Set([...sources,root])];
    const img=document.createElement('img'); img.alt=''; img.referrerPolicy='no-referrer'; img.loading='lazy'; img.style.opacity='0';
    img.onload=()=>{ img.style.opacity='1'; fallback.style.visibility='hidden'; };
-   img.onerror=()=>{ if(img.src!==root) img.src=root; else img.remove(); };
-   img.src=known?.favicon||root; icon.append(img);
+   img.onerror=()=>{
+    img.style.opacity='0'; fallback.style.visibility='';
+    if(candidates.length) img.src=candidates.shift(); else img.remove();
+   };
+   img.src=candidates.shift(); icon.append(img);
   }
  } catch {}
  open.append(time,icon,name,host); open.onclick=()=>Felaris.navigate(entry.url);

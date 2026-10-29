@@ -88,7 +88,7 @@
 
 The sidebar has no fixed shortcut-tile dock. Search opens/closes with short, interruptible motion, and tab and workspace changes retain visual continuity. Reduced-motion preferences skip spatial effects. Home-page shortcuts rank your most-visited sites (such as YouTube or X) first and fill any remaining slots from the default 8 shortcuts.
 
-Web searches use **Brave Search** by default (Settings can switch to DuckDuckGo, Google, or Bing) throughout the sidebar, Home page, and floating search bar. Suggestions come from your local open tabs, bookmarks, history, and shortcuts; no remote autocomplete requests are sent while typing.
+Web searches use **Brave Search** by default (Settings can switch to DuckDuckGo, Google, or Bing) throughout the sidebar, Home page, and floating search bar. Suggestions come from your local open tabs, bookmarks, history, and shortcuts; no remote autocomplete requests are sent while typing. Strong site or title matches appear before web search and are selected when you press Enter. Ordinary queries and weak matches keep web search first, and an explicit web search choice is always available.
 
 Shortcuts work while browser chrome or page content has focus. In pages they are caught natively before the page sees the key, so sites and focused iframes can't swallow them; `Ctrl + S`, `Ctrl + F`, and other keys not listed stay with the page. Right-clicking any tab in the sidebar opens quick actions to pin/unpin, duplicate, sleep/wake, move to another workspace, or close it. The bottom sidebar menu contains pin/unpin, reopen, and close-other-tabs actions. Close Others keeps pinned tabs, affects only the current workspace, and can be undone one tab at a time with Reopen.
 
@@ -153,6 +153,8 @@ node tests/native-smoke.cjs
 ```
 
 Native results and diagnostic logs are saved under `target/native-regressions/`. On failure, `failure.json` and `debugger.json` record the active tab, focus, sidebar state, recent keyboard input, and isolated debugger targets. Windows CI retains the top-level native logs and JSON reports for seven days after a failure; browser profiles are excluded. The same suite is mandatory during packaging and CI.
+
+Suggestion ranking can be compared against an earlier commit with `node tests/suggestions.bench.cjs --baseline <git-ref>`. After building, `python -B tests/native_suggestions.py --baseline <git-ref>` runs the same comparison in a hidden WebView2 app with an isolated profile. Both check identical results before timing six workloads with 2,000 history entries, including replaced history objects. Results are medians of seven alternating samples and measure suggestion computation, not page loading or rendering.
 
 For repeatable visual captures, run `python -B tests/native_capture.py` after building. It launches its own hidden app against local fixtures, uses a separate executable, profile, and debugging ports, and stops only its owned process tree. PNGs and a target manifest are saved under `target/native-capture/`. These are WebView captures; they do not prove native window composition or animation smoothness. The regression suite separately checks native sidebar stacking order and stable width during reveal, hide, and reversal, and menu opacity throughout its opening animation.
 

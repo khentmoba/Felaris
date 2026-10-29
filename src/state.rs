@@ -97,6 +97,12 @@ pub struct BrowserState {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub update_status: Option<String>,
     #[serde(default)]
+    pub dismissed_update_version: Option<String>,
+    #[serde(default, skip_deserializing)]
+    pub downloads_open: bool,
+    #[serde(default, skip_deserializing)]
+    pub download_items: Vec<crate::desktop::DownloadInfo>,
+    #[serde(default)]
     pub active_downloads: usize,
     #[serde(default, skip_deserializing)]
     pub is_default_browser: bool,
@@ -158,6 +164,9 @@ impl BrowserState {
             bookmarks: Vec::new(),
             update_available: None,
             update_status: None,
+            dismissed_update_version: None,
+            downloads_open: false,
+            download_items: Vec::new(),
             active_downloads: 0,
             is_default_browser: false,
             update_busy: false,
@@ -569,13 +578,18 @@ impl BrowserState {
 
     /// The state to write to disk: everything except the Private profile.
     pub fn for_session(&self) -> std::borrow::Cow<'_, Self> {
-        let Some(private) = self.private_workspace() else {
+        let private = self.private_workspace();
+        if private.is_none() && self.download_items.is_empty() && !self.downloads_open {
             return std::borrow::Cow::Borrowed(self);
-        };
+        }
         let mut state = self.clone();
-        state.workspaces.retain(|w| w.id != private);
-        state.tabs.retain(|tab| tab.workspace_id != private);
-        state.closed_tabs.retain(|tab| tab.workspace_id != private);
+        state.download_items.clear();
+        state.downloads_open = false;
+        if let Some(private) = private {
+            state.workspaces.retain(|w| w.id != private);
+            state.tabs.retain(|tab| tab.workspace_id != private);
+            state.closed_tabs.retain(|tab| tab.workspace_id != private);
+        }
         if state.tabs.is_empty() {
             state.active_workspace_id = state.workspaces.first().map_or(1, |w| w.id);
             state.add_tab(None, false);
@@ -1207,6 +1221,39 @@ mod tests {
         assert_eq!(restored.active_tab_id, 1);
         assert_eq!(restored.active_workspace_id, 1);
         assert!(BrowserState::from_session("{truncated").is_none());
+    }
+
+    #[test]
+    fn session_keeps_update_dismissal_without_download_paths() {
+        for private in [false, true] {
+            let mut state = BrowserState::new();
+            if private {
+                state.open_private_tab();
+            }
+            state.dismissed_update_version = Some("999.0.0".into());
+            state.downloads_open = true;
+            state.download_items.push(crate::desktop::DownloadInfo {
+                id: 1,
+                path: "C:\\secret-download.txt".into(),
+                received: 10,
+                total: 10,
+                status: "complete".into(),
+            });
+            assert!(
+                serde_json::to_string(&state)
+                    .unwrap()
+                    .contains("secret-download")
+            );
+            let saved = serde_json::to_string(&*state.for_session()).unwrap();
+            assert!(!saved.contains("secret-download"));
+            let restored = BrowserState::from_session(&saved).unwrap();
+            assert_eq!(
+                restored.dismissed_update_version.as_deref(),
+                Some("999.0.0")
+            );
+            assert!(restored.download_items.is_empty());
+            assert!(!restored.downloads_open);
+        }
     }
 
     #[test]

@@ -9,7 +9,7 @@
 * { box-sizing:border-box; } body { margin:0; min-height:100vh; color:var(--text); background:var(--bg); display:flex; flex-direction:column; padding:28px 40px 20px; } button,input { font:inherit; } button,a { -webkit-tap-highlight-color:transparent; } button { cursor:pointer; } :focus-visible { outline:2px solid var(--accent); outline-offset:4px; } ::selection { background:#45454b; color:white; } svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
 header { display:flex; justify-content:space-between; align-items:center; gap:16px; color:var(--muted); font-size:12px; } .logo { width:38px; height:38px; display:block; flex-shrink:0; } .logo path,.logo circle { stroke:none; } .logo .spark { stroke:#e0f2fe; stroke-width:1.2; stroke-linecap:round; } time { font-variant-numeric:tabular-nums; }
 main { flex:1; width:100%; max-width:640px; margin:0 auto; display:flex; flex-direction:column; justify-content:center; padding:64px 0 80px; }
-h1 { font-size:clamp(30px,4vw,44px); font-weight:400; letter-spacing:-.035em; line-height:1.15; margin:0 0 12px; text-wrap:balance; } .intro { color:var(--muted); font-size:14px; margin:0 0 32px; line-height:1.5; }
+h1 { font-size:clamp(30px,4vw,44px); font-weight:500; letter-spacing:-.035em; line-height:1.15; margin:0 0 12px; text-wrap:balance; } .intro { color:var(--muted); font-size:14px; margin:0 0 32px; line-height:1.5; }
 form { display:flex; align-items:center; gap:12px; min-height:60px; padding:8px 10px 8px 20px; background:var(--surface); border:1px solid var(--line); border-radius:14px; } form:focus-within { border-color:var(--accent); } form>svg { color:var(--muted); flex-shrink:0; } input { width:100%; min-width:0; background:none; border:0; outline:0; color:var(--text); caret-color:var(--accent); font-size:15px; height:40px; } #search-input:focus-visible { outline:none; } input::placeholder { color:var(--muted); opacity:1; } .submit { display:grid; place-items:center; flex-shrink:0; width:40px; height:40px; border:0; border-radius:9px; color:#101011; background:var(--accent); } .submit:hover { background:#f5f5f7; }
 .search-box { position:relative; }
 #search-results { position:absolute; z-index:1; top:calc(100% + 6px); width:100%; max-height:320px; overflow:auto; padding:6px; border:1px solid var(--line); border-radius:12px; background:var(--surface); scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
@@ -20,13 +20,14 @@ form { display:flex; align-items:center; gap:12px; min-height:60px; padding:8px 
 .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 .search-note { margin:10px 0 34px; font-size:12px; color:var(--muted); }
 h2 { font-size:12px; font-weight:600; color:var(--muted); margin:0 0 14px; }
-.shortcuts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px 12px; } .shortcut { display:flex; flex-direction:column; align-items:center; gap:10px; text-decoration:none; color:var(--muted); font-size:12px; padding:8px 4px; border-radius:10px; text-align:center; } .shortcut:hover { background:var(--surface); color:var(--text); } .shortcut-icon { display:grid; place-items:center; width:44px; height:44px; border-radius:13px; background:var(--surface); color:var(--accent); font-size:15px; font-weight:600; } .shortcut-icon img { width:26px; height:26px; object-fit:contain; border-radius:5px; } .shortcut-icon svg { width:21px; height:21px; } .shortcut:hover .shortcut-icon { background:var(--hover); } .shortcut-label { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .shortcut-visits { font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
+.shortcuts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px 16px; } .shortcut { display:flex; align-items:center; gap:12px; text-decoration:none; color:var(--text); font-size:13px; min-height:56px; padding:8px 12px; border-radius:10px; text-align:left; } .shortcut:hover { background:var(--surface); } .shortcut-icon { display:grid; place-items:center; flex-shrink:0; width:32px; height:32px; color:var(--accent); font-size:15px; font-weight:600; } .shortcut-icon img { width:24px; height:24px; object-fit:contain; } .shortcut-icon svg { width:21px; height:21px; } .shortcut-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .shortcut-visits { font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
 footer { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; font-size:12px; color:var(--muted); line-height:1.5; } .keys { display:flex; flex-wrap:wrap; gap:16px; } kbd { font:10px "Segoe UI",sans-serif; border:1px solid var(--line); border-radius:4px; padding:2px 5px; margin-right:5px; }
 form { transition:border-color 160ms ease,background-color 160ms ease; }
 .shortcut,.shortcut-icon,.submit { transition:background-color 140ms ease,color 140ms ease,transform 100ms ease; }
 .submit:active { transform:scale(.95); }
 @media(prefers-reduced-motion:reduce) { .submit:active { transform:none; } }
 @media(max-width:500px) { body { padding:22px; } header { font-size:12px; } .logo { width:32px; height:32px; } main { padding:40px 0; } .shortcuts { grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; } form { padding-left:12px; gap:8px; } input { font-size:13px; } .intro { font-size:13px; } footer { flex-direction:column; } }
+@media(max-width:360px) { .shortcuts { grid-template-columns:minmax(0,1fr); } }
 </style>
 </head>
 <body>
@@ -51,7 +52,7 @@ form { transition:border-color 160ms ease,background-color 160ms ease; }
 <a class="shortcut" href="https://reddit.com"><span class="shortcut-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><ellipse cx="12" cy="14" rx="9" ry="6"/><path d="m12 8 2-5 5 1M8 16c2 2 6 2 8 0"/><circle cx="8" cy="12" r="1"/><circle cx="16" cy="12" r="1"/><circle cx="20" cy="4" r="2"/></svg></span><span class="shortcut-label">Reddit</span></a>
 </div></section>
 </main>
-<footer><span>Make space for what matters.</span><div class="keys"><span><kbd>Ctrl L</kbd>Address bar</span><span><kbd>Ctrl T</kbd>New tab</span><span><kbd>Ctrl S</kbd>Sidebar</span></div></footer>
+<footer><span>Make space for what matters.</span><div class="keys"><span><kbd>Ctrl L</kbd>Address bar</span><span><kbd>Ctrl T</kbd>New tab</span><span><kbd>Ctrl Shift B</kbd>Sidebar</span></div></footer>
 <script>__COMMON_SCRIPT__</script>
 <script>
 document.querySelector('.search-note').textContent='Web searches use '+Felaris.searchName;
@@ -95,7 +96,7 @@ function renderSuggestions() {
  }));
  results.hidden=!options.length;
  input.setAttribute('aria-expanded',String(options.length>0));
- selectSuggestion(-1);
+ selectSuggestion(input.value.trim()?0:-1);
  document.getElementById('result-status').textContent=options.length?`${options.length} suggestions available`:'';
 }
 input.addEventListener('compositionstart',()=>{composing=true;});

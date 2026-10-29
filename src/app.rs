@@ -123,6 +123,16 @@ pub enum Command {
     },
     CheckUpdates,
     ApplyUpdate,
+    DismissUpdate {
+        version: String,
+    },
+    CloseDownloads,
+    CancelDownload {
+        id: usize,
+    },
+    RevealDownload {
+        id: usize,
+    },
     OpenDownloads,
     DefaultBrowser,
     OpenSettings {
@@ -268,13 +278,14 @@ fn bounds(window: &Window, state: &BrowserState, side: f64, top: f64) -> (Rect, 
     let size = window.inner_size().to_logical::<f64>(window.scale_factor());
     let full = ui::SIDEBAR_WIDTH_EXPANDED;
     let hot = ui::SIDEBAR_HOT_ZONE;
-    let (side_x, side_width, top_left) = if !state.sidebar_collapsed {
-        (0., full, full)
+    let (side_x, side_width) = if !state.sidebar_collapsed {
+        (0., full)
     } else {
         let right = (full * side).max(hot);
         // Keep WebView2 at full width so revealing it never resizes its surface.
-        (right - full, full, if side <= 0. { 0. } else { right })
+        (right - full, full)
     };
+    let top_left = if state.sidebar_collapsed { 0. } else { full };
     let margin = if window.is_maximized() || window.fullscreen().is_some() {
         0.
     } else {
@@ -627,7 +638,7 @@ fn tab_event(
                     tab.error = None;
                 }
                 if tab.url == url && !failed && !private {
-                    history::visit(&tab.url, &tab.title);
+                    history::visit(&tab.url, &tab.title, tab.favicon.as_deref());
                 }
             }
         }
@@ -661,8 +672,11 @@ fn tab_event(
             }
         }
         UserEvent::Favicon(id, generation, uri) => {
-            if current(state, id, generation).is_some() {
+            if let Some(index) = current(state, id, generation) {
                 let web = uri.starts_with("https://") || uri.starts_with("http://");
+                if web && !state.is_private(id) {
+                    history::set_favicon(&state.tabs[index].url, &uri);
+                }
                 state.set_favicon(id, web.then_some(uri));
             }
         }
@@ -1149,6 +1163,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         | Command::OpenSettings { .. } | Command::OpenHistory | Command::ImportBookmarks { .. } | Command::DuplicateTab { .. }
                         | Command::MoveTabToWorkspace { .. } | Command::ExpandPopup { .. }
                         | Command::ReorderTab { .. } | Command::RenameWorkspace { .. } | Command::DeleteWorkspace { .. } | Command::ToggleMute { .. }
+                        | Command::DismissUpdate { .. }
                         | Command::ToggleBookmark { .. } | Command::NewPrivateTab));
                 match event {
                     UserEvent::Audio(id, generation, playing, muted) => {
@@ -1422,7 +1437,12 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                     let _ = sidebar.evaluate_script(&format!("window.updateAddressHistory?.({json})"));
                                 }
                             },
+                            Command::CancelDownload { id } => { if let Err(error) = desktop::cancel_download(id) { state.update_status = Some(error); } },
+                            Command::CloseDownloads => { state.downloads_open = false; },
+                            Command::RevealDownload { id } => { if let Err(error) = desktop::reveal_download(id) { state.update_status = Some(error); } },
                             Command::OpenDownloads => {
+                                state.sidebar_collapsed = false;
+                                state.downloads_open = true;
                                 let id = downloads.iter().find(|(_, count)| **count > 0).map(|(id,_)| *id)
                                     .or(last_download_host.filter(|id| views.contains_key(id))).unwrap_or(state.active_tab_id);
                                 if let Some(view) = views.get(&id) && let Err(error) = view.open_downloads() { state.update_status = Some(error); }
@@ -1517,8 +1537,9 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             Command::Print => if let Some(view) = views.get(&state.active_tab_id) { let _ = view.print(); },
                             Command::Exit => if may_exit(&state, &session) { *flow = ControlFlow::Exit; },
                             Command::DefaultBrowser => { if let Err(error) = std::process::Command::new("explorer.exe").arg("ms-settings:defaultapps").spawn() { state.update_status = Some(format!("Could not open Windows default apps: {error}")); } },
+                            Command::DismissUpdate { version } => { if version.len() <= 100 { state.dismissed_update_version = Some(version); } },
                             Command::CheckUpdates => if !check_busy {
-                                check_busy = true; state.update_status = Some("Checking for updates…".into());
+                                check_busy = true; state.dismissed_update_version = None; state.update_status = Some("Checking for updates…".into());
                                 let proxy = proxy.clone(); std::thread::spawn(move || { let _ = proxy.send_event(UserEvent::UpdateChecked(updater::check_for_updates())); });
                             },
                             Command::ApplyUpdate => if !state.update_busy && state.active_downloads == 0 && let Some(update) = &state.update_available {
@@ -1540,6 +1561,8 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         },
                     UserEvent::DownloadsChanged => {},
                     UserEvent::DownloadStarted(id, generation, blank, document) => {
+                        state.downloads_open = true;
+                        state.sidebar_collapsed = false;
                         if state.tabs.iter().any(|tab| tab.id == id && tab.generation == generation) {
                             last_download_host = Some(id);
                             if blank && state.discard_download_tab(id) {
@@ -1598,6 +1621,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         downloads = desktop::download_counts(&views);
         for (id, count) in engine.downloads() { *downloads.entry(id).or_default() += count; }
         state.active_downloads = downloads.values().sum();
+        state.download_items = desktop::download_items();
         let awake: HashSet<_> = state.tabs.iter().filter(|tab| !tab.is_sleeping).map(|tab| tab.id).collect();
         let mut download_hosts = desktop::download_hosts();
         download_hosts.extend(downloads.iter().filter(|(_, count)| **count > 0).map(|(id, _)| *id));
@@ -1667,8 +1691,12 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         for (id, view) in &views { if rounded.get(id) != Some(&shape) { view.round(shape.0 as i32, shape.1 as i32, radius); rounded.insert(*id, shape); } }
         let _ = topbar.set_bounds(topbar_bounds);
         if !palette_open {
-            if state.sidebar_collapsed { desktop::raise(&sidebar); }
-            desktop::raise(&topbar);
+            if state.sidebar_collapsed {
+                desktop::raise(&sidebar);
+                desktop::below(&topbar, &sidebar);
+            } else {
+                desktop::raise(&topbar);
+            }
         }
         let _ = palette.set_bounds(overlay_bounds);
         if palette_shown != palette_open {

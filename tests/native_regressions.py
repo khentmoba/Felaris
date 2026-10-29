@@ -18,6 +18,7 @@ from native_cache import check_cache_recovery
 from tab_recovery import check_recovery
 from tab_input import check_tab_input
 from update_restore import check_update_restore
+from topbar_animation import check_topbar_animation
 
 
 def assert_sidebar_above_content(process_id, palette_open=False):
@@ -60,12 +61,16 @@ def assert_sidebar_above_content(process_id, palette_open=False):
     sidebar = min(panels, key=lambda panel: panel[1])[0]
     content = max(panels, key=lambda panel: panel[1])[0]
     assert sidebar < content, f'Sidebar hover area is behind page content: {children}'
+    topbars = [i for i, (width, height) in enumerate(children) if width > 260 and 0 < height <= 100]
+    assert len(topbars) == 1, children
+    assert sidebar < topbars[0], f'Floating sidebar is behind the top bar: {children}'
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--exe', default='target/debug/felaris.exe')
     args = parser.parse_args()
+    check_topbar_animation(args.exe)
     check_cache_recovery(args.exe)
     check_tab_input(args.exe)
     check_recovery(args.exe)

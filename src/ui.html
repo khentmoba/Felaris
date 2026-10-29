@@ -8,16 +8,16 @@
 :root { color-scheme: dark; --bg:#101011; --surface:#1b1b1e; --hover:#252528; --active:#2e2e33; --line:#333338; --text:#f5f5f7; --muted:#b2b2b8; --accent:#dedee3; font-family:"Segoe UI",system-ui,sans-serif; font-size:13px; }
 * { box-sizing:border-box; }
 html { background:var(--bg); overflow:hidden; }
-body { margin:0; height:100vh; min-width:260px; overflow:hidden; background:var(--bg); color:var(--text); display:flex; flex-direction:column; padding:12px; gap:14px; user-select:none; }
+body { margin:0; height:100vh; min-width:260px; overflow:hidden; background:var(--bg); color:var(--text); display:flex; flex-direction:column; padding:12px; gap:12px; user-select:none; }
 button,input { font:inherit; } button { color:inherit; cursor:pointer; } button,a,input { -webkit-tap-highlight-color:transparent; }
 button { border:0; background:none; border-radius:8px; } button:hover { background:var(--hover); } button:disabled { opacity:.45; cursor:default; }
 :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 input { color:var(--text); caret-color:var(--accent); min-width:0; } input::placeholder { color:var(--muted); opacity:1; } ::selection { background:#45454b; color:#fff; }
 svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; } svg[aria-hidden] { pointer-events:none; }
 .nav { display:flex; gap:4px; align-items:center; } .icon { width:32px; height:32px; display:grid; place-items:center; flex-shrink:0; color:var(--muted); } .icon:hover { color:var(--text); } .nav .toggle { margin-left:auto; }
-.address { position:relative; display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:10px; min-height:42px; padding:0 10px; }
+.address { position:relative; display:flex; align-items:center; gap:4px; background:var(--surface); border:1px solid var(--line); border-radius:10px; min-height:42px; padding:0 6px; }
 .address:focus-within { border-color:var(--accent); } #btn-bookmark[aria-pressed="true"] svg { fill:currentColor; color:var(--accent); } #security.insecure { color:#f2b8b5; } .address>svg { color:var(--muted); width:16px; } #url-input:focus-visible { outline:none; } #url-input { width:100%; height:40px; outline:0; border:0; background:transparent; font-size:12px; user-select:text; } .address .icon { width:26px; height:28px; } .address .icon svg { width:14px; }
-.workspace-heading { display:flex; align-items:center; gap:9px; padding:8px 4px 0; } .workspace-heading svg { width:16px; color:var(--accent); } #workspace-name { font-weight:600; flex:1; } .count { color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+.workspace-heading { display:flex; align-items:center; gap:9px; padding:10px 8px 0; } .workspace-heading svg { width:15px; color:var(--muted); } #workspace-name { font-weight:600; flex:1; } .count { color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
 .address-results { position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:20; max-height:min(360px,calc(100vh - 130px)); overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:var(--line) transparent; padding:4px; background:var(--surface); border:1px solid var(--line); border-radius:10px; }
 .address-option { display:flex; align-items:center; gap:8px; padding:10px 8px; border-radius:6px; cursor:pointer; }
 .address-option[aria-selected="true"] { background:var(--active); }
@@ -29,12 +29,12 @@ svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7;
 .address-option-title,.address-option-detail { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .address-option-title { font-size:12px; } .address-option-detail { font-size:11px; color:var(--muted); }
 @media(forced-colors:active) { .address-option[aria-selected="true"] { outline:1px solid Highlight; } }
-.tab-tools { display:flex; gap:4px; align-items:center; } .new-tab { flex:1; display:flex; gap:10px; align-items:center; height:36px; color:var(--muted); text-align:left; padding:0 10px; } .new-tab svg { width:16px; } kbd { font:11px "Segoe UI",sans-serif; color:var(--muted); } .new-tab kbd { margin-left:auto; }
+.tab-tools { display:flex; gap:4px; align-items:center; } .new-tab { flex:1; display:flex; gap:10px; align-items:center; height:38px; background:var(--surface); color:var(--text); text-align:left; padding:0 10px; } .new-tab:hover { background:var(--hover); } .new-tab svg { width:16px; } kbd { font:11px "Segoe UI",sans-serif; color:var(--muted); } .new-tab kbd { margin-left:auto; }
 #tab-search { width:100%; background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:9px 10px; outline-offset:0; }
 [hidden] { display:none!important; }
 .tabs { flex:1; min-height:0; overflow:auto; scrollbar-width:thin; scrollbar-color:var(--line) transparent; margin:0 -4px; padding:0 4px; }
-.tab-group { display:flex; flex-direction:column; gap:4px; } .tab-group:not(:empty)+.tab-group:not(:empty) { border-top:1px solid var(--line); margin-top:12px; padding-top:12px; }
-.tab { display:flex; align-items:center; gap:4px; min-height:40px; border-radius:9px; position:relative; } .tab:hover { background:var(--surface); } .tab.active { background:var(--active); } .tab.active .tab-main { font-weight:600; }
+.tab-group { display:flex; flex-direction:column; gap:4px; } .tab-group:not(:empty)+.tab-group:not(:empty) { border-top:1px solid #262629; margin-top:10px; padding-top:10px; }
+.tab { display:flex; align-items:center; gap:4px; min-height:40px; border-radius:9px; position:relative; } .tab:hover { background:var(--surface); } .tab.active { background:var(--active); box-shadow:inset 0 0 0 1px #ffffff0d; } .tab.active .tab-main { font-weight:600; }
 .tab-main { min-width:0; display:flex; gap:10px; align-items:center; flex:1; text-align:left; height:40px; padding:0 9px; border-radius:9px; } .tab-main:hover { background:transparent; } .favicon { width:16px; height:16px; flex-shrink:0; display:grid; place-items:center; color:var(--accent); font-size:11px; font-weight:600; } .favicon svg { width:14px; height:14px; } .favicon { position:relative; } .favicon img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; } .tab-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .tab.sleeping:not(.active) .tab-title { color:var(--muted); } .sleep-icon { color:var(--muted); width:13px; height:13px; }
 .close-tab { width:28px; height:28px; display:grid; place-items:center; opacity:0; margin-right:5px; flex-shrink:0; } .close-tab svg { width:14px; } .tab:hover .close-tab,.tab:focus-within .close-tab,.tab.active .close-tab { opacity:1; } .close-tab:hover { background:#45454b; color:var(--text); }
 .empty { text-align:center; color:var(--muted); line-height:1.6; padding:24px 10px; }
@@ -48,6 +48,16 @@ details { position:relative; } summary { list-style:none; cursor:pointer; } summ
 .update-header svg { width:15px; height:15px; color:var(--accent); }
 .update-btn { background:var(--active); color:var(--text); border:1px solid var(--line); padding:6px 10px; border-radius:6px; font-size:11px; font-weight:600; text-align:center; }
 .update-btn:hover { background:var(--accent); color:#101011; }
+.update-header span { flex:1; }
+.downloads-panel { position:absolute; bottom:calc(100% + 8px); left:0; right:0; z-index:30; max-height:min(360px,calc(100vh - 180px)); overflow:auto; scrollbar-width:thin; scrollbar-color:var(--line) transparent; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px; }
+.footer { position:relative; }
+.downloads-heading { display:flex; align-items:center; justify-content:space-between; }
+.download-item { padding:10px 0; border-top:1px solid var(--line); font-size:12px; overflow-wrap:anywhere; }
+.download-item strong { display:block; font-weight:600; }
+.download-item small { display:block; color:var(--muted); margin:5px 0; font-variant-numeric:tabular-nums; }
+.download-item progress { width:100%; height:5px; accent-color:var(--accent); }
+.download-item button { padding:6px 8px; background:var(--active); font-size:11px; }
+#downloads-empty { color:var(--muted); font-size:12px; }
 .toast { flex-shrink:0; border:1px solid var(--line); padding:12px; background:var(--surface); border-radius:10px; font-size:12px; box-shadow:0 8px 24px #0004; } .toast button { color:var(--accent); padding:4px 0; display:block; margin-top:4px; }
 body.floating { min-width:0; margin:6px; height:calc(100vh - 12px); border-radius:14px; border:1px solid var(--line); box-shadow:0 8px 24px #0008; }
 body.collapsed { visibility:hidden; pointer-events:none; transition:visibility 0s linear 340ms; }
@@ -131,7 +141,7 @@ button:active:not(:disabled),summary:active { transform:scale(.96); }
 <input id="tab-search" type="search" aria-label="Filter tabs in this workspace" placeholder="Find a tab…" hidden>
 <section class="tabs" aria-label="Tabs in this workspace"><div id="pinned-tabs" class="tab-group" aria-label="Pinned tabs"></div><div id="tabs-container" class="tab-group" aria-label="Open tabs"></div><p class="empty" id="empty-tabs" hidden>No matching tabs.<br>Try a different title or address.</p></section>
 <div class="update-banner" id="update-banner" hidden>
-<div class="update-header"><svg aria-hidden="true"><use href="#felaris"/></svg><span id="update-text">Update available</span></div>
+<div class="update-header"><svg aria-hidden="true"><use href="#felaris"/></svg><span id="update-text">Update available</span><button class="icon" id="dismiss-update" aria-label="Dismiss update notification" title="Dismiss update notification"><svg><use href="#close"/></svg></button></div>
 <button id="btn-apply-update" class="update-btn">Update now</button>
 </div>
 <div class="feedback">
@@ -139,6 +149,7 @@ button:active:not(:disabled),summary:active { transform:scale(.96); }
 <div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-message"></span><button id="toast-undo" hidden>Reopen tab</button></div>
 </div>
 <footer class="footer">
+<section class="downloads-panel" id="downloads-panel" aria-label="Downloads" hidden><div class="downloads-heading"><strong>Downloads</strong><button class="icon" id="close-downloads" aria-label="Close downloads"><svg><use href="#close"/></svg></button></div><p id="downloads-empty">No downloads this session.</p><div id="download-items"></div></section>
 <button class="download-control" id="btn-downloads" title="Downloads (Ctrl+J)" aria-label="Downloads"><svg><use href="#download"/></svg><span>Downloads</span><small id="download-count"></small></button>
 <button class="sleep-control" id="btn-ram-saver" title="Unload background tabs to free memory (Ctrl+Shift+S)"><svg><use href="#moon"/></svg><span id="sleep-label">Sleep background tabs</span><svg><use href="#forward"/></svg></button>
 <div class="workspace-switcher"><details id="profiles"><summary aria-label="Switch workspace"><svg aria-hidden="true"><use href="#globe"/></svg><span id="profile-current">General</span></summary><div class="menu"><p>Workspaces</p><div id="spaces" aria-label="Workspaces"></div><form id="profile-form"><label for="profile-name">New workspace</label><input id="profile-name" placeholder="e.g. School" maxlength="40" required autocomplete="off"><small>Workspaces organize tabs and pins. Website logins are shared.</small><p id="profile-error" role="alert" hidden></p><button type="submit">Create workspace</button></form><div class="workspace-actions"><button type="button" id="rename-workspace">Rename workspace</button><button type="button" id="delete-workspace">Delete workspace</button></div>
@@ -173,7 +184,7 @@ function moveTab(tab,down) {
  const target=peers[peers.findIndex(t=>t.id===tab.id)+(down?1:-1)];
  if(target)Felaris.send('reorder_tab',{id:tab.id,target:target.id,after:down});
 }
-let tabSignature='';
+let tabSignature='',tabLayoutSignature='';
 reducedMotion.addEventListener('change',()=>{if(reducedMotion.matches)document.getAnimations().filter(animation=>animation.id==='tab-layout').forEach(animation=>animation.finish());});
 let toastTimer;
 let inside=false,hideTimer;
@@ -196,8 +207,11 @@ function renderTabs() {
  }
  tabSignature=signature;
  const oldRows=new Map([...document.querySelectorAll('.tab')].map(row=>[Number(row.dataset.tabId),row]));
- const oldTops=new Map([...oldRows].map(([id,row])=>[id,row.getBoundingClientRect().top]));
- oldRows.forEach(row=>row.getAnimations().filter(animation=>animation.id==='tab-layout').forEach(animation=>animation.cancel()));
+ const layoutSignature=JSON.stringify(tabs.filter(tab=>!query||(tab.title+' '+tab.url).toLowerCase().includes(query)).map(tab=>[tab.id,tab.is_pinned]));
+ const layoutChanged=tabLayoutSignature!==layoutSignature;
+ tabLayoutSignature=layoutSignature;
+ const oldTops=layoutChanged?new Map([...oldRows].map(([id,row])=>[id,row.getBoundingClientRect().top])):new Map();
+ if(layoutChanged) oldRows.forEach(row=>row.getAnimations().filter(animation=>animation.id==='tab-layout').forEach(animation=>animation.cancel()));
  const focused=document.activeElement;
  const focusId=focused?.dataset.tabId;
  const focusControl=focused?.classList.contains('close-tab')?'close-tab':focused?.classList.contains('audio-toggle')?'audio-toggle':'tab-main';
@@ -263,12 +277,12 @@ function renderTabs() {
  for(const [parent,children] of [[$('pinned-tabs'),pinned],[$('tabs-container'),normal]]) {
   children.forEach((row,index)=>{if(parent.children[index]!==row)parent.insertBefore(row,parent.children[index]||null);});
  }
- const positions=rows.map(row=>({row,id:Number(row.dataset.tabId),top:row.getBoundingClientRect().top}));
+ const positions=layoutChanged&&!reducedMotion.matches?rows.map(row=>({row,id:Number(row.dataset.tabId),top:row.getBoundingClientRect().top})):[];
  if(!reducedMotion.matches) positions.forEach(({row,id,top},index)=>{
   if(oldTops.has(id)) {
    const delta=oldTops.get(id)-top;
    if(Math.abs(delta)>1) row.animate([{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],{duration:200,easing:'cubic-bezier(.16,1,.3,1)',id:'tab-layout'});
-  } else row.animate([{opacity:.35,transform:'translateX(-8px)'},{opacity:1,transform:'translateX(0)'}],{duration:200,delay:Math.min(index*16,64),easing:'cubic-bezier(.16,1,.3,1)',id:'tab-layout'});
+  } else row.animate([{opacity:.35,transform:'translateX(-8px)'},{opacity:1,transform:'translateX(0)'}],{duration:200,delay:Math.min(index*16,64),fill:'backwards',easing:'cubic-bezier(.16,1,.3,1)',id:'tab-layout'});
  });
  $('empty-tabs').hidden=visible>0;
  if(focusId) document.querySelector(`.${focusControl}[data-tab-id="${focusId}"]`)?.focus({preventScroll:true});
@@ -325,7 +339,7 @@ window.updateState = state => {
  $('download-count').textContent=state.active_downloads?`${state.active_downloads} active`:'';
  $('btn-default-browser').hidden=!!state.is_default_browser;
  $('btn-apply-update').disabled=!!state.update_busy||state.active_downloads>0;
- $('btn-apply-update').textContent=state.update_busy?'Updating?':state.active_downloads>0?'Finish downloads to update':'Update now';
+ $('btn-apply-update').textContent=state.update_busy?'Updating…':state.active_downloads>0?'Finish downloads to update':'Update now';
  $('url-input').title=active?.url||'Search or enter address';
  $('address-form').setAttribute('aria-busy',String(state.is_loading));
  const sleeping=state.tabs.filter(t=>t.is_sleeping).length;
@@ -334,7 +348,25 @@ window.updateState = state => {
  $('btn-pin-tab').textContent=active?.is_pinned?'Unpin current tab':'Pin current tab';
  $('btn-pin-tab').title='Pinned tabs stay awake during automatic tab sleeping';
  $('btn-reopen-tab').disabled=!state.can_restore_closed_tab;
- if(state.update_available) {
+ $('downloads-panel').hidden=!state.downloads_open;
+ $('btn-downloads').setAttribute('aria-expanded',String(!!state.downloads_open));
+ if(JSON.stringify(previous.download_items)!==JSON.stringify(state.download_items)) {
+  const items=state.download_items||[];
+  $('downloads-empty').hidden=items.length>0;
+  $('download-items').replaceChildren(...items.slice().reverse().map(item=>{
+   const row=document.createElement('div'); row.className='download-item';
+   const name=document.createElement('strong'); name.textContent=item.path.split(/[\\/]/).pop()||'Download'; name.title=item.path;
+   const detail=document.createElement('small');
+   const bytes=value=>`${(Math.max(0,value)/1024).toFixed(1)} KB`;
+   detail.textContent=item.status==='complete'?`Complete · ${bytes(item.received)}`:item.status==='cancelled'?`Cancelled · ${bytes(item.received)} received`:item.status==='interrupted'?`Interrupted · ${bytes(item.received)} received`:`Downloading · ${bytes(item.received)}${item.total>0?` of ${bytes(item.total)} (${Math.min(100,Math.floor(item.received/item.total*100))}%)`:''}`;
+   row.append(name,detail);
+   if(item.status==='downloading') { const progress=document.createElement('progress'); progress.setAttribute('aria-label',`Downloading ${name.textContent}`); if(item.total>0) { progress.max=item.total; progress.value=item.received; } row.append(progress); }
+   if(item.status==='downloading') { const button=document.createElement('button'); button.textContent='Cancel'; button.onclick=()=>Felaris.send('cancel_download',{id:item.id}); row.append(button); }
+   if(item.status==='complete') { const button=document.createElement('button'); button.textContent='Show in folder'; button.onclick=()=>Felaris.send('reveal_download',{id:item.id}); row.append(button); }
+   return row;
+  }));
+ }
+ if(state.update_available && state.dismissed_update_version!==state.update_available.version) {
   $('update-banner').hidden=false;
   $('update-text').textContent=`Felaris v${state.update_available.version} available`;
  } else {
@@ -349,7 +381,7 @@ window.focusAddress=()=>{ let tries=0; const focus=()=>{ $('url-input').focus();
 for(const [id,action] of Object.entries({'btn-back':'back','btn-forward':'forward','btn-reload':'reload','btn-add-tab':'new_tab','btn-toggle-sidebar':'toggle_sidebar','btn-reopen-tab':'restore_closed_tab'})) $(id).onclick=()=>Felaris.send(action);
 $('btn-reload').onclick=()=>Felaris.send(currentState.is_loading?'stop':'reload');
 $('btn-home').onclick=()=>Felaris.navigate('felaris://newtab');
-let addressOptions=[],addressSelected=-1,addressHistory=[],addressComposing=false,addressQuery='';
+let addressOptions=[],addressSelected=-1,addressHistory=[],addressComposing=false,addressQuery='',addressChosen=false;
 function closeAddressResults() {
  $('address-results').hidden=true;
  $('url-input').setAttribute('aria-expanded','false');
@@ -358,6 +390,7 @@ function closeAddressResults() {
 }
 function selectAddressOption(index,scroll=true) {
  addressSelected=index;
+ addressChosen=true;
  [...$('address-results').children].forEach((row,i)=>row.setAttribute('aria-selected',String(i===index)));
  const row=$('address-results').children[index];
  if(row) { $('url-input').setAttribute('aria-activedescendant',row.id); if(scroll) row.scrollIntoView({block:'nearest'}); }
@@ -401,11 +434,12 @@ function renderAddressResults() {
  results.hidden=!addressOptions.length;
  $('url-input').setAttribute('aria-expanded',String(addressOptions.length>0));
  selectAddressOption(addressQuery.trim()?0:-1,false);
+ addressChosen=false;
 }
 window.updateAddressHistory=entries=>{
  addressHistory=Array.isArray(entries)?entries:[];
  if(document.activeElement===$('url-input')&&!addressComposing) {
-  const selected=addressOptions[addressSelected];
+  const selected=addressChosen?addressOptions[addressSelected]:null;
   renderAddressResults();
   if(selected) selectAddressOption(addressOptions.findIndex(option=>option.url===selected.url&&option.id===selected.id),false);
  }
@@ -441,6 +475,8 @@ $('btn-pin-tab').onclick=()=>Felaris.send('toggle_pin',{id:currentState.active_t
 $('btn-clear-tabs').onclick=()=>Felaris.send('clear_unpinned_tabs');
 $('btn-ram-saver').onclick=()=>Felaris.send('sleep_inactive_tabs');
 $('toast-undo').onclick=()=>{ Felaris.send('restore_closed_tab'); $('toast').hidden=true; };
+$('close-downloads').onclick=()=>Felaris.send('close_downloads');
+$('dismiss-update').onclick=()=>{ const version=currentState.update_available?.version; if(version) { currentState.dismissed_update_version=version; $('update-banner').hidden=true; Felaris.send('dismiss_update',{version}); } };
 $('btn-downloads').onclick=()=>Felaris.send('open_downloads');
 $('btn-default-browser').onclick=()=>Felaris.send('default_browser');
 $('activity-message').onclick=()=>{ const button=$('activity-message'); button.setAttribute('aria-expanded',String(button.getAttribute('aria-expanded')!=='true')); };

@@ -1,6 +1,6 @@
 {
-  "version": "0.3.2",
-  "release_url": "https://github.com/khentmoba/Veluno/releases/tag/v0.3.2",
-  "download_url": "https://github.com/khentmoba/Felaris/releases/download/v0.3.2/felaris.exe",
-  "summary": "- Add tracking prevention levels (Basic, Balanced, or Strict), password saving (off by default), and form autofill to Settings.\n- Add Clear browsing data (Ctrl+Shift+Delete) for history, cookies and site data, cached files, and saved passwords and form data over a chosen time range.\n- Add reader view (F9 or the app menu) for reading articles with adjustable text size.\n- Add Save screenshot to the app menu, which saves the visible page to Pictures\\Veluno.\n- Import bookmarks from Chrome, Edge, Brave, Vivaldi, Opera, and Opera GX.\n- Show saved site logos in browsing history instead of a globe icon.\n- Fix pages that stall after a cached script fails to load. The next Reload clears that site's cache and service workers first.\n- Add a fresh reload from the app menu, Ctrl+Shift+R, or Ctrl+F5."
+  "version": "0.3.3",
+  "release_url": "https://github.com/khentmoba/Veluno/releases/tag/v0.3.3",
+  "download_url": "https://github.com/khentmoba/Felaris/releases/download/v0.3.3/felaris.exe",
+  "summary": "- Rename Felaris to Veluno with a new logo and Windows icons.\n- Keep existing profiles, saved tabs, bookmarks, and default-browser links during upgrades.\n- Speed up local search suggestions and rank obvious site and tab matches first.\n- Smooth search, sidebar, tab, and loading animations, including interrupted transitions.\n- Remember dismissed update notices and show download progress.\n- Preserve source pages and unsaved drafts when links start downloads.\n- Deliver the Windows installer directly in Discord release announcements."
 }

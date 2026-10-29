@@ -74,6 +74,14 @@ pub fn is_default_browser() -> bool {
 }
 
 pub fn raise(view: &WebView) {
+    stack(view, None);
+}
+
+pub fn below(view: &WebView, above: &WebView) {
+    stack(view, Some(above));
+}
+
+fn stack(view: &WebView, above: Option<&WebView>) {
     #[cfg(windows)]
     {
         use windows::Win32::UI::WindowsAndMessaging::{
@@ -83,7 +91,7 @@ pub fn raise(view: &WebView) {
         unsafe {
             let _ = SetWindowPos(
                 view.hwnd(),
-                Some(HWND_TOP),
+                Some(above.map_or(HWND_TOP, |view| view.hwnd())),
                 0,
                 0,
                 0,
@@ -94,7 +102,7 @@ pub fn raise(view: &WebView) {
     }
     #[cfg(not(windows))]
     {
-        let _ = view;
+        let _ = (view, above);
     }
 }
 

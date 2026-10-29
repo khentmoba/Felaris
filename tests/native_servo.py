@@ -5,6 +5,7 @@ test server and the WebView2 sidebar's debugger, and reads results from the app'
 Native dialogs run on a private Windows desktop that is never shown to the user.
 """
 import argparse
+import base64
 import ctypes
 import ctypes.wintypes as wt
 import http.server
@@ -165,6 +166,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     f"<script src='http://127.0.0.1:{port}/same.js'></script>"
                     f"<script src='http://127.0.0.2:{port}/other.js'></script>").encode()
             self.send(200, [('Content-Type', 'text/html'), ('Cache-Control', 'no-store')], body)
+        elif self.path == '/data-ipc':
+            self.send(200, [('Content-Type', 'text/html')], DATA_IPC_PAGE)
         elif self.path.endswith('.js'):
             self.send(200, [('Content-Type', 'text/javascript'), ('Cache-Control', 'max-age=3600')], b'void 0;')
         elif self.path.startswith('/?') or self.path == '/':
@@ -209,6 +212,13 @@ if (q.get('child')) setTimeout(() => {
 if (q.get('tab')) setTimeout(() => { window.open('/?opened=1'); document.title = 'asked'; }, 1000);
 if (q.get('opened')) document.title = 'second tab';
 </script>"""
+
+
+DATA_IPC_TARGET = 'data:text/html;base64,' + base64.b64encode(
+    b"<script>setTimeout(()=>window.ipc.postMessage(JSON.stringify("
+    b"{action:'set_setting',key:'auto_update',value:false})),500)</script>").decode()
+DATA_IPC_PAGE = ("<!doctype html><title>web</title><script>setTimeout(()=>{document.title='navigating';"
+                 f"location.href={json.dumps(DATA_IPC_TARGET)}}},800)</script>").encode()
 
 
 class Startup(ctypes.Structure):
@@ -362,6 +372,18 @@ def run(executable, only):
                     results.append(check(f'{engine} private-desktop startup exits cleanly', app.exit_cleanly()))
                 finally:
                     app.close()
+        if scenario('data-ipc'):
+            app = App(executable, f'{origin}/data-ipc')
+            try:
+                settings = app.profile / 'settings.json'
+                navigated = app.wait_title('navigating', 15)
+                time.sleep(4)
+                value = json.loads(settings.read_text(encoding='utf-8')).get('auto_update') if settings.exists() else None
+                results.append(check('web page reached its own navigation step', navigated))
+                results.append(check('web page cannot use internal-page commands through a data: URL',
+                                     value is not False, f'auto_update={value}'))
+            finally:
+                app.close()
         if scenario('download'):
             target = downloads / f'{RUN_PREFIX}-naïve.txt'
             target.unlink(missing_ok=True)
@@ -611,7 +633,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--exe', default=str(REPO / 'target/debug/felaris.exe'))
     parser.add_argument('--only', nargs='*', default=[],
-                        choices=['startup-webview2', 'startup-servo', 'download', 'cancel', 'stalled', 'memory', 'color', 'cache', 'popup', 'permission', 'privacy', 'private-session', 'crash'])
+                        choices=['startup-webview2', 'startup-servo', 'data-ipc', 'download', 'cancel', 'stalled', 'memory', 'color', 'cache', 'popup', 'permission', 'privacy', 'private-session', 'crash'])
     arguments = parser.parse_args()
     DESKTOP_NAME = 'FelarisTests-' + str(uuid.uuid4())
     DESKTOP = user32.CreateDesktopW(DESKTOP_NAME, None, None, 0, 0x1FF, None)

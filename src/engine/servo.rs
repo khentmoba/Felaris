@@ -925,8 +925,13 @@ impl WebViewDelegate for TabDelegate {
         set_cursor(&self.shared.tabs, &webview, cursor);
     }
 
+    /// Only page-initiated navigations reach here; Felaris's own loads go straight to the
+    /// constellation. Internal pages are `data:` documents trusted with local IPC, so a page
+    /// may not navigate its tab to one.
     fn request_navigation(&self, _: WebView, request: NavigationRequest) {
-        if allow_navigation(request.url.as_str(), &self.shared.proxy) {
+        if request.url.scheme() != "data"
+            && allow_navigation(request.url.as_str(), &self.shared.proxy)
+        {
             request.allow();
         } else {
             request.deny();

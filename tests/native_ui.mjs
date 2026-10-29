@@ -141,7 +141,7 @@ try {
   for (const [site, allow] of [[origin, false], [origin.replace('127.0.0.1', 'localhost'), true]]) {
     await command('new_tab', { url: site + '/permission' });
     const requester = await connect(page => page.url === site + '/permission', contentPort);
-    await until(() => requester.evaluate('document.readyState === "complete"'), 'permission fixture ready');
+    await until(() => requester.evaluate(`location.href === ${JSON.stringify(site + '/permission')} && document.readyState === "complete"`), 'permission fixture ready');
     await requester.call('Runtime.evaluate', { expression: 'window.permissionResult="pending";Notification.requestPermission().then(result=>window.permissionResult=result);true', userGesture: true });
     await until(() => permission.evaluate(`current?.origin === ${JSON.stringify(site)} && current.kind === 'notifications'`), 'notification permission prompt');
     assert.equal(await permission.evaluate('document.getElementById("title").textContent'), 'Show notifications?');

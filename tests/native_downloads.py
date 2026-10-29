@@ -23,6 +23,11 @@ def main():
             subprocess.run(['node', str(Path(__file__).with_suffix('.mjs')),
                             str(app.port), str(app.content_port), origin, str(app.artifacts)],
                            check=True, timeout=90)
+            app.stop()
+            app.start([origin], log)
+            subprocess.run(['node', str(Path(__file__).with_suffix('.mjs')),
+                            str(app.port), str(app.content_port), origin, str(app.artifacts), '--restored'],
+                           check=True, timeout=30)
         print(f'Native download checks passed. Evidence: {app.artifacts}')
     finally:
         try:

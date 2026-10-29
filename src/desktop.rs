@@ -8,6 +8,84 @@ thread_local! {
     static DOWNLOADS: std::cell::RefCell<Vec<(usize, webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadOperation)>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DownloadInfo {
+    pub id: usize,
+    pub path: String,
+    pub received: i64,
+    pub total: i64,
+    pub status: String,
+}
+
+#[cfg(windows)]
+thread_local! {
+    static CANCELLABLE_DOWNLOADS: std::cell::RefCell<Vec<(usize, webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadOperation)>> = const { std::cell::RefCell::new(Vec::new()) };
+    static DOWNLOAD_ITEMS: std::cell::RefCell<Vec<std::rc::Rc<std::cell::RefCell<DownloadInfo>>>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+pub fn download_items() -> Vec<DownloadInfo> {
+    DOWNLOAD_ITEMS.with_borrow(|items| items.iter().map(|item| item.borrow().clone()).collect())
+}
+
+#[cfg(windows)]
+unsafe fn refresh_download(
+    operation: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadOperation,
+    info: &std::cell::RefCell<DownloadInfo>,
+) -> windows::core::Result<()> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::*;
+    let mut info = info.borrow_mut();
+    let mut path = windows::core::PWSTR::null();
+    unsafe {
+        operation.ResultFilePath(&mut path)?;
+        info.path = webview2_com::take_pwstr(path);
+        operation.BytesReceived(&mut info.received)?;
+        operation.TotalBytesToReceive(&mut info.total)?;
+        let mut state = COREWEBVIEW2_DOWNLOAD_STATE::default();
+        operation.State(&mut state)?;
+        info.status = if state == COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED {
+            "complete"
+        } else if state == COREWEBVIEW2_DOWNLOAD_STATE_INTERRUPTED {
+            let mut reason = COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON::default();
+            operation.InterruptReason(&mut reason)?;
+            if reason == COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_CANCELED {
+                "cancelled"
+            } else {
+                "interrupted"
+            }
+        } else {
+            "downloading"
+        }
+        .into();
+    }
+    Ok(())
+}
+
+pub fn cancel_download(id: usize) -> Result<(), String> {
+    CANCELLABLE_DOWNLOADS.with_borrow(|items| {
+        let (_, operation) = items
+            .iter()
+            .find(|(item, _)| *item == id)
+            .ok_or("This download is no longer active.")?;
+        unsafe {
+            operation
+                .Cancel()
+                .map_err(|error| format!("Could not cancel the download: {error}"))
+        }
+    })
+}
+
+pub fn reveal_download(id: usize) -> Result<(), String> {
+    let item = download_items()
+        .into_iter()
+        .find(|item| item.id == id && item.status == "complete")
+        .ok_or("This download is not complete yet.")?;
+    std::process::Command::new("explorer.exe")
+        .args(["/select,", &item.path])
+        .spawn()
+        .map_err(|error| format!("Could not show the downloaded file: {error}"))?;
+    Ok(())
+}
+
 pub fn download_counts(
     views: &std::collections::HashMap<usize, WebView>,
 ) -> std::collections::HashMap<usize, usize> {
@@ -35,6 +113,10 @@ pub fn download_counts(
             true
         });
     });
+    CANCELLABLE_DOWNLOADS.with_borrow_mut(|items| items.retain(|(_, operation)| unsafe {
+        let mut state = webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_DOWNLOAD_STATE::default();
+        operation.State(&mut state).is_ok() && state == webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS
+    }));
     counts
 }
 
@@ -703,10 +785,44 @@ pub fn attach(
             &DownloadStartingEventHandler::create(Box::new(move |view, args| {
                 if let Some(args) = args {
                     let operation = args.DownloadOperation()?;
+                    let info = std::rc::Rc::new(std::cell::RefCell::new(DownloadInfo {
+                        id: 0,
+                        path: String::new(),
+                        received: 0,
+                        total: 0,
+                        status: "downloading".into(),
+                    }));
+                    refresh_download(&operation, &info)?;
+                    DOWNLOAD_ITEMS.with_borrow_mut(|items| {
+                        info.borrow_mut().id = items.last().map_or(1, |item| item.borrow().id + 1);
+                        if items.len() >= 100
+                            && let Some(index) = items
+                                .iter()
+                                .position(|item| item.borrow().status != "downloading")
+                        {
+                            items.remove(index);
+                        }
+                        items.push(info.clone());
+                    });
+                    CANCELLABLE_DOWNLOADS
+                        .with_borrow_mut(|items| items.push((info.borrow().id, operation.clone())));
+                    let progress = download_proxy.clone();
+                    let progress_info = info.clone();
+                    operation.add_BytesReceivedChanged(
+                        &BytesReceivedChangedEventHandler::create(Box::new(move |operation, _| {
+                            if let Some(operation) = operation {
+                                refresh_download(&operation, &progress_info)?;
+                            }
+                            let _ = progress.send_event(UserEvent::DownloadsChanged);
+                            Ok(())
+                        })),
+                        &mut 0,
+                    )?;
                     let complete = download_proxy.clone();
                     operation.add_StateChanged(
                         &StateChangedEventHandler::create(Box::new(move |operation, _| {
                             if let Some(operation) = operation {
+                                refresh_download(&operation, &info)?;
                                 let mut state = COREWEBVIEW2_DOWNLOAD_STATE::default();
                                 operation.State(&mut state)?;
                                 let _ = complete.send_event(UserEvent::DownloadsChanged);

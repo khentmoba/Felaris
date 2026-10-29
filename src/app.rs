@@ -116,6 +116,16 @@ pub enum Command {
     },
     CheckUpdates,
     ApplyUpdate,
+    DismissUpdate {
+        version: String,
+    },
+    CloseDownloads,
+    CancelDownload {
+        id: usize,
+    },
+    RevealDownload {
+        id: usize,
+    },
     OpenDownloads,
     DefaultBrowser,
     OpenSettings {
@@ -1208,6 +1218,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         | Command::OpenSettings { .. } | Command::OpenHistory | Command::ImportBookmarks { .. } | Command::DuplicateTab { .. }
                         | Command::MoveTabToWorkspace { .. } | Command::ExpandPopup { .. }
                         | Command::ReorderTab { .. } | Command::RenameWorkspace { .. } | Command::DeleteWorkspace { .. } | Command::ToggleMute { .. }
+                        | Command::DismissUpdate { .. }
                         | Command::ToggleBookmark { .. } | Command::NewPrivateTab));
                 match event {
                     UserEvent::Audio(id, generation, playing, muted) => {
@@ -1481,7 +1492,12 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                     let _ = sidebar.evaluate_script(&format!("window.updateAddressHistory?.({json})"));
                                 }
                             },
+                            Command::CancelDownload { id } => { if let Err(error) = desktop::cancel_download(id) { state.update_status = Some(error); } },
+                            Command::CloseDownloads => { state.downloads_open = false; },
+                            Command::RevealDownload { id } => { if let Err(error) = desktop::reveal_download(id) { state.update_status = Some(error); } },
                             Command::OpenDownloads => {
+                                state.sidebar_collapsed = false;
+                                state.downloads_open = true;
                                 let id = downloads.iter().find(|(_, count)| **count > 0).map(|(id,_)| *id)
                                     .or(last_download_host.filter(|id| views.contains_key(id))).unwrap_or(state.active_tab_id);
                                 if let Some(view) = views.get(&id) && let Err(error) = desktop::downloads(view) { state.update_status = Some(error); }
@@ -1576,8 +1592,9 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             Command::Print => if let Some(view) = views.get(&state.active_tab_id) { let _ = view.print(); },
                             Command::Exit => if may_exit(&state, &session) { *flow = ControlFlow::Exit; },
                             Command::DefaultBrowser => { if let Err(error) = std::process::Command::new("explorer.exe").arg("ms-settings:defaultapps").spawn() { state.update_status = Some(format!("Could not open Windows default apps: {error}")); } },
+                            Command::DismissUpdate { version } => { if version.len() <= 100 { state.dismissed_update_version = Some(version); } },
                             Command::CheckUpdates => if !check_busy {
-                                check_busy = true; state.update_status = Some("Checking for updates…".into());
+                                check_busy = true; state.dismissed_update_version = None; state.update_status = Some("Checking for updates…".into());
                                 let proxy = proxy.clone(); std::thread::spawn(move || { let _ = proxy.send_event(UserEvent::UpdateChecked(updater::check_for_updates())); });
                             },
                             Command::ApplyUpdate => if !state.update_busy && state.active_downloads == 0 && let Some(update) = &state.update_available {
@@ -1599,6 +1616,8 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         },
                     UserEvent::DownloadsChanged => {},
                     UserEvent::DownloadStarted(id, generation, blank, document) => {
+                        state.downloads_open = true;
+                        state.sidebar_collapsed = false;
                         if state.tabs.iter().any(|tab| tab.id == id && tab.generation == generation) {
                             last_download_host = Some(id);
                             if blank && state.discard_download_tab(id) {
@@ -1656,6 +1675,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         }
         downloads = desktop::download_counts(&views);
         state.active_downloads = downloads.values().sum();
+        state.download_items = desktop::download_items();
         let awake: HashSet<_> = state.tabs.iter().filter(|tab| !tab.is_sleeping).map(|tab| tab.id).collect();
         let download_hosts = desktop::download_hosts();
         // Active and resumable transfers retain their owner; keep one completed owner for Downloads.

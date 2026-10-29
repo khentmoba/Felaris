@@ -77,6 +77,10 @@ window.runChecks=async()=>{
  const movingTab=w.matchMedia('(prefers-reduced-motion: reduce)').matches?null:originalRow.animate([{transform:'translateY(1px)'},{transform:'translateY(0)'}],{duration:60000,id:'tab-layout'});
  w.updateState(tabLoading);
  check('page loading updates navigation controls without cancelling tab movement',d.getElementById('btn-back').disabled===false&&d.getElementById('btn-reload').getAttribute('aria-label')==='Stop loading'&&(!movingTab||movingTab.playState!=='idle'));
+ const titleUpdate=structuredClone(tabLoading);
+ titleUpdate.tabs[3].title='A background title changed during tab motion';
+ w.updateState(titleUpdate);
+ check('title updates preserve in-flight tab movement',!movingTab||movingTab.playState!=='idle');
  movingTab?.cancel();
  w.updateState({...structuredClone(fixtureState),active_tab_id:3});
  check('active selection reuses tab rows',d.querySelector('.tab')===originalRow&&d.querySelector('.tab.active .tab-main').dataset.tabId==='3');
@@ -200,6 +204,7 @@ window.runChecks=async()=>{
  check('opening palette does not create a tab',messages.length===countBefore);
  check('palette input receives focus',nd.activeElement===ni);
  check('palette entry respects reduced motion',n.matchMedia('(prefers-reduced-motion: reduce)').matches?!nd.getAnimations().some(animation=>animation.id==='palette-open'):nd.getAnimations().some(animation=>animation.id==='palette-open'));
+ check('palette scrim fades without repainting its fill',nd.getAnimations().filter(animation=>animation.id==='palette-scrim').every(animation=>animation.effect.getKeyframes().every(frame=>!('backgroundColor' in frame)))&&n.getComputedStyle(nd.querySelector('.scrim')).pointerEvents==='none');
  change('new search query');
  check('palette identifies Brave Search',nd.querySelector('.option-detail').textContent==='Search with Brave');
  check('search queries keep the search icon',!nd.querySelector('.option-icon img'));

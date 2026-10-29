@@ -95,7 +95,7 @@ function renderSuggestions() {
  }));
  results.hidden=!options.length;
  input.setAttribute('aria-expanded',String(options.length>0));
- selectSuggestion(-1);
+ selectSuggestion(input.value.trim()?0:-1);
  document.getElementById('result-status').textContent=options.length?`${options.length} suggestions available`:'';
 }
 input.addEventListener('compositionstart',()=>{composing=true;});

@@ -349,7 +349,7 @@ window.focusAddress=()=>{ let tries=0; const focus=()=>{ $('url-input').focus();
 for(const [id,action] of Object.entries({'btn-back':'back','btn-forward':'forward','btn-reload':'reload','btn-add-tab':'new_tab','btn-toggle-sidebar':'toggle_sidebar','btn-reopen-tab':'restore_closed_tab'})) $(id).onclick=()=>Felaris.send(action);
 $('btn-reload').onclick=()=>Felaris.send(currentState.is_loading?'stop':'reload');
 $('btn-home').onclick=()=>Felaris.navigate('felaris://newtab');
-let addressOptions=[],addressSelected=-1,addressHistory=[],addressComposing=false,addressQuery='';
+let addressOptions=[],addressSelected=-1,addressHistory=[],addressComposing=false,addressQuery='',addressChosen=false;
 function closeAddressResults() {
  $('address-results').hidden=true;
  $('url-input').setAttribute('aria-expanded','false');
@@ -358,6 +358,7 @@ function closeAddressResults() {
 }
 function selectAddressOption(index,scroll=true) {
  addressSelected=index;
+ addressChosen=true;
  [...$('address-results').children].forEach((row,i)=>row.setAttribute('aria-selected',String(i===index)));
  const row=$('address-results').children[index];
  if(row) { $('url-input').setAttribute('aria-activedescendant',row.id); if(scroll) row.scrollIntoView({block:'nearest'}); }
@@ -401,11 +402,12 @@ function renderAddressResults() {
  results.hidden=!addressOptions.length;
  $('url-input').setAttribute('aria-expanded',String(addressOptions.length>0));
  selectAddressOption(addressQuery.trim()?0:-1,false);
+ addressChosen=false;
 }
 window.updateAddressHistory=entries=>{
  addressHistory=Array.isArray(entries)?entries:[];
  if(document.activeElement===$('url-input')&&!addressComposing) {
-  const selected=addressOptions[addressSelected];
+  const selected=addressChosen?addressOptions[addressSelected]:null;
   renderAddressResults();
   if(selected) selectAddressOption(addressOptions.findIndex(option=>option.url===selected.url&&option.id===selected.id),false);
  }

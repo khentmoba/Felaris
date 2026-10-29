@@ -120,7 +120,7 @@ async function main() {
       const expression = `(() => {
         const before = new Function('let Felaris;const window={addEventListener(){}};' + ${JSON.stringify(baselineSource)} + ';Felaris=window.Felaris;return Felaris.suggestions;')();
         const assert = { deepEqual(a,b,message) { if(JSON.stringify(a)!==JSON.stringify(b)) throw Error(message||'Suggestions changed'); } };
-        return (${run.toString()})(before,window.Felaris.suggestions,assert,performance,20);
+        return (${run.toString()})(before,window.Felaris.suggestions,assert,performance,300);
       })()`;
       report = await view.evaluate(expression);
     } finally {

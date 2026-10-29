@@ -7,7 +7,7 @@ Operate mode: a Zen-inspired desktop sidebar, not a browser feature clone. Keep 
 ## Surfaces
 
 - `src/ui.html`: 260px expanded sidebar; 56px compact rail. Navigation, address field, workspace heading, new-tab/search actions, pinned and ordinary tab groups, sleep state, and bottom workspace dock.
-- `src/start_page.html`: quiet, left-aligned startup/Home page with eight shortcuts ranked by user visit frequency (`LOCALAPPDATA/Felaris/shortcuts.json`) and padded with default sites. Two-column shortcuts in narrow content panes; scrolling remains available at the minimum desktop window size.
+- `src/start_page.html`: quiet, left-aligned startup/Home page with eight shortcuts ranked by user visit frequency (`LOCALAPPDATA/Felaris/shortcuts.json`) and padded with default sites. Shortcuts use two columns of compact icon-and-label rows, collapsing to one below 360px; scrolling remains available at the minimum desktop window size.
 - `src/new_tab.html`: Zen-style floating new-tab search in a separate transparent, normally hidden WebView. It covers the client area without replacing or modifying the current page.
 - `src/browser.js`: shared address resolution and keyboard shortcuts. Embedded into both local pages and initialized before remote content. Management IPC from content requires the injected trusted-key handler's per-process token; ordinary page scripts do not receive that token through the public helper.
 
@@ -59,9 +59,9 @@ A download-only navigation with no committed document removes its unpinned empty
 
 ## Motion
 
-The focal interaction is the floating search palette: each invocation resolves into focus over a dimmed page in 220ms, and exits in 100ms before the native overlay hides. A new invocation cancels a pending exit so stale dismiss/submit IPC cannot fire. Reduced-motion mode skips these spatial effects and never delays submission or cancellation.
+The focal interaction is the floating search palette: each invocation resolves into focus over a dimmed page in 220ms, and exits in 100ms before the native overlay hides. The scrim animates opacity on its own noninteractive layer; the panel uses transform and opacity without animated blur. Dismissal starts at the current scrim opacity, including during an interrupted entrance. A new invocation cancels a pending exit so stale dismiss/submit IPC cannot fire. Reduced-motion mode skips these spatial effects and never delays submission or cancellation.
 
-Tab rows preserve identity and use 200ms position transitions when the list changes; workspace entries stagger at most 64ms. Active/hover fills and press feedback take 100–160ms. Loading state updates do not rebuild unchanged tab or workspace controls. Menus and feedback toasts have short, bounded reveals. Native WebView resizing and remote websites are not animated; there are no new dependencies or idle animation loops. The existing loading indicator remains tied to actual loading and becomes static under reduced motion.
+Tab rows preserve identity and use 200ms position transitions when the list changes; workspace entries stagger at most 64ms, holding their initial state during the delay. Title, favicon, audio, and sleep updates preserve running tab transitions when the visible order and pin groups stay the same, and skip position measurements. Active/hover fills and press feedback take 100–160ms. Loading state updates do not rebuild unchanged tab or workspace controls. Menus and feedback toasts have short, bounded reveals. Native WebView resizing and remote websites are not animated; there are no new dependencies or idle animation loops. The existing loading indicator remains tied to actual loading and becomes static under reduced motion.
 
 ## Deliberate limits
 

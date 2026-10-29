@@ -61,7 +61,7 @@ export async function checkBrowserControls(sidebar, command, origin, port, artif
   assert.notEqual(otherOrigin, origin);
   await command('new_tab', { url: otherOrigin + '/other-storage' });
   const other = await connect(target => target.url === otherOrigin + '/other-storage', port);
-  await until(() => other.evaluate('document.readyState==="complete"'), 'other origin');
+  await until(() => other.evaluate(`location.href===${JSON.stringify(otherOrigin + '/other-storage')} && document.readyState==="complete"`), 'other origin');
   await other.evaluate(`localStorage.setItem('controls','keep-other');document.cookie='controls=keep-other;path=/';true`);
   await command('switch_tab', { id: a });
   await until(() => sidebar.evaluate(`currentState.active_tab_id===${a}`), 'site controls target');

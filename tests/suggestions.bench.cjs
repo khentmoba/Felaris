@@ -12,8 +12,8 @@ function load(source) {
   const window = { addEventListener() {} };
   const context = vm.createContext({ window, URL });
   vm.runInContext(source, context);
-  context.Felaris = window.Felaris;
-  return window.Felaris.suggestions;
+  context.Veluno = window.Veluno;
+  return window.Veluno.suggestions;
 }
 const baselineSource = execFileSync('git', ['show', `${baseline}:src/browser.js`], { encoding: 'utf8' });
 const candidateSource = fs.readFileSync('src/browser.js', 'utf8');
@@ -66,7 +66,7 @@ function run(before, after, assert, performance, iterations = 150) {
   for (let run = 0; run < 100; run++) {
     const entries = Array.from({ length: 80 }, (_, id) => ({
       id, title: ['', 'GitHub', 'GitHub guide', 'Rust async', '東京'][random(5)],
-      url: ['https://github.com/', 'https://www.github.com/guide', 'https://docs.rs/', 'invalid url', 'felaris://newtab'][random(5)] + (random(3) ? '' : '/'),
+      url: ['https://github.com/', 'https://www.github.com/guide', 'https://docs.rs/', 'invalid url', 'veluno://newtab'][random(5)] + (random(3) ? '' : '/'),
     }));
     const state = { tabs: entries.slice(0, 12), bookmarks: entries.slice(12, 40), shortcuts: entries.slice(60) };
     for (const query of queries) {
@@ -111,16 +111,16 @@ async function main() {
     const { connect, closeConnections } = await import('./native_cdp.mjs');
     try {
       const port = process.argv[process.argv.indexOf('--port') + 1];
-      const view = await connect(page => page.title === 'Felaris', port);
+      const view = await connect(page => page.title === 'Veluno', port);
       const deadline = Date.now() + 10000;
-      while (!await view.evaluate('Boolean(window.Felaris?.suggestions)')) {
+      while (!await view.evaluate('Boolean(window.Veluno?.suggestions)')) {
         if (Date.now() >= deadline) throw Error('Sidebar suggestions were not ready');
         await new Promise(resolve => setTimeout(resolve, 50));
       }
       const expression = `(() => {
-        const before = new Function('let Felaris;const window={addEventListener(){}};' + ${JSON.stringify(baselineSource)} + ';Felaris=window.Felaris;return Felaris.suggestions;')();
+        const before = new Function('let Veluno;const window={addEventListener(){}};' + ${JSON.stringify(baselineSource)} + ';Veluno=window.Veluno;return Veluno.suggestions;')();
         const assert = { deepEqual(a,b,message) { if(JSON.stringify(a)!==JSON.stringify(b)) throw Error(message||'Suggestions changed'); } };
-        return (${run.toString()})(before,window.Felaris.suggestions,assert,performance,300);
+        return (${run.toString()})(before,window.Veluno.suggestions,assert,performance,300);
       })()`;
       report = await view.evaluate(expression);
     } finally {

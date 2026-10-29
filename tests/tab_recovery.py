@@ -31,7 +31,7 @@ def check_recovery(executable):
     try:
         with (app.artifacts / 'app.log').open('w', encoding='utf-8') as log:
             app.start([origin], log)
-            wait('currentState.tabs.find(tab=>tab.id===currentState.active_tab_id)?.title==="Felaris fixture" && !currentState.is_loading')
+            wait('currentState.tabs.find(tab=>tab.id===currentState.active_tab_id)?.title==="Veluno fixture" && !currentState.is_loading')
             crash = f"""import {{ connect, closeConnections }} from './tests/native_cdp.mjs';
 const view = await connect(page=>page.url.startsWith({json.dumps(origin)}), {app.content_port});
 try {{ await view.call('Page.crash', {{}}, {{allowTargetClose:true}}); }} catch (error) {{
@@ -40,10 +40,10 @@ try {{ await view.call('Page.crash', {{}}, {{allowTargetClose:true}}); }} catch 
             subprocess.run(['node', '--input-type=module', '-e', crash], check=True, timeout=20)
             wait('currentState.tabs.some(tab=>tab.error && !tab.is_loading)')
             failed = sidebar('currentState.active_tab_id')
-            sidebar('window.ipc.postMessage(JSON.stringify({action:"new_tab",url:"felaris://newtab"}));true')
+            sidebar('window.ipc.postMessage(JSON.stringify({action:"new_tab",url:"veluno://newtab"}));true')
             wait(f'currentState.active_tab_id!=={failed}')
             sidebar(f'window.ipc.postMessage(JSON.stringify({{action:"switch_tab",id:{failed}}}));true')
-            wait('currentState.tabs.find(tab=>tab.id===currentState.active_tab_id)?.title==="Felaris fixture" && !currentState.tabs.find(tab=>tab.id===currentState.active_tab_id)?.error && !currentState.is_loading')
+            wait('currentState.tabs.find(tab=>tab.id===currentState.active_tab_id)?.title==="Veluno fixture" && !currentState.tabs.find(tab=>tab.id===currentState.active_tab_id)?.error && !currentState.is_loading')
         print(f'Crashed tab recovered on selection without manual reload. Evidence: {app.artifacts}')
     finally:
         app.close()
@@ -52,4 +52,4 @@ try {{ await view.call('Page.crash', {{}}, {{allowTargetClose:true}}); }} catch 
 
 
 if __name__ == '__main__':
-    check_recovery('target/debug/felaris.exe')
+    check_recovery('target/debug/veluno.exe')

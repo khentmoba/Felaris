@@ -26,5 +26,5 @@ def check_cache_recovery(executable):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exe', default='target/debug/felaris.exe')
+    parser.add_argument('--exe', default='target/debug/veluno.exe')
     check_cache_recovery(parser.parse_args().exe)

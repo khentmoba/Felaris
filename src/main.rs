@@ -31,7 +31,7 @@ fn main() -> wry::Result<()> {
         unsafe extern "system" {
             fn SetCurrentProcessExplicitAppUserModelID(app_id: *const u16) -> i32;
         }
-        let app_id: Vec<u16> = "Felaris.Browser\0".encode_utf16().collect();
+        let app_id: Vec<u16> = "Veluno.Browser\0".encode_utf16().collect();
         // Windows copies the ID during this call.
         unsafe { SetCurrentProcessExplicitAppUserModelID(app_id.as_ptr()) };
     }
@@ -48,7 +48,7 @@ fn main() -> wry::Result<()> {
                     println!("Download URL: {url}");
                 }
             }
-            Ok(None) => println!("Felaris is up to date."),
+            Ok(None) => println!("Veluno is up to date."),
             Err(error) => {
                 eprintln!("{error}");
                 std::process::exit(1);
@@ -59,7 +59,7 @@ fn main() -> wry::Result<()> {
 
     if let Err(error) = app::run(&args) {
         desktop::message(
-            "Felaris could not start",
+            "Veluno could not start",
             &format!(
                 "{error}\n\nMake sure Microsoft Edge WebView2 Runtime is installed, then try again."
             ),
@@ -81,15 +81,15 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert!(super::has_option(
-            &arguments(&["felaris.exe", "--check-update"]),
+            &arguments(&["veluno.exe", "--check-update"]),
             "--check-update"
         ));
         assert!(!super::has_option(
-            &arguments(&["felaris.exe", "--", "--check-update"]),
+            &arguments(&["veluno.exe", "--", "--check-update"]),
             "--check-update"
         ));
         assert!(!super::has_option(
-            &arguments(&["felaris.exe", "--", "https://example.com/?x=--check-update"]),
+            &arguments(&["veluno.exe", "--", "https://example.com/?x=--check-update"]),
             "--check-update"
         ));
     }

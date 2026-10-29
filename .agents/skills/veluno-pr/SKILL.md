@@ -1,9 +1,9 @@
 ---
-name: felaris-pr
-description: Open or update requested Felaris pull requests with Windows/WebView2 evidence and checks for the current commit. Use for release PR preparation only when the user explicitly requests a release PR; releases use discord-release.
+name: veluno-pr
+description: Open or update requested Veluno pull requests with Windows/WebView2 evidence and checks for the current commit. Use for release PR preparation only when the user explicitly requests a release PR; releases use discord-release.
 ---
 
-# Felaris pull requests
+# Veluno pull requests
 
 Create or update the PR, register it with the current T3 thread, and verify its
 current head's checks. PR creation authorizes committing and pushing the scoped
@@ -43,7 +43,7 @@ python -B tests/release.test.py
 For native behavior or test tooling, build with `cargo build --locked`, then run
 `python -B tests/native_smoke.py`, `python -B tests/native_regressions.py`, and
 `python -B tests/native_tools.test.py` as relevant. Run native app suites serially.
-Use `--exe target/release/felaris.exe` when validating a release-mode build.
+Use `--exe target/release/veluno.exe` when validating a release-mode build.
 For resource/version changes, run `powershell -NoProfile -File tests/version.test.ps1`.
 Use the skill-creator validator for skill changes when that skill is available.
 

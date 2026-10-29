@@ -61,7 +61,7 @@ def check_tab_input(executable):
     try:
         with (app.artifacts / 'app.log').open('w', encoding='utf-8') as log:
             app.start([origin + '/'], log)
-            wait('!currentState.is_loading && currentState.tabs.some(tab=>tab.title==="Felaris fixture")')
+            wait('!currentState.is_loading && currentState.tabs.some(tab=>tab.title==="Veluno fixture")')
             first = sidebar('currentState.active_tab_id')
             roots = []
 
@@ -79,7 +79,7 @@ def check_tab_input(executable):
             window = max(roots)[1]
             baseline = len(hosts(window))
             command('new_tab', url=origin + '/second')
-            wait(f'!currentState.is_loading && currentState.active_tab_id!=={first} && currentState.tabs.find(tab=>tab.id===currentState.active_tab_id)?.title==="Felaris second"')
+            wait(f'!currentState.is_loading && currentState.active_tab_id!=={first} && currentState.tabs.find(tab=>tab.id===currentState.active_tab_id)?.title==="Veluno second"')
             second = sidebar('currentState.active_tab_id')
             assert len(hosts(window)) == baseline + 1, f'Host baseline {baseline}, after new tab {len(hosts(window))}'
             for selected, sleeping in [(second, first), (first, second)] * 3:
@@ -105,19 +105,19 @@ try {{
  const page=await connect(target=>target.url==={json.dumps(origin + '/')}, {app.content_port});
  await page.evaluate(`new Promise(r=>{{const frame=document.createElement('iframe');frame.src={json.dumps(frame)};frame.style='position:fixed;top:0;left:0;width:400px;height:300px';frame.onload=r;document.body.prepend(frame);}})`);
  await new Promise(r=>setTimeout(r,500));
- if(await page.evaluate('__felarisCanSleep()')!==true) throw Error('An idle cross-origin iframe blocked sleep');
+ if(await page.evaluate('__velunoCanSleep()')!==true) throw Error('An idle cross-origin iframe blocked sleep');
  const child=await connect(target=>target.type==='iframe'&&target.url==={json.dumps(frame)}, {app.content_port});
  const point=await child.evaluate(`(()=>{{const r=document.getElementById('note').getBoundingClientRect();return {{x:r.x+r.width/2,y:r.y+r.height/2}};}})()`);
  await child.evaluate("addEventListener('beforeunload',()=>{{}});true");
  await new Promise(r=>setTimeout(r,500));
- if(await page.evaluate('__felarisCanSleep()')!==true) throw Error('beforeunload blocked sleep before any interaction');
+ if(await page.evaluate('__velunoCanSleep()')!==true) throw Error('beforeunload blocked sleep before any interaction');
  for(const type of ['mouseMoved','mousePressed','mouseReleased']) await page.call('Input.dispatchMouseEvent',{{type,...point,...(type==='mouseMoved'?{{}}:{{button:'left',clickCount:1}})}});
  await new Promise(r=>setTimeout(r,500));
- if(await page.evaluate('__felarisCanSleep()')!==false) throw Error('Clicking a cross-origin iframe with beforeunload did not block sleep');
+ if(await page.evaluate('__velunoCanSleep()')!==false) throw Error('Clicking a cross-origin iframe with beforeunload did not block sleep');
  await page.call('Input.insertText',{{text:'iframe draft'}});
  if(await child.evaluate("document.getElementById('note').value")!=='iframe draft') throw Error('Typing did not reach the cross-origin iframe');
  await new Promise(r=>setTimeout(r,500));
- if(await page.evaluate('__felarisCanSleep()')!==false) throw Error('Typing in a cross-origin iframe did not block sleep');
+ if(await page.evaluate('__velunoCanSleep()')!==false) throw Error('Typing in a cross-origin iframe did not block sleep');
 }} finally {{closeConnections();}}"""
             subprocess.run(['node', '--input-type=module', '-e', typing], check=True, timeout=20)
             print(f'Tab sleep/wake releases native windows and preserves pointer input across six cycles; cross-origin iframe clicks (with beforeunload) and typing block sleep. Evidence: {app.artifacts}')
@@ -129,5 +129,5 @@ try {{
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exe', default='target/debug/felaris.exe')
+    parser.add_argument('--exe', default='target/debug/veluno.exe')
     check_tab_input(parser.parse_args().exe)

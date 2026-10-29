@@ -5,12 +5,12 @@ import { connect, closeConnections } from './native_cdp.mjs';
 
 const [port, artifacts] = process.argv.slice(2);
 try {
-  const sidebar = await connect(page => page.title === 'Felaris', port);
+  const sidebar = await connect(page => page.title === 'Veluno', port);
   const deadline = Date.now() + 15000;
   let topbar;
   while (!topbar && Date.now() < deadline) {
     const pages = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-    for (const page of pages.filter(page => page.type === 'page' && page.title !== 'Felaris')) {
+    for (const page of pages.filter(page => page.type === 'page' && page.title !== 'Veluno')) {
       const candidate = await connect(target => target.id === page.id, port);
       if (await candidate.evaluate("!!document.getElementById('drag') && !!window.setLoading")) { topbar = candidate; break; }
     }
@@ -36,7 +36,7 @@ try {
     return {stable,continuous,compositor:frames.every(frame=>!('width' in frame)),hidden:getComputedStyle(bar).opacity==='0',animations:bar.getAnimations().length};
   })()`;
   const loading = await topbar.evaluate(loadingProbe);
-  const popup = await connect(page => page.title === 'Felaris Popup', port);
+  const popup = await connect(page => page.title === 'Veluno Popup', port);
   await popup.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
   const popupLoading = await popup.evaluate(loadingProbe.replaceAll('setLoading(', "setPopupState('',").replaceAll("'bar'", "'progress'"));
   assert.deepEqual(popupLoading, loading, 'Popup loading follows the same continuity and completion behavior');

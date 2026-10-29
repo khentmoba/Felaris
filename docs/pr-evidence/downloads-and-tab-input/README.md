@@ -42,4 +42,4 @@ Local installer packaging and signing were not run. Windows PR CI covers package
 
 The shared native-lifetime change must not evict protected work or break other browser panels. This is proven at end-to-end level by `tests/tab_input.py` plus the full native suite: repeated sleep/wake leaves no native host behind, click dispatch works after waking, protected drafts/media/downloads remain alive, and popups, permission decisions, sidebar stacking, and session recovery pass.
 
-The remaining risk is native focus, bounds, or stacking behavior on other Windows/WebView2 versions and arbitrary sites. Default detection requires both HTTP and HTTPS to resolve to `FelarisHTML`. History uses saved icons where available, then the site's favicon, then a globe. No profile migration or irreversible data change is involved.
+The remaining risk is native focus, bounds, or stacking behavior on other Windows/WebView2 versions and arbitrary sites. Default detection requires both HTTP and HTTPS to resolve to `VelunoHTML`. History uses saved icons where available, then the site's favicon, then a globe. No profile migration or irreversible data change is involved.

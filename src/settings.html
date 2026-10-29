@@ -48,9 +48,9 @@ select { font:inherit; font-size:13px; color:var(--text); background:var(--activ
 
 <section data-section="general" data-label="General" data-icon="M3 10l9-7 9 7M5 9v11h5v-6h4v6h5V9">
 <div class="row"><div><h2>Default browser</h2><p id="default-browser-status"></p></div><button class="btn" id="set-default-browser" data-send="default_browser">Open Windows settings</button></div>
-<div class="row"><div><h2>Check for updates automatically</h2><p>Felaris looks for a new version shortly after launch and every 6 hours.</p></div><button class="switch" role="switch" id="auto-update" aria-label="Check for updates automatically"></button></div>
+<div class="row"><div><h2>Check for updates automatically</h2><p>Veluno looks for a new version shortly after launch and every 6 hours.</p></div><button class="switch" role="switch" id="auto-update" aria-label="Check for updates automatically"></button></div>
 <div class="row"><div><h2>Import bookmarks</h2><p id="import-detail"></p></div><select id="import-source" aria-label="Browser to import from"></select><button class="btn" id="import-button">Import</button></div>
-<div class="row"><div><h2>Update now</h2><p>Check for a new version of Felaris.</p></div><button class="btn" data-send="check_updates">Check for updates</button></div>
+<div class="row"><div><h2>Update now</h2><p>Check for a new version of Veluno.</p></div><button class="btn" data-send="check_updates">Check for updates</button></div>
 </section>
 
 <section data-section="search" data-label="Search" data-icon="M10 3.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zm5 11.5 5 5">
@@ -60,13 +60,13 @@ select { font:inherit; font-size:13px; color:var(--text); background:var(--activ
 </section>
 
 <section data-section="privacy" data-label="Privacy and security" data-icon="M6 11V8a6 6 0 0 1 12 0v3M5 11h14v10H5z">
-<div class="row"><div><h2>Block ads and trackers</h2><p>Runs uBlock Origin Lite in every tab. Turning this on or off applies after you restart Felaris.</p></div><button class="switch" role="switch" id="ad-blocker" aria-label="Block ads and trackers"></button></div>
+<div class="row"><div><h2>Block ads and trackers</h2><p>Runs uBlock Origin Lite in every tab. Turning this on or off applies after you restart Veluno.</p></div><button class="switch" role="switch" id="ad-blocker" aria-label="Block ads and trackers"></button></div>
 <div class="row"><div><h2>Save browsing history</h2><p>Keeps the pages you visit so you can find them again. Open it from the menu or with Ctrl + H.</p></div><button class="switch" role="switch" id="save-history" aria-label="Save browsing history"></button></div>
 <h2>Tracking prevention</h2>
 <div class="choices three" id="tracking" role="radiogroup" aria-label="Tracking prevention"></div>
 <p class="note" id="tracking-note"></p>
 <h2>Passwords and forms</h2>
-<div class="row"><div><h2>Offer to save passwords</h2><p>Saved passwords stay in this Felaris profile on this computer and are filled in when you return to the site.</p></div><button class="switch" role="switch" id="save-passwords" aria-label="Offer to save passwords"></button></div>
+<div class="row"><div><h2>Offer to save passwords</h2><p>Saved passwords stay in this Veluno profile on this computer and are filled in when you return to the site.</p></div><button class="switch" role="switch" id="save-passwords" aria-label="Offer to save passwords"></button></div>
 <div class="row"><div><h2>Fill in forms automatically</h2><p>Suggests names, addresses, and other details you typed into forms before.</p></div><button class="switch" role="switch" id="autofill" aria-label="Fill in forms automatically"></button></div>
 <h2>Clear browsing data</h2>
 <div class="panel" id="clear-data">
@@ -82,7 +82,7 @@ select { font:inherit; font-size:13px; color:var(--text); background:var(--activ
 
 <section data-section="extensions" data-label="Extensions" data-icon="M10 4h4v3h3a1 1 0 0 1 1 1v3h-3v2h3v3a1 1 0 0 1-1 1h-3v-3h-2v3H8a1 1 0 0 1-1-1v-3h3v-2H7V8a1 1 0 0 1 1-1h2z">
 <div class="row"><div><h2>uBlock Origin Lite</h2><p id="ublock-detail"></p></div><span class="pill" id="ublock-pill"></span><button class="btn" id="ublock-action" data-send="install_ad_blocker" hidden>Install</button></div>
-<div class="row"><div><h2>More extensions</h2><p>Felaris loads any unpacked Chromium extension folder placed in:<br><code id="extensions-folder"></code><br>Restart Felaris after adding one.</p></div><button class="btn" data-send="open_extensions_folder">Open folder</button></div>
+<div class="row"><div><h2>More extensions</h2><p>Veluno loads any unpacked Chromium extension folder placed in:<br><code id="extensions-folder"></code><br>Restart Veluno after adding one.</p></div><button class="btn" data-send="open_extensions_folder">Open folder</button></div>
 <p class="note">uBlock Origin Lite is the Manifest V3 edition of uBlock Origin. The original uBlock Origin is a Manifest V2 extension, which current WebView2 no longer runs.</p>
 </section>
 
@@ -90,8 +90,8 @@ select { font:inherit; font-size:13px; color:var(--text); background:var(--activ
 <table class="keys"><tbody id="keys"></tbody></table>
 </section>
 
-<section data-section="about" data-label="About Felaris" data-icon="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 8v5m0-8.5v.01">
-<div class="row"><div><h2>Felaris</h2><p id="version"></p></div><button class="btn" data-send="check_updates">Check for updates</button></div>
+<section data-section="about" data-label="About Veluno" data-icon="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 8v5m0-8.5v.01">
+<div class="row"><div><h2>Veluno</h2><p id="version"></p></div><button class="btn" data-send="check_updates">Check for updates</button></div>
 <p class="note">A lightweight browser built in Rust on Microsoft Edge WebView2.</p>
 </section>
 <p class="empty" id="no-match" hidden>No settings match your search.</p>
@@ -101,7 +101,7 @@ select { font:inherit; font-size:13px; color:var(--text); background:var(--activ
 const data=__SETTINGS__;
 const $=id=>document.getElementById(id);
 window.setDefaultBrowser=isDefault=>{
- $('default-browser-status').textContent=isDefault?'Felaris is your default browser.':'Make Felaris open links from other apps. Windows keeps the final choice with you.';
+ $('default-browser-status').textContent=isDefault?'Veluno is your default browser.':'Make Veluno open links from other apps. Windows keeps the final choice with you.';
  $('set-default-browser').hidden=isDefault;
 };
 window.setDefaultBrowser(data.is_default_browser);
@@ -142,8 +142,8 @@ function show(id) {
 $('find').oninput=()=>show(current);
 $('find').onkeydown=e=>{ if(e.key==='Escape') { $('find').value=''; show(current); } };
 document.addEventListener('keydown',e=>{ if(e.ctrlKey&&!e.shiftKey&&!e.altKey&&e.key.toLowerCase()==='f') { e.preventDefault(); $('find').focus(); } });
-document.querySelectorAll('[data-send]').forEach(button=>button.onclick=()=>{ if(button.dataset.send==='clear_history'&&!confirm('Clear all browsing history?'))return; Felaris.send(button.dataset.send); });
-function setting(key,value) { Felaris.send('set_setting',{key,value}); data.settings[key]=value; }
+document.querySelectorAll('[data-send]').forEach(button=>button.onclick=()=>{ if(button.dataset.send==='clear_history'&&!confirm('Clear all browsing history?'))return; Veluno.send(button.dataset.send); });
+function setting(key,value) { Veluno.send('set_setting',{key,value}); data.settings[key]=value; }
 function toggle(id,key) {
  const button=$(id); button.setAttribute('aria-checked',String(!!data.settings[key]));
  button.onclick=()=>{ setting(key,!data.settings[key]); button.setAttribute('aria-checked',String(data.settings[key])); renderExtension(); };
@@ -157,7 +157,7 @@ function renderTracking() {
   const dot=document.createElement('span'); dot.className='dot'; const label=document.createElement('span'); label.textContent=name;
   button.append(dot,label); button.onclick=()=>{ setting('tracking_prevention',id); renderTracking(); }; return button;
  }));
- $('tracking-note').textContent=(tracking.find(([id])=>id===data.settings.tracking_prevention)||tracking[1])[2]+' Built into Felaris and works without the ad blocker.';
+ $('tracking-note').textContent=(tracking.find(([id])=>id===data.settings.tracking_prevention)||tracking[1])[2]+' Built into Veluno and works without the ad blocker.';
 }
 renderTracking();
 const clearButton=$('clear-data-button'), clearStatus=$('clear-status'), clearBoxes=[...document.querySelectorAll('[data-kind]')];
@@ -168,7 +168,7 @@ clearButton.onclick=()=>{
  const range=$('clear-range');
  if(range.value==='all'&&(kinds.site_data||kinds.passwords)&&!confirm('Clear the selected data from all time? You will be signed out of most sites.'))return;
  clearButton.disabled=true; clearStatus.textContent='Clearing…';
- Felaris.send('clear_browsing_data',{range:range.value,kinds});
+ Veluno.send('clear_browsing_data',{range:range.value,kinds});
 };
 window.dataCleared=ok=>{ clearReady(); clearStatus.textContent=ok?'Cleared.':'Could not clear everything. See the message at the bottom of the window.'; };
 function renderImport() {
@@ -177,7 +177,7 @@ function renderImport() {
  const none=!data.importers.length;
  select.hidden=none; button.hidden=none;
  $('import-detail').textContent=none?'No Chrome, Edge, Brave, Vivaldi, or Opera bookmarks were found on this computer.':'Copies web bookmarks from another browser on this computer. Folders are flattened and existing bookmarks are kept.';
- button.onclick=()=>Felaris.send('import_bookmarks',{browser:select.value});
+ button.onclick=()=>Veluno.send('import_bookmarks',{browser:select.value});
 }
 renderImport();
 function renderEngines() {
@@ -196,8 +196,8 @@ function renderExtension() {
   else if(wanted&&!data.ublock_active) { pill=['Turns on after restart','warn']; }
   else if(wanted) { pill=['Active','ok']; }
   else { pill=['Off','']; }
- } else if(state==='installing') { pill=['Downloading…','warn']; detail='Felaris is downloading the ad blocker. Restart after installation to activate it.'; }
- else if(state==='failed') { pill=['Download failed','warn']; detail='Felaris could not download the ad blocker. Check your connection and try again.'; action='Try again'; }
+ } else if(state==='installing') { pill=['Downloading…','warn']; detail='Veluno is downloading the ad blocker. Restart after installation to activate it.'; }
+ else if(state==='failed') { pill=['Download failed','warn']; detail='Veluno could not download the ad blocker. Check your connection and try again.'; action='Try again'; }
  else if(wanted) { pill=['Waiting to download','warn']; action='Install now'; }
  else { action='Install'; }
  $('ublock-pill').textContent=pill[0]; $('ublock-pill').className='pill '+pill[1]; $('ublock-detail').textContent=detail;

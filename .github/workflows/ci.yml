@@ -43,12 +43,12 @@ jobs:
       - name: Package, install, and exercise the release app
         run: powershell -NoProfile -File scripts/package.ps1
       - name: Capture ownership and native failure guards
-        run: python -B tests/native_tools.test.py --exe target/release/felaris.exe
+        run: python -B tests/native_tools.test.py --exe target/release/veluno.exe
       - name: Retain native failure evidence
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: Felaris-native-failure-${{ github.run_attempt }}
+          name: Veluno-native-failure-${{ github.run_attempt }}
           retention-days: 7
           if-no-files-found: ignore
           path: |
@@ -60,8 +60,10 @@ jobs:
             target/native-tools/*/*.json
       - uses: actions/upload-artifact@v4
         with:
-          name: Felaris-Windows
+          name: Veluno-Windows
           path: |
+            target/release/veluno.exe
+            target/release/veluno-setup.exe
             target/release/felaris.exe
             target/release/felaris-setup.exe
             target/release/SHA256SUMS

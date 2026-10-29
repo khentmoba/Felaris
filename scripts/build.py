@@ -19,7 +19,7 @@ def git(*arguments):
 def manifest_for(version, summary):
     return {
         'version': version,
-        'release_url': f'https://github.com/khentmoba/Felaris/releases/tag/v{version}',
+        'release_url': f'https://github.com/khentmoba/Veluno/releases/tag/v{version}',
         'download_url': f'https://github.com/khentmoba/Felaris/releases/download/v{version}/felaris.exe',
         'summary': summary,
     }
@@ -72,7 +72,7 @@ def main():
             raise ValueError('Windows CI must pass on the exact release commit before publication.')
         if git('ls-remote', '--tags', 'origin', f'refs/tags/v{version}', f'refs/tags/v{version}^{{}}'):
             raise ValueError(f'Tag v{version} already exists. Prepare a new version before publishing.')
-    print(f'Felaris v{version}, source commit {commit}')
+    print(f'Veluno v{version}, source commit {commit}')
     if args.dry_run:
         print(f'Would package and verify; GitHub: {not args.skip_github}; Discord: {not args.skip_discord}')
         return
@@ -82,13 +82,13 @@ def main():
     if clean_commit() != commit:
         raise ValueError('Source commit changed during packaging; nothing was published.')
     release = PROJECT_ROOT / 'target/release'
-    assets = [release / name for name in ('felaris.exe', 'felaris-setup.exe', 'SHA256SUMS')]
+    assets = [release / name for name in ('veluno.exe', 'veluno-setup.exe', 'felaris.exe', 'felaris-setup.exe', 'SHA256SUMS')]
     for asset in assets:
         if not asset.is_file():
             raise ValueError(f'Missing verified release asset: {asset}')
     if not args.skip_github:
         subprocess.run(['gh', 'release', 'create', f'v{version}', *map(str, assets),
-                        '--target', commit, '--title', f'Felaris v{version}', '--notes', summary],
+                        '--target', commit, '--title', f'Veluno v{version}', '--notes', summary],
                        cwd=PROJECT_ROOT, check=True)
     if not args.skip_discord:
         subprocess.run([sys.executable, str(PROJECT_ROOT / 'scripts/notify_discord.py'), '--summary', summary],

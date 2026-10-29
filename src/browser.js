@@ -1,17 +1,18 @@
 (() => {
-  if (window.Felaris) return;
+  if (window.Veluno) return;
   function send(action, payload = {}) {
     window.ipc?.postMessage(JSON.stringify({ action, ...payload }));
   }
   function resolveAddress(value) {
     const text = value.trim();
     if (!text) return null;
-    if (text === 'felaris://newtab') return text;
+    const internal=text.startsWith('felaris://')?'veluno://'+text.slice(10):text;
+    if (['veluno://newtab','veluno://blank','veluno://settings','veluno://history'].includes(internal)) return internal;
     if (/^(https?:\/\/|file:\/\/)/i.test(text)) return text;
     if (!/\s/.test(text) && /^(localhost(?=[:/]|$)|\[[0-9a-f:]+\](?=[:/]|$)|[^/:]+\.[^/:]+)(:\d+)?([/?#].*)?$/i.test(text)) {
       return (/^(localhost|127\.0\.0\.1|\[::1\])(?=[:/]|$)/i.test(text) ? 'http://' : 'https://') + text;
     }
-    return window.Felaris.searchUrl + encodeURIComponent(text);
+    return window.Veluno.searchUrl + encodeURIComponent(text);
   }
   const suggestionMetadata=new Map();
   function metadata(entry) {
@@ -29,7 +30,7 @@
   function suggestions(value,state={},historyEntries=[]) {
     const query=value.trim();
     const needle=query.toLowerCase();
-    const target=Felaris.resolveAddress(query);
+    const target=Veluno.resolveAddress(query);
     const options=[];
     const seen=new Set();
     const norm=u=>(u||'').replace(/\/+$/,'').toLowerCase();
@@ -77,13 +78,13 @@
     }
     let fallback;
     if(target) {
-     const search=target===Felaris.searchUrl+encodeURIComponent(query);
-     fallback={option:{title:query,detail:search?'Search with '+Felaris.searchName.replace(/ Search$/,''):'Open in a new tab',url:target,search},score:search?60:110};
+     const search=target===Veluno.searchUrl+encodeURIComponent(query);
+     fallback={option:{title:query,detail:search?'Search with '+Veluno.searchName.replace(/ Search$/,''):'Open in a new tab',url:target,search},score:search?60:110};
      seen.add(norm(target));
     }
     let tabCount=0;
     for(const tab of state.tabs||[]) {
-     if(['felaris://newtab','felaris://blank'].includes(tab.url)) continue;
+     if(['veluno://newtab','veluno://blank'].includes(tab.url)) continue;
      if(!needle&&tabCount++>=6) break;
      if(add(tab,'tab')) break;
     }
@@ -96,7 +97,7 @@
     if(fallback) options.push(fallback);
     return options.sort((a,b)=>b.score-a.score).map(item=>item.option);
   }
-  window.Felaris = { send, resolveAddress, suggestions, navigate: url => send('navigate', { url }), searchUrl: 'https://search.brave.com/search?q=', searchName: 'Brave Search' };
+  window.Veluno = { send, resolveAddress, suggestions, navigate: url => send('navigate', { url }), searchUrl: 'https://search.brave.com/search?q=', searchName: 'Brave Search' };
   const postShortcut = window.ipc?.postMessage.bind(window.ipc);
   const stringify = JSON.stringify;
   window.addEventListener('keydown', event => {

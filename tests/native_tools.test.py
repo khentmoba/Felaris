@@ -21,7 +21,7 @@ class DelayedKeyboardFixture(Fixture):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exe', default='target/debug/felaris.exe')
+    parser.add_argument('--exe', default='target/debug/veluno.exe')
     args = parser.parse_args()
     app = NativeApp(args.exe, 'native-tools')
     server = ThreadingHTTPServer(('127.0.0.1', 0), DelayedKeyboardFixture)
@@ -42,7 +42,7 @@ def main():
                            check=True, timeout=60)
             assert app.process.poll() is None, 'Capturing another app terminated the decoy'
             assert evaluate('currentState.sidebar_collapsed') is False, 'Decoy stopped responding'
-            print('Owned capture cleanup preserves a separate running Felaris instance.', flush=True)
+            print('Owned capture cleanup preserves a separate running Veluno instance.', flush=True)
 
             source = (tests / 'native_ui.mjs').read_text(encoding='utf-8')
             source = source.replace("from './native_cdp.mjs'", f'from {json.dumps((tests / "native_cdp.mjs").as_uri())}')
@@ -50,7 +50,7 @@ def main():
             menu_marker = '  const menuOpacity = await sidebar.evaluate('
             key_marker = "  await press(restored, 'B', 10);"
             command_marker = '  const command = '
-            sidebar_marker = "  const sidebar = await connect(page => page.title === 'Felaris');"
+            sidebar_marker = "  const sidebar = await connect(page => page.title === 'Veluno');"
             assert source.count(menu_marker) == source.count(key_marker) == source.count(command_marker) == source.count(sidebar_marker) == 1
             menu_source = source.replace(sidebar_marker, sidebar_marker + "\n  await sidebar.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });")
             menu_source = menu_source.replace(command_marker, "  throw Error('Injected menu fade was not rejected');\n" + command_marker)
@@ -72,7 +72,7 @@ def main():
                 assert result.returncode != 0 and expected in result.stderr, result.stderr
                 report = json.loads((app.artifacts / 'debugger.json').read_text(encoding='utf-8'))
                 assert expected in report['error'], report
-                sidebar = next(target for target in report['targets'] if target.get('title') == 'Felaris')
+                sidebar = next(target for target in report['targets'] if target.get('title') == 'Veluno')
                 assert sidebar['state']['ready'] == 'complete', report
                 if name == 'menu':
                     assert sidebar['state']['reducedMotion'] is False, report

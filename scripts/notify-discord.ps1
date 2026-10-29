@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Publishes Felaris releases and announcements to Discord via Webhook.
+    Publishes Veluno releases and announcements to Discord via Webhook.
 #>
 
 [CmdletBinding()]

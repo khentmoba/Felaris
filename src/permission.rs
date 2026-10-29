@@ -142,7 +142,7 @@ impl Prompt {
                     ));
                 }
             });
-        if headless && let Ok(arguments) = std::env::var("FELARIS_SMOKE_BROWSER_ARGUMENTS") {
+        if headless && let Ok(arguments) = std::env::var("VELUNO_SMOKE_BROWSER_ARGUMENTS") {
             use wry::WebViewBuilderExtWindows;
             builder = builder.with_additional_browser_args(arguments);
         }

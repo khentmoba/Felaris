@@ -145,10 +145,12 @@ pub fn is_default_browser() -> bool {
                     &mut length,
                 )
                 .is_ok()
-                    && String::from_utf16_lossy(
-                        &value[..value.iter().position(|c| *c == 0).unwrap_or(value.len())],
-                    )
-                    .eq_ignore_ascii_case("FelarisHTML")
+                    && ["VelunoHTML", "FelarisHTML"].iter().any(|progid| {
+                        String::from_utf16_lossy(
+                            &value[..value.iter().position(|c| *c == 0).unwrap_or(value.len())],
+                        )
+                        .eq_ignore_ascii_case(progid)
+                    })
             })
     }
     #[cfg(not(windows))]
@@ -350,7 +352,7 @@ pub fn clear_browsing_data(
     .map_err(|error| error.to_string())
 }
 
-/// Saves the visible part of the page as a PNG in `Pictures\Felaris`.
+/// Saves the visible part of the page as a PNG in `Pictures\Veluno`.
 pub fn screenshot(
     view: &WebView,
     title: &str,
@@ -363,7 +365,7 @@ pub fn screenshot(
         core::HSTRING,
     };
     use wry::WebViewExtWindows;
-    let folder = pictures_folder().join("Felaris");
+    let folder = pictures_folder().join("Veluno");
     std::fs::create_dir_all(&folder).map_err(|error| error.to_string())?;
     let path = folder.join(screenshot_name(title));
     unsafe {
@@ -534,7 +536,7 @@ fn devtools(
 }
 
 pub fn message(title: &str, text: &str, confirm: bool) -> bool {
-    if std::env::var_os("FELARIS_SMOKE_TEST").is_some() {
+    if std::env::var_os("VELUNO_SMOKE_TEST").is_some() {
         eprintln!("{title}: {text}");
         return false;
     }
@@ -994,7 +996,7 @@ mod tests {
     #[test]
     fn completed_download_clears_without_completion_notifications() {
         let directory = std::env::temp_dir().join(format!(
-            "felaris-download-{}",
+            "veluno-download-{}",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()

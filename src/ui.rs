@@ -22,7 +22,7 @@ pub fn script() -> String {
 
 pub fn search_script() -> String {
     let (name, url) = settings::engine();
-    format!("Felaris.searchUrl='{url}';Felaris.searchName='{name}'")
+    format!("Veluno.searchUrl='{url}';Veluno.searchName='{name}'")
 }
 
 pub fn get_ui_html() -> String {

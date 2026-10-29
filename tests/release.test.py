@@ -23,9 +23,15 @@ SHA = 'a' * 40
 
 
 class NotificationTests(unittest.TestCase):
+    def test_historical_installer_links_keep_the_published_asset_name(self):
+        self.assertEqual(notify.installer_asset("0.3.2"), "felaris-setup.exe")
+        self.assertEqual(notify.installer_asset("v0.2.3"), "felaris-setup.exe")
+        self.assertEqual(notify.installer_asset("0.3.3"), "veluno-setup.exe")
+        self.assertEqual(notify.installer_asset("1.2.3"), "veluno-setup.exe")
+
     def test_payload_matches_delivery_and_normalizes_bullets(self):
         with tempfile.TemporaryDirectory() as directory:
-            binary = Path(directory) / 'felaris-setup.exe'
+            binary = Path(directory) / 'veluno-setup.exe'
             binary.write_bytes(b'fixture')
             for option, upload in (('--installer', True), ('--exe', True), ('--installer', False)):
                 arguments = ['notify', '--version', '1.2.3', '--summary', '* Fixed hover\n- Added prompts', option, str(binary)]
@@ -39,7 +45,7 @@ class NotificationTests(unittest.TestCase):
                 self.assertEqual(payload['allowed_mentions'], {'parse': []})
                 embed = payload['embeds'][0]
                 self.assertEqual(embed['color'], 4363994)
-                self.assertEqual(embed['title'], 'Release: Felaris v1.2.3')
+                self.assertEqual(embed['title'], 'Release: Veluno v1.2.3')
                 self.assertEqual(embed['fields'][-1]['value'], '- Fixed hover\n- Added prompts')
                 self.assertEqual(embed['fields'][2]['name'], 'Attached File' if upload else 'Download')
                 self.assertEqual(send.call_args.kwargs['file_path'], binary if upload else None)
@@ -48,9 +54,9 @@ class NotificationTests(unittest.TestCase):
     def test_default_delivery_uses_installer(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            installer = root / 'target/release/felaris-setup.exe'
+            installer = root / 'target/release/veluno-setup.exe'
             installer.parent.mkdir(parents=True)
-            (installer.parent / 'felaris.exe').write_bytes(b'raw executable')
+            (installer.parent / 'veluno.exe').write_bytes(b'raw executable')
             for mode in ('attached', 'oversized', 'missing', 'no-upload'):
                 with self.subTest(mode=mode):
                     installer.write_bytes(b'installer')
@@ -69,26 +75,26 @@ class NotificationTests(unittest.TestCase):
                         notify.main()
                     request = post.call_args.args[0]
                     if mode == 'attached':
-                        self.assertIn(b'filename="felaris-setup.exe"', request.data)
+                        self.assertIn(b'filename="veluno-setup.exe"', request.data)
                         self.assertIn(b'installer', request.data)
-                        self.assertNotIn(b'filename="felaris.exe"', request.data)
+                        self.assertNotIn(b'filename="veluno.exe"', request.data)
                     else:
                         payload = json.loads(request.data)
                         self.assertEqual(payload['embeds'][0]['fields'][2]['value'],
-                                         '[felaris-setup.exe](https://github.com/khentmoba/Felaris/releases/download/v1.2.3/felaris-setup.exe)')
-                    self.assertIn(b'Run felaris-setup.exe', request.data)
+                                         '[veluno-setup.exe](https://github.com/khentmoba/Veluno/releases/download/v1.2.3/veluno-setup.exe)')
+                    self.assertIn(b'Run veluno-setup.exe', request.data)
 
     @unittest.skipUnless(sys.platform == 'win32', 'PowerShell entry point is Windows-only')
     def test_powershell_installer_path_and_legacy_alias(self):
         script = str(ROOT / 'scripts/notify-discord.ps1').replace("'", "''")
         for parameter in ('InstallerPath', 'ExePath'):
             command = ("function python { ConvertTo-Json -InputObject @($args) -Compress; $global:LASTEXITCODE = 37 }; "
-                       f"& '{script}' -{parameter} 'C:\\release files\\felaris-setup.exe' -DryRun; exit $LASTEXITCODE")
+                       f"& '{script}' -{parameter} 'C:\\release files\\veluno-setup.exe' -DryRun; exit $LASTEXITCODE")
             encoded = base64.b64encode(command.encode('utf-16le')).decode('ascii')
             result = subprocess.run(['powershell', '-NoProfile', '-EncodedCommand', encoded], capture_output=True, text=True)
             self.assertEqual(result.returncode, 37, result.stderr)
             self.assertEqual(json.loads(result.stdout), [str(ROOT / 'scripts/notify_discord.py'), '--dry-run',
-                             '--installer', 'C:\\release files\\felaris-setup.exe'])
+                             '--installer', 'C:\\release files\\veluno-setup.exe'])
 
     def test_webhook_requests_message_receipt(self):
         response = io.BytesIO(b'{"id":"123"}')
@@ -106,7 +112,7 @@ class ReleaseTests(unittest.TestCase):
         self.manifest = self.root / 'version.json'
         self.manifest.write_text(json.dumps({
             'version': '1.2.3',
-            'release_url': 'https://github.com/khentmoba/Felaris/releases/tag/v1.2.3',
+            'release_url': 'https://github.com/khentmoba/Veluno/releases/tag/v1.2.3',
             'download_url': 'https://github.com/khentmoba/Felaris/releases/download/v1.2.3/felaris.exe',
             'summary': 'Committed notes',
         }), encoding='utf-8')
@@ -142,7 +148,7 @@ class ReleaseTests(unittest.TestCase):
             if stage == 'package':
                 directory = self.root / 'target/release'
                 directory.mkdir(parents=True)
-                for name in ('felaris.exe', 'felaris-setup.exe', 'SHA256SUMS'):
+                for name in ('veluno.exe', 'veluno-setup.exe', 'felaris.exe', 'felaris-setup.exe', 'SHA256SUMS'):
                     if not self.missing_asset or name != 'SHA256SUMS':
                         (directory / name).write_bytes(b'fixture')
                 if self.change_during_build:
@@ -177,8 +183,8 @@ class ReleaseTests(unittest.TestCase):
         github, notification = self.published()
         self.assertEqual(github[github.index('--target') + 1], SHA)
         self.assertIn('Committed notes', notification)
-        self.assertEqual(github[4:7], [str(self.root / 'target/release' / name)
-                                     for name in ('felaris.exe', 'felaris-setup.exe', 'SHA256SUMS')])
+        self.assertEqual(github[4:9], [str(self.root / 'target/release' / name)
+                                     for name in ('veluno.exe', 'veluno-setup.exe', 'felaris.exe', 'felaris-setup.exe', 'SHA256SUMS')])
         self.assertEqual(json.loads(self.manifest.read_text())['download_url'],
                          release.manifest_for('1.2.3', 'Committed notes')['download_url'])
 

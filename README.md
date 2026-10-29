@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo-wordmark.svg" alt="Felaris Browser" width="320">
+  <img src="assets/logo-wordmark.svg" alt="Veluno Browser" width="320">
 </p>
 
 <p align="center">
@@ -16,16 +16,16 @@
 - **Floating sign-in & OAuth popups:** Login, OAuth, and confirmation popups open in a Zen-style floating window that shares your profile and `window.opener` session, with a compact read-only URL bar and one-click promotion to a full tab.
 - **Session recovery:** Tabs, workspace selection, pins, and recent closed tabs are saved locally, with a backup for recovery. Site storage uses a persistent WebView2 profile.
 - **Windows integration:** Setup wizard with uninstaller, Start menu and desktop shortcuts, Installed apps registration, default-browser eligibility, and link handoff to the running instance.
-- **Native downloads:** WebView2 provides download progress and file actions; Felaris reports completion and warns before closing active downloads.
+- **Native downloads:** WebView2 provides download progress and file actions; Veluno reports completion and warns before closing active downloads.
 - **Automatic tab sleeping:** Targets 12 live pages by unloading older background tabs. Pinned tabs stay awake, as do active downloads, playing media, capture sessions, and pages with detected edits or unload handlers. Pages with frames or failed safety checks stay awake too, so protected work can exceed the budget. Manual sleeping is still available. Selecting a sleeping tab reloads its saved URL; unsaved form state and page history do not survive sleeping or an app restart.
 - **Ad blocking built in:** uBlock Origin Lite is downloaded on first launch (SHA-256 checked) and loaded into every tab as a WebView2 extension. Turn it off in **Settings > Privacy and security**.
 - **Bookmarks:** Press `Ctrl + D` or the star in the address bar. Bookmarks appear first in new-tab suggestions and at the top of History, where you can remove them. **Settings > General > Import bookmarks** copies web bookmarks from Chrome, Edge, Brave, Vivaldi, Opera, or Opera GX on the same computer, reading their local bookmark files only.
 - **Reader view:** Press `F9` (or **Reader view** in the app menu) on an article to read it in a clean, dark serif layout with adjustable text size. It runs only when you ask for it, and closing it leaves the page exactly as it was.
 - **Tracking prevention and privacy controls:** WebView2's built-in tracking prevention (Basic, Balanced, or Strict) works with or without the ad blocker. Password saving is off by default, form autofill can be turned off, and `Ctrl + Shift + Delete` opens **Clear browsing data** for history, cookies and site data, cached files, or passwords and form data over the last hour, day, week, four weeks, or all time.
-- **Screenshots:** **Save screenshot** in the app menu saves the visible page as a PNG in `Pictures\Felaris`.
+- **Screenshots:** **Save screenshot** in the app menu saves the visible page as a PNG in `Pictures\Veluno`.
 - **Private tabs:** `Ctrl + Shift + N` (or **New private tab** in the app menu) opens a tab in the Private workspace. Its pages use an InPrivate WebView2 profile, and none of their tabs, history, or top sites are saved. Ad blocking may not apply to private pages.
 - **Connection security:** The address bar shows a lock for HTTPS pages and a warning for plain HTTP. WebView2 blocks pages with certificate errors.
-- **App menu and Settings:** The button at the top-left of the sidebar opens the app menu (new tab, downloads, reader view, screenshot, print, zoom, settings, updates, exit). Settings (`felaris://settings`) covers search engine, tracking prevention, passwords and autofill, clearing browsing data, bookmark import, ad blocker, updates, extensions, and shortcuts.
+- **App menu and Settings:** The button at the top-left of the sidebar opens the app menu (new tab, downloads, reader view, screenshot, print, zoom, settings, updates, exit). Settings (`veluno://settings`) covers search engine, tracking prevention, passwords and autofill, clearing browsing data, bookmark import, ad blocker, updates, extensions, and shortcuts.
 - **Built-in Upstream Sync & Conflict Inspector:** Includes an automated local tool and agent skill to fetch upstream sources, compare local changes, and simulate pre-merge conflict status in memory before applying.
 
 ---
@@ -34,7 +34,7 @@
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│  FELARIS (Rust Application Core)                       │
+│  VELUNO (Rust Application Core)                       │
 │                                                        │
 │  Zen-inspired sidebar (260px / 56px compact rail)       │
 │  • Navigation and address / search                     │
@@ -100,7 +100,7 @@ Links that open only a download dismiss their empty tab and return to the origin
 
 Click the connection icon beside a website address for its full origin, connection information, and **Clear cookies and site data**. Clearing requires confirmation, clears the selected origin's cookies and stored data, and reloads that page. Regular workspaces share the cleared data; cookies shared with related subdomains may also be removed. Routine download feedback expires, while persistent messages can be expanded or dismissed in the compact feedback area.
 
-For pages stuck during startup, choose **Reload fresh site files** in the app menu or press **Ctrl+Shift+R**. This resets the current origin's service worker and resource cache, then reloads while bypassing the HTTP cache. Cookies, local storage, IndexedDB, and permission decisions are kept. When a same-origin script fails on a service-worker-controlled page, Felaris reports it and gives the next normal **Reload** the same recovery behavior. Resource failures do not reload a page automatically.
+For pages stuck during startup, choose **Reload fresh site files** in the app menu or press **Ctrl+Shift+R**. This resets the current origin's service worker and resource cache, then reloads while bypassing the HTTP cache. Cookies, local storage, IndexedDB, and permission decisions are kept. When a same-origin script fails on a service-worker-controlled page, Veluno reports it and gives the next normal **Reload** the same recovery behavior. Resource failures do not reload a page automatically.
 
 **Current engine limits:** Awake tabs preserve page state and navigation history. Sleeping tabs and restored sessions reload saved URLs; unsaved forms and per-tab history do not survive unloading or restart. Automatic sleeping uses conservative checks, but custom app state cannot always be detected; pin tabs whose state must be preserved.
 
@@ -127,7 +127,7 @@ cargo build --release
 
 The compiled release executable will be located at:
 ```
-target/release/felaris.exe
+target/release/veluno.exe
 ```
 
 Development builds use line-table debug information to reduce compilation and linking
@@ -142,7 +142,7 @@ Remove-Item Env:CARGO_PROFILE_DEV_DEBUG
 
 Cargo already enables incremental compilation for `cargo run`. `cargo-blaze` 0.0.1
 currently supports macOS and Linux and requires Rust 1.99; it cannot accelerate
-Felaris's Windows/MSVC build. See [the benchmark evidence](docs/pr-evidence/search-and-build-performance/README.md)
+Veluno's Windows/MSVC build. See [the benchmark evidence](docs/pr-evidence/search-and-build-performance/README.md)
 for measured rebuild and suggestion timings.
 
 ---
@@ -176,7 +176,7 @@ For repeatable visual captures, run `python -B tests/native_capture.py` after bu
 
 ## Upstream Synchronization & Conflict Detection
 
-Felaris includes a built-in upstream inspector that simulates upstream branch merges in-memory without dirtying your working tree:
+Veluno includes a built-in upstream inspector that simulates upstream branch merges in-memory without dirtying your working tree:
 
 ```bash
 # Using Python
@@ -194,7 +194,7 @@ A dedicated agent skill is available at `.agents/skills/upstream-sync/SKILL.md` 
 
 ### Windows App & Setup
 
-Felaris is a Rust desktop app using Tao and Wry (Windows WebView2). Release
+Veluno is a Rust desktop app using Tao and Wry (Windows WebView2). Release
 builds include an Explorer icon, Windows product/version details, and a taskbar
 identity, and open without a console window.
 
@@ -205,14 +205,14 @@ Build the app and its installer locally (needs [Inno Setup 6](https://jrsoftware
 .\scripts\package.ps1
 ```
 
-Run `target\release\felaris-setup.exe` to install for the current user: a
+Run `target\release\veluno-setup.exe` to install for the current user: a
 standard setup wizard with Start menu and optional desktop shortcuts, an entry in
 Windows Installed apps with a real uninstaller, and no administrator prompt. The
-source is `installer\felaris.iss`. For unattended installs use
-`felaris-setup.exe /VERYSILENT /NOLAUNCH`; add `/DIR="path"` to choose a folder.
-The portable app, `target\release\felaris.exe`, runs from anywhere without installing.
+source is `installer\veluno.iss`. For unattended installs use
+`veluno-setup.exe /VERYSILENT /NOLAUNCH`; add `/DIR="path"` to choose a folder.
+The portable app, `target\release\veluno.exe`, runs from anywhere without installing.
 After installation, choose **Set default browser?** from the sidebar menu, then
-select Felaris in Windows Settings. Felaris registers HTTP, HTTPS, and HTML
+select Veluno in Windows Settings. Veluno registers HTTP, HTTPS, and HTML
 file support; Windows keeps the final choice with you.
 Uninstall from Windows Settings to remove the app and shortcuts. Browser data
 is preserved. Running the new setup over an install from before the wizard
@@ -240,11 +240,11 @@ publish a GitHub release or send a Discord message.
 
 ### Extensions and ad blocking
 
-Felaris stores unpacked extensions in `%LOCALAPPDATA%\Felaris\extensions` and loads every folder there at startup. On first launch it downloads the latest uBlock Origin Lite (the Manifest V3 build; WebView2 no longer runs the Manifest V2 uBlock Origin) from `uBlockOrigin/uBOL-home`, checks the release's SHA-256, and unpacks it to `extensions\ublock-origin-lite`. If the first launch is offline, it retries on the next start or from **Settings > Extensions**. A new installation activates after restart so open pages keep their forms and history. Preferences live in `settings.json` beside `session.json`.
+Veluno stores unpacked extensions in `%LOCALAPPDATA%\Veluno\extensions` and loads every folder there at startup. On first launch it downloads the latest uBlock Origin Lite (the Manifest V3 build; WebView2 no longer runs the Manifest V2 uBlock Origin) from `uBlockOrigin/uBOL-home`, checks the release's SHA-256, and unpacks it to `extensions\ublock-origin-lite`. If the first launch is offline, it retries on the next start or from **Settings > Extensions**. A new installation activates after restart so open pages keep their forms and history. Preferences live in `settings.json` beside `session.json`.
 
 ### Browser data and recovery
 
-Browser data is stored in `%LOCALAPPDATA%\Felaris`. `session.json` and
+Browser data is stored in `%LOCALAPPDATA%\Veluno`. On first launch, Veluno moves an existing `%LOCALAPPDATA%\Felaris` profile there without overwriting a current Veluno profile. If Windows prevents moving the old folder, Veluno continues using it. Saved `felaris://` pages are migrated to `veluno://` pages. `session.json` and
 `session.json.bak` retain tab URLs, profiles, pins, and recently closed tabs.
 `WebView2` contains persistent site storage. Session changes are batched every
 500 ms and written by one background writer. Clean exits and updates flush the
@@ -275,28 +275,30 @@ use isolated profiles and hidden windows.
 
 ### One-Line Install (PowerShell)
 
-Download the latest `felaris-setup.exe`, check it against the release `SHA256SUMS`,
-and install it silently (add `-NoLaunch` to skip opening Felaris):
+Download the latest `veluno-setup.exe`, check it against the release `SHA256SUMS`,
+and install it silently (add `-NoLaunch` to skip opening Veluno):
 
 ```powershell
-irm https://raw.githubusercontent.com/khentmoba/Felaris/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/khentmoba/Veluno/main/scripts/install.ps1 | iex
 ```
 
 ### Automatic Updates
 
-- Felaris checks for a new version shortly after launch and every 6 hours while it runs.
-  `felaris.exe --check-update` checks from the command line.
+- Veluno checks for a new version shortly after launch and every 6 hours while it runs.
+  `veluno.exe --check-update` checks from the command line.
 - When one is available, an "Update Available" banner appears in the sidebar.
 - **Update now** saves your session, downloads the release, verifies it against the
-  release `SHA256SUMS`, and restarts Felaris on the new version.
-  - Installed copies run `felaris-setup.exe` silently, so Windows' version record stays correct.
-  - Portable copies swap `felaris.exe` in place and restore the previous one if that fails.
+  release `SHA256SUMS`, and restarts Veluno on the new version.
+  - Installed copies run `veluno-setup.exe` silently, so Windows' version record stays correct.
+  - Portable copies swap `veluno.exe` in place and restore the previous one if that fails.
 
 ---
 
 ## Releases & Distribution Pipeline
 
-Felaris automates releases to both GitHub Releases and Discord (`#felaris-releases`):
+Veluno automates releases to both GitHub Releases and Discord (`#veluno-releases`). New releases publish `veluno.exe` and `veluno-setup.exe`, plus identical `felaris.exe` and `felaris-setup.exe` compatibility copies and checksums for older updaters. The manifest retains the legacy repository redirect and executable filename so existing installs can upgrade. Historical release binaries retain their original names.
+
+Release commands:
 
 ```bash
 # Test Discord webhook connectivity
@@ -323,7 +325,7 @@ stops the release. Discord runs only after GitHub succeeds, unless `--skip-githu
 was explicitly requested. `--dry-run` only validates and prints the plan.
 The PowerShell entry point forwards to this same implementation.
 
-Webhook configuration is resolved from `DISCORD_WEBHOOK_URL`, `scripts/discord_webhook.txt` (gitignored), or `%LOCALAPPDATA%\Felaris\discord_webhook.txt` (shared across worktrees). See `.agents/skills/discord-release/SKILL.md`.
+Webhook configuration is resolved from `DISCORD_WEBHOOK_URL`, `scripts/discord_webhook.txt` (gitignored), or `%LOCALAPPDATA%\Veluno\discord_webhook.txt` (shared across worktrees). See `.agents/skills/discord-release/SKILL.md`.
 
 ---
 

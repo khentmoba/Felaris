@@ -1,4 +1,4 @@
-"""Measure private working set and commit of an owned Felaris process tree while opening cross-site tabs.
+"""Measure private working set and commit of an owned Veluno process tree while opening cross-site tabs.
 
 Manual benchmark (needs psutil); not part of CI: python -B tests/native_memory.py --exe <exe> --tabs 30 --idle 120
 """
@@ -63,7 +63,7 @@ def footprint(pid):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exe', default='target/release/felaris.exe')
+    parser.add_argument('--exe', default='target/release/veluno.exe')
     parser.add_argument('--tabs', type=int, default=30)
     parser.add_argument('--idle', type=int, default=60, help='seconds to idle before the final sample')
     parser.add_argument('--label', default='run')
@@ -71,8 +71,8 @@ def main():
     parser.add_argument('--content-args', default='', help='extra browser arguments for the tab environment')
     args = parser.parse_args()
     app = NativeApp(args.exe, 'native-memory')
-    app.environment['FELARIS_SMOKE_BROWSER_ARGUMENTS'] += ' ' + args.chrome_args
-    app.environment['FELARIS_SMOKE_CONTENT_BROWSER_ARGUMENTS'] += ' ' + args.content_args
+    app.environment['VELUNO_SMOKE_BROWSER_ARGUMENTS'] += ' ' + args.chrome_args
+    app.environment['VELUNO_SMOKE_CONTENT_BROWSER_ARGUMENTS'] += ' ' + args.content_args
     server = ThreadingHTTPServer(('127.0.0.1', 0), Page)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     port = server.server_port

@@ -20,23 +20,25 @@ try {
         $signature = Set-AuthenticodeSignature -FilePath $path -Certificate $certificate -HashAlgorithm SHA256 -TimestampServer $TimestampServer
         if ($signature.Status -ne 'Valid') { throw "Code signing failed: $($signature.StatusMessage)" }
     }
-    Sign 'target\release\felaris.exe'
-    & $iscc /Qp "/DAppVersion=$version" 'installer\felaris.iss'
+    Sign 'target\release\veluno.exe'
+    & $iscc /Qp "/DAppVersion=$version" 'installer\veluno.iss'
     if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
-    Sign 'target\release\felaris-setup.exe'
+    Sign 'target\release\veluno-setup.exe'
     & (Join-Path $PSScriptRoot 'verify-package.ps1')
-    python (Join-Path $PSScriptRoot '..\tests\native_smoke.py') --exe 'target\release\felaris.exe'
+    python (Join-Path $PSScriptRoot '..\tests\native_smoke.py') --exe 'target\release\veluno.exe'
     if ($LASTEXITCODE -ne 0) { throw 'Native app verification failed' }
-    python (Join-Path $PSScriptRoot '..\tests\native_regressions.py') --exe 'target\release\felaris.exe'
+    python (Join-Path $PSScriptRoot '..\tests\native_regressions.py') --exe 'target\release\veluno.exe'
     if ($LASTEXITCODE -ne 0) { throw 'Native regression verification failed' }
     & (Join-Path $PSScriptRoot '..\tests\installer.test.ps1')
-    $checksums = foreach ($name in @('felaris.exe', 'felaris-setup.exe')) {
+    Copy-Item 'target\release\veluno.exe' 'target\release\felaris.exe' -Force
+    Copy-Item 'target\release\veluno-setup.exe' 'target\release\felaris-setup.exe' -Force
+    $checksums = foreach ($name in @('veluno.exe', 'veluno-setup.exe', 'felaris.exe', 'felaris-setup.exe')) {
         $hash = (Get-FileHash -LiteralPath (Join-Path 'target\release' $name) -Algorithm SHA256).Hash.ToLowerInvariant()
         "$hash  $name"
     }
     Set-Content -LiteralPath 'target\release\SHA256SUMS' -Value $checksums -Encoding ASCII
-    Write-Host 'App: target\release\felaris.exe'
-    Write-Host 'Setup: target\release\felaris-setup.exe'
+    Write-Host 'App: target\release\veluno.exe'
+    Write-Host 'Setup: target\release\veluno-setup.exe'
 } finally {
     Pop-Location
 }

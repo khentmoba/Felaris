@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Felaris Discord Release & Update Notification Tool
+Veluno Discord Release & Update Notification Tool
 Uploads the Windows installer and announcements to Discord via Webhook.
 """
 
@@ -9,13 +9,14 @@ import sys
 import json
 import argparse
 import mimetypes
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_AVATAR = "https://cdn.discordapp.com/avatars/1561759821349523456/311acf046e18671fb9c62e839bec09d1.png"
+
 
 
 def get_webhook_url(explicit_url=None):
@@ -33,7 +34,8 @@ def get_webhook_url(explicit_url=None):
     for env_key in ("LOCALAPPDATA", "APPDATA"):
         base = os.environ.get(env_key)
         if base:
-            candidates.append(Path(base) / "Felaris" / "discord_webhook.txt")
+            candidates.extend(Path(base) / name / "discord_webhook.txt"
+                              for name in ("Veluno", "Felaris"))
 
     for c in candidates:
         if c.is_file():
@@ -53,6 +55,13 @@ def get_cargo_version():
     return "0.1.0"
 
 
+def installer_asset(version):
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?", version)
+    if match and tuple(map(int, match.groups())) <= (0, 3, 2):
+        return "felaris-setup.exe"
+    return "veluno-setup.exe"
+
+
 def send_webhook(webhook_url, payload, file_path=None):
     parts = urlsplit(webhook_url)
     query = dict(parse_qsl(parts.query))
@@ -62,12 +71,12 @@ def send_webhook(webhook_url, payload, file_path=None):
         req = Request(
             webhook_url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "User-Agent": "FelarisReleaseBot/1.0"},
+            headers={"Content-Type": "application/json", "User-Agent": "VelunoReleaseBot/1.0"},
         )
         with urlopen(req) as resp:
             return json.load(resp)
     else:
-        boundary = "----WebKitFormBoundaryFelarisRelease7MA4YWxkTrZu0gW"
+        boundary = "----WebKitFormBoundaryVelunoRelease7MA4YWxkTrZu0gW"
         file_bytes = file_path.read_bytes()
         filename = file_path.name
         mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
@@ -91,7 +100,7 @@ def send_webhook(webhook_url, payload, file_path=None):
             data=data,
             headers={
                 "Content-Type": f"multipart/form-data; boundary={boundary}",
-                "User-Agent": "FelarisReleaseBot/1.0",
+                "User-Agent": "VelunoReleaseBot/1.0",
                 "Content-Length": str(len(data)),
             },
         )
@@ -100,11 +109,11 @@ def send_webhook(webhook_url, payload, file_path=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Send Felaris release/update notifications to Discord.")
+    parser = argparse.ArgumentParser(description="Send Veluno release/update notifications to Discord.")
     parser.add_argument("--test", action="store_true", help="Send a webhook connection test message")
     parser.add_argument("--version", "-v", help="Release version (defaults to Cargo.toml)")
     parser.add_argument("--summary", "-s", help="Release notes or announcement summary")
-    parser.add_argument("--installer", "--exe", dest="installer", help="Path to felaris-setup.exe installer (--exe is a compatibility alias)")
+    parser.add_argument("--installer", "--exe", dest="installer", help="Path to veluno-setup.exe installer (--exe is a compatibility alias)")
     parser.add_argument("--no-upload", action="store_true", help="Link to the installer instead of attaching it")
     parser.add_argument("--webhook", help="Explicit webhook URL")
     parser.add_argument("--dry-run", action="store_true", help="Print payload without sending")
@@ -113,25 +122,24 @@ def main():
 
     webhook_url = get_webhook_url(args.webhook)
     if not webhook_url and not args.dry_run:
-        print("[Felaris] Error: No Discord webhook URL found.")
-        print("  Place your webhook URL in %LOCALAPPDATA%\\Felaris\\discord_webhook.txt, scripts/discord_webhook.txt, or set DISCORD_WEBHOOK_URL.")
+        print("[Veluno] Error: No Discord webhook URL found.")
+        print("  Place your webhook URL in %LOCALAPPDATA%\\Veluno\\discord_webhook.txt, scripts/discord_webhook.txt, or set DISCORD_WEBHOOK_URL.")
         sys.exit(1)
 
     if args.test:
         payload = {
-            "username": "Felaris Release Bot",
-            "avatar_url": DEFAULT_AVATAR,
+            "username": "Veluno Release Bot",
             "embeds": [
                 {
-                    "title": "Felaris Release Webhook Connected",
-                    "description": "Discord webhook integration for **Felaris** browser is active and verified.",
+                    "title": "Veluno Release Webhook Connected",
+                    "description": "Discord webhook integration for **Veluno** browser is active and verified.",
                     "color": 959977,
                     "fields": [
                         {"name": "Status", "value": "Ready to publish updates & binary releases", "inline": True},
                         {"name": "Engine", "value": "Rust 2024 / Wry / WebView2", "inline": True},
-                        {"name": "Channel", "value": "#felaris-releases", "inline": True},
+                        {"name": "Channel", "value": "#veluno-releases", "inline": True},
                     ],
-                    "footer": {"text": "Felaris Release Pipeline"},
+                    "footer": {"text": "Veluno Release Pipeline"},
                 }
             ],
         }
@@ -139,9 +147,9 @@ def main():
             print("[DryRun] Test payload:", json.dumps(payload, indent=2))
             return
 
-        print("[Felaris] Sending test ping to Discord webhook...")
+        print("[Veluno] Sending test ping to Discord webhook...")
         send_webhook(webhook_url, payload)
-        print("[Felaris] Test notification sent successfully!")
+        print("[Veluno] Test notification sent successfully!")
         return
 
     ver = args.version or get_cargo_version()
@@ -152,21 +160,21 @@ def main():
 
     exe_file = None
     if not args.no_upload:
-        candidate = Path(args.installer) if args.installer else PROJECT_ROOT / 'target/release/felaris-setup.exe'
+        candidate = Path(args.installer) if args.installer else PROJECT_ROOT / 'target/release/veluno-setup.exe'
         # Larger binaries use the public release asset to fit the default upload budget.
         if candidate.is_file() and candidate.stat().st_size <= 10 * 1024 * 1024:
             exe_file = candidate
-    download_url = f'https://github.com/khentmoba/Felaris/releases/download/v{ver}/felaris-setup.exe'
+    asset_name = installer_asset(ver)
+    download_url = f'https://github.com/khentmoba/Veluno/releases/download/v{ver}/{asset_name}'
     delivery = ({"name": "Attached File", "value": f'{exe_file.name} ({exe_file.stat().st_size / (1024 * 1024):.2f} MB)', "inline": True}
-                if exe_file else {"name": "Download", "value": f'[felaris-setup.exe]({download_url})', "inline": True})
+                if exe_file else {"name": "Download", "value": f'[{asset_name}]({download_url})', "inline": True})
     payload = {
-        "username": "Felaris Release Bot",
-        "avatar_url": DEFAULT_AVATAR,
-        "content": f"New Release: **Felaris v{ver}** is now available! " + ('Download the attached installer.' if exe_file else 'Download felaris-setup.exe using the link below.'),
+        "username": "Veluno Release Bot",
+        "content": f"New Release: **Veluno v{ver}** is now available! " + ('Download the attached installer.' if exe_file else f'Download {asset_name} using the link below.'),
         "allowed_mentions": {"parse": []},
         "embeds": [{
-            "title": f"Release: Felaris v{ver}",
-            "description": "Run felaris-setup.exe on Windows to install Felaris.",
+            "title": f"Release: Veluno v{ver}",
+            "description": f"Run {exe_file.name if exe_file else asset_name} on Windows to install Veluno.",
             "color": 4363994,
             "fields": [
                 {"name": "Version", "value": f"v{ver}", "inline": True},
@@ -174,7 +182,7 @@ def main():
                 delivery,
                 {"name": "What's New", "value": bullets, "inline": False},
             ],
-            "footer": {"text": "Felaris Automated Release System"},
+            "footer": {"text": "Veluno Automated Release System"},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }],
     }
@@ -185,12 +193,12 @@ def main():
             print(f"[DryRun] Attaching installer: {exe_file}")
         return
 
-    print(f"[Felaris] Publishing v{ver} release to Discord...")
+    print(f"[Veluno] Publishing v{ver} release to Discord...")
     if exe_file:
-        print(f"[Felaris] Attaching installer: {exe_file.name}")
+        print(f"[Veluno] Attaching installer: {exe_file.name}")
     message = send_webhook(webhook_url, payload, file_path=exe_file)
-    print(f"[Felaris] Discord message ID: {message['id']}")
-    print(f"[Felaris] Successfully published v{ver} to #felaris-releases!")
+    print(f"[Veluno] Discord message ID: {message['id']}")
+    print(f"[Veluno] Successfully published v{ver} to #veluno-releases!")
 
 
 if __name__ == "__main__":

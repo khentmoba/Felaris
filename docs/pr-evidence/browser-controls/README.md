@@ -4,7 +4,7 @@ These captures compare the sidebar HTML at `d0a3e59c533d48105ef6b99380b2c149b487
 
 The sources ran in isolated srcdoc frames inside an owned WebView2 content view. Screenshot IPC was stubbed. These images show rendered UI, not native Windows composition or animation smoothness. The native regression suite tests actual sidebar geometry and stacking separately.
 
-- `address-before.png` and `address-after.png`: tab and history suggestions replace generic icons with the site's favicon. The synthetic site uses the local Felaris SVG as its favicon.
+- `address-before.png` and `address-after.png`: tab and history suggestions replace generic icons with the site's favicon. The synthetic site uses the local Veluno SVG as its favicon.
 - `workspaces-before.png` and `workspaces-after.png`: clearer naming, shared-login copy, and workspace rename/delete controls.
 - `feedback-before.png` and `feedback-after.png`: feedback uses less vertical space; the after image also shows the muted-tab control.
 - `site-controls-after.png`: full origin, HTTP connection explanation, and the entry point to confirmed data clearing. The baseline had a static connection indicator and no equivalent panel.

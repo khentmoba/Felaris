@@ -426,7 +426,7 @@ fn open_popup(
         let y = main_pos.y + ((main_size.height - size.height) * 0.5).max(32.);
         host.window.set_outer_position(LogicalPosition::new(x, y));
     }
-    host.window.set_title("Sign in — Felaris");
+    host.window.set_title("Sign in — Veluno");
     if !host.headless {
         host.window.set_minimized(false);
         host.window.set_visible(true);
@@ -466,7 +466,7 @@ fn open_popup(
             NewWindowResponse::Deny
         });
     if host.headless
-        && let Ok(arguments) = std::env::var("FELARIS_SMOKE_CONTENT_BROWSER_ARGUMENTS")
+        && let Ok(arguments) = std::env::var("VELUNO_SMOKE_CONTENT_BROWSER_ARGUMENTS")
     {
         builder = builder.with_additional_browser_args(arguments);
     }
@@ -490,13 +490,13 @@ fn open_popup(
 }
 
 fn load(view: &WebView, state: &BrowserState, url: &str) -> wry::Result<()> {
-    if url == "felaris://newtab" {
+    if url == "veluno://newtab" {
         view.load_html(&start_page::get_start_page_html(state))
-    } else if url == "felaris://blank" {
+    } else if url == "veluno://blank" {
         view.load_html(&format!("<!DOCTYPE html><html lang=\"en\"><meta charset=\"UTF-8\"><title>New Tab</title><style>:root{{color-scheme:dark}}body{{margin:0;background:#0c0c0e}}</style><script>{}</script></html>", ui::script()))
-    } else if url == "felaris://settings" {
+    } else if url == "veluno://settings" {
         view.load_html(&ui::get_settings_html())
-    } else if url == "felaris://history" {
+    } else if url == "veluno://history" {
         view.load_html(&ui::get_history_html(&state.bookmarks, &state.shortcuts))
     } else {
         view.load_url(url)
@@ -634,9 +634,9 @@ fn content(
                 }
             }
         });
-    if std::env::var_os("FELARIS_SMOKE_TEST").is_some() {
+    if std::env::var_os("VELUNO_SMOKE_TEST").is_some() {
         #[cfg(windows)]
-        if let Ok(arguments) = std::env::var("FELARIS_SMOKE_CONTENT_BROWSER_ARGUMENTS") {
+        if let Ok(arguments) = std::env::var("VELUNO_SMOKE_CONTENT_BROWSER_ARGUMENTS") {
             use wry::WebViewBuilderExtWindows;
             builder = builder.with_additional_browser_args(arguments);
         }
@@ -727,7 +727,7 @@ fn tab_event(
                     && (url == "about:blank" || url.starts_with("data:text/html;"))
                     && !profile::is_internal(&tab.url)
                 {
-                    tab.url = "felaris://newtab".into();
+                    tab.url = "veluno://newtab".into();
                 }
                 tab.is_loading = true;
             } else {
@@ -812,7 +812,7 @@ fn may_exit(state: &BrowserState, session: &SessionWriter) -> bool {
     if state.active_downloads > 0
         && !desktop::message(
             "Downloads in progress",
-            "Closing Felaris will cancel active downloads. Close anyway?",
+            "Closing Veluno will cancel active downloads. Close anyway?",
             true,
         )
     {
@@ -839,7 +839,7 @@ fn start_ad_blocker_install(proxy: &EventLoopProxy<UserEvent>) {
 
 pub fn run(args: &[String]) -> wry::Result<()> {
     let _ = extensions::active_at_startup();
-    let headless = std::env::var_os("FELARIS_SMOKE_TEST").is_some();
+    let headless = std::env::var_os("VELUNO_SMOKE_TEST").is_some();
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
     let urls: Vec<_> = args
@@ -853,7 +853,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             Ok(Some(instance)) => instance,
             Ok(None) => return Ok(()),
             Err(error) => {
-                desktop::message("Felaris", &error, false);
+                desktop::message("Veluno", &error, false);
                 return Ok(());
             }
         };
@@ -861,14 +861,14 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     if let Err(error) = instance.listen(move |urls| {
         let _ = external.send_event(UserEvent::External(urls));
     }) {
-        desktop::message("Felaris", &error, false);
+        desktop::message("Veluno", &error, false);
         return Ok(());
     }
     updater::cleanup_old_version();
     let icon = Icon::from_rgba(include_bytes!("../assets/icon_64.rgba").to_vec(), 64, 64).ok();
     let window = Rc::new(
         WindowBuilder::new()
-            .with_title("Felaris")
+            .with_title("Veluno")
             .with_visible(!headless)
             .with_focused(!headless)
             .with_theme(Some(tao::window::Theme::Dark))
@@ -876,7 +876,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             .with_undecorated_shadow(true)
             .with_background_color((16, 16, 17, 255))
             .with_window_icon(icon.clone())
-            .with_inner_size(if std::env::var_os("FELARIS_SMOKE_TEST").is_some() {
+            .with_inner_size(if std::env::var_os("VELUNO_SMOKE_TEST").is_some() {
                 LogicalSize::new(640., 480.)
             } else {
                 LogicalSize::new(1380., 860.)
@@ -886,7 +886,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             .expect("Cannot create window"),
     );
     let mut popup_window_builder = WindowBuilder::new()
-        .with_title("Sign in — Felaris")
+        .with_title("Sign in — Veluno")
         .with_visible(false)
         .with_focused(false)
         .with_theme(Some(tao::window::Theme::Dark))
@@ -956,7 +956,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             }
         });
     #[cfg(windows)]
-    if headless && let Ok(arguments) = std::env::var("FELARIS_SMOKE_BROWSER_ARGUMENTS") {
+    if headless && let Ok(arguments) = std::env::var("VELUNO_SMOKE_BROWSER_ARGUMENTS") {
         use wry::WebViewBuilderExtWindows;
         sidebar_builder = sidebar_builder.with_additional_browser_args(arguments);
     }
@@ -987,7 +987,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             }
         });
     #[cfg(windows)]
-    if headless && let Ok(arguments) = std::env::var("FELARIS_SMOKE_BROWSER_ARGUMENTS") {
+    if headless && let Ok(arguments) = std::env::var("VELUNO_SMOKE_BROWSER_ARGUMENTS") {
         use wry::WebViewBuilderExtWindows;
         palette_builder = palette_builder.with_additional_browser_args(arguments);
     }
@@ -1020,7 +1020,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             }
         });
     #[cfg(windows)]
-    if headless && let Ok(arguments) = std::env::var("FELARIS_SMOKE_BROWSER_ARGUMENTS") {
+    if headless && let Ok(arguments) = std::env::var("VELUNO_SMOKE_BROWSER_ARGUMENTS") {
         use wry::WebViewBuilderExtWindows;
         topbar_builder = topbar_builder.with_additional_browser_args(arguments);
     }
@@ -1045,7 +1045,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             }
         });
     #[cfg(windows)]
-    if headless && let Ok(arguments) = std::env::var("FELARIS_SMOKE_BROWSER_ARGUMENTS") {
+    if headless && let Ok(arguments) = std::env::var("VELUNO_SMOKE_BROWSER_ARGUMENTS") {
         use wry::WebViewBuilderExtWindows;
         popup_bar_builder = popup_bar_builder.with_additional_browser_args(arguments);
     }
@@ -1148,7 +1148,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         match event {
             Event::WindowEvent { window_id, event: WindowEvent::Focused(true), .. } if window_id == window.id() => {
                 state.is_default_browser = desktop::is_default_browser();
-                for tab in state.tabs.iter().filter(|tab| tab.url == "felaris://settings") {
+                for tab in state.tabs.iter().filter(|tab| tab.url == "veluno://settings") {
                     if let Some(view) = views.get(&tab.id) {
                         let _ = view.evaluate_script(&format!("window.setDefaultBrowser?.({})", state.is_default_browser));
                     }
@@ -1283,7 +1283,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             let checked = proxy.clone();
                             if let Some(view) = views.get(&id) {
                                 if !desktop::quiet(view) { sleep_pending.remove(&(id, generation)); continue; }
-                                if view.evaluate_script_with_callback("window.__felarisCanSleep?.() === true", move |result| {
+                                if view.evaluate_script_with_callback("window.__velunoCanSleep?.() === true", move |result| {
                                     let _ = checked.send_event(UserEvent::SleepChecked(id, generation, last_active, url.clone(), result == "true"));
                                 }).is_err() { sleep_pending.remove(&(id, generation)); }
                             }
@@ -1330,7 +1330,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                     },
                     UserEvent::PopupTitle(title) => {
                         if !title.is_empty() {
-                            popup_host.window.set_title(&format!("{title} — Felaris"));
+                            popup_host.window.set_title(&format!("{title} — Veluno"));
                         }
                     },
                     UserEvent::PopupState(url, loading) => {
@@ -1503,16 +1503,16 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                 if let Some(view) = views.get(&id) && let Err(error) = desktop::downloads(view) { state.update_status = Some(error); }
                             },
                             Command::OpenSettings { section } => {
-                                let live = state.tabs.iter().find(|tab| tab.url == "felaris://settings").and_then(|tab| views.get(&tab.id));
+                                let live = state.tabs.iter().find(|tab| tab.url == "veluno://settings").and_then(|tab| views.get(&tab.id));
                                 if let Some(section) = section.filter(|section| ui::SETTINGS_SECTIONS.contains(&section.as_str())) {
                                     match live {
                                         Some(view) => { let _ = view.evaluate_script(&format!("window.showSection?.({section:?})")); },
                                         None => ui::open_settings_at(section),
                                     }
                                 }
-                                state.open_internal("felaris://settings"); palette_open = false;
+                                state.open_internal("veluno://settings"); palette_open = false;
                             },
-                            Command::OpenHistory => { state.open_internal("felaris://history"); palette_open = false; },
+                            Command::OpenHistory => { state.open_internal("veluno://history"); palette_open = false; },
                             Command::DeleteHistory { url } => history::remove(&url),
                             Command::ClearHistory => history::clear(),
                             Command::SetSetting { key, value } => match settings::set(&key, &value) {
@@ -1528,7 +1528,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                         }
                                     } else if key == "ad_blocker" {
                                         if current.ad_blocker { start_ad_blocker_install(&proxy); }
-                                        state.update_status = Some("Ad blocker changes apply after you restart Felaris.".into());
+                                        state.update_status = Some("Ad blocker changes apply after you restart Veluno.".into());
                                     }
                                 },
                                 Err(error) => { state.update_status = Some(error); },
@@ -1556,7 +1556,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                         let total = found.len();
                                         match state.import_bookmarks(found) {
                                             0 if total == 0 => format!("{name} has no web bookmarks to import."),
-                                            0 => format!("All {total} bookmarks from {name} are already in Felaris."),
+                                            0 => format!("All {total} bookmarks from {name} are already in Veluno."),
                                             1 => format!("Imported 1 bookmark from {name}."),
                                             added => format!("Imported {added} bookmarks from {name}."),
                                         }
@@ -1598,9 +1598,9 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                 let proxy = proxy.clone(); std::thread::spawn(move || { let _ = proxy.send_event(UserEvent::UpdateChecked(updater::check_for_updates())); });
                             },
                             Command::ApplyUpdate => if !state.update_busy && state.active_downloads == 0 && let Some(update) = &state.update_available {
-                                let url = update.download_url.clone().unwrap_or_else(|| format!("https://github.com/{}/releases/download/v{}/felaris.exe", updater::GITHUB_REPO, update.version));
+                                let url = update.download_url.clone().unwrap_or_else(|| format!("https://github.com/{}/releases/download/v{}/veluno.exe", updater::GITHUB_REPO, update.version));
                                 if session.flush(&state).is_ok() {
-                                    state.update_busy = true; state.update_status = Some("Downloading update. Felaris will restart when it is ready.".into());
+                                    state.update_busy = true; state.update_status = Some("Downloading update. Veluno will restart when it is ready.".into());
                                     let proxy = proxy.clone(); std::thread::spawn(move || { if let Err(error) = updater::download_and_apply_update(&url) { let _ = proxy.send_event(UserEvent::UpdateFailed(format!("Update failed: {error}. You can try again."))); } });
                                 } else { state.update_status = Some("Save your session successfully before updating. Check available disk space.".into()); }
                             },
@@ -1637,12 +1637,12 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                     },
                     UserEvent::UpdateChecked(result) => { check_busy = false; match result {
                         Ok(Some(update)) => { state.update_available = Some(update); state.update_status = None; },
-                        Ok(None) => { state.update_status = Some(format!("Felaris is up to date (v{}).", updater::CURRENT_VERSION)); },
+                        Ok(None) => { state.update_status = Some(format!("Veluno is up to date (v{}).", updater::CURRENT_VERSION)); },
                         Err(error) => { state.update_status = Some(error); }
                     } },
                     UserEvent::Status(status) => { state.update_status = Some(status); },
                     UserEvent::AdBlockerInstalled(result) => match result {
-                        Ok(()) => { state.update_status = Some("uBlock Origin Lite is installed. Restart Felaris to start blocking ads.".into()); },
+                        Ok(()) => { state.update_status = Some("uBlock Origin Lite is installed. Restart Veluno to start blocking ads.".into()); },
                         Err(error) => { state.update_status = Some(format!("Ad blocker install failed: {error} Try again from Settings.")); },
                     },
                     UserEvent::UpdateFailed(status) => { state.update_busy = false; state.update_status = Some(status); },
@@ -1652,13 +1652,13 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             Ok(()) => format!("Browsing data from {label} was cleared."),
                             Err(error) => format!("Could not clear browsing data: {error}"),
                         });
-                        for tab in state.tabs.iter().filter(|tab| tab.url == "felaris://settings") {
+                        for tab in state.tabs.iter().filter(|tab| tab.url == "veluno://settings") {
                             if let Some(view) = views.get(&tab.id) { let _ = view.evaluate_script(&format!("window.dataCleared?.({ok})")); }
                         }
                     },
                     UserEvent::ScreenshotSaved(result) => {
                         state.update_status = Some(match result {
-                            Ok(path) => format!("Screenshot saved to Pictures\\Felaris as {}.", path.file_name().map(|name| name.to_string_lossy()).unwrap_or_default()),
+                            Ok(path) => format!("Screenshot saved to Pictures\\Veluno as {}.", path.file_name().map(|name| name.to_string_lossy()).unwrap_or_default()),
                             Err(error) => format!("Could not save a screenshot: {error}"),
                         });
                     },
@@ -1764,7 +1764,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         state.is_loading = state.active_tab().is_some_and(|tab| tab.is_loading);
         if state.is_loading != last_loading { last_loading = state.is_loading; let _ = topbar.evaluate_script(&format!("window.setLoading?.({last_loading})")); }
         if let Some(tab) = state.active_tab() {
-            window.set_title(&format!("{} — Felaris", tab.title));
+            window.set_title(&format!("{} — Veluno", tab.title));
         }
         if let Ok(json) = serde_json::to_string(&state) {
             if json != last_sidebar_state && sidebar.evaluate_script(&format!("window.updateState?.({json})")).is_ok() { last_sidebar_state = json.clone(); }

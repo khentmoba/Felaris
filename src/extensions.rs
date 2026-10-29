@@ -83,7 +83,7 @@ fn install_ublock() -> Result<(), String> {
         "--max-time",
         "15",
         "-H",
-        "User-Agent: Felaris-Browser",
+        "User-Agent: Veluno-Browser",
         RELEASE_API,
     ])
     .ok_or("Could not reach GitHub to download the ad blocker.")?;

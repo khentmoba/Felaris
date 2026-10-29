@@ -1,8 +1,8 @@
 // Reader view: toggled on demand, never injected into every page. It copies the main article
 // into an isolated overlay above the page, so closing it returns the page exactly as it was.
 (() => {
-  const open = document.getElementById('__felaris-reader');
-  if (open) { open.__felarisClose?.(); return 'closed'; }
+  const open = document.getElementById('__veluno-reader');
+  if (open) { open.__velunoClose?.(); return 'closed'; }
   if (!document.body || !/^https?:$/.test(location.protocol)) return 'unavailable';
 
   const SKIP = 'nav,aside,footer,form,[role=navigation],[role=complementary],[role=banner],[aria-hidden=true],[hidden]';
@@ -90,7 +90,7 @@
   const count = words(article).split(' ').length;
 
   const host = document.createElement('div');
-  host.id = '__felaris-reader';
+  host.id = '__veluno-reader';
   host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;display:block';
   const shadow = host.attachShadow({ mode: 'closed' });
   shadow.innerHTML = `<style>
@@ -124,11 +124,11 @@ article th,article td{border:1px solid #3a3a40;padding:6px 10px}
   shadow.querySelector('.meta').textContent = [author, `${Math.max(1, Math.round(count / 230))} min read`].filter(Boolean).join(' · ');
   shadow.querySelector('main').append(article);
 
-  let size = Number(sessionStorage.getItem('__felarisReaderSize')) || 19;
+  let size = Number(sessionStorage.getItem('__velunoReaderSize')) || 19;
   const resize = delta => {
     size = Math.min(28, Math.max(14, size + delta));
     page.style.setProperty('--size', size + 'px');
-    try { sessionStorage.setItem('__felarisReaderSize', String(size)); } catch {}
+    try { sessionStorage.setItem('__velunoReaderSize', String(size)); } catch {}
   };
   resize(0);
   for (const button of shadow.querySelectorAll('[data-size]')) button.onclick = () => resize(Number(button.dataset.size));
@@ -145,7 +145,7 @@ article th,article td{border:1px solid #3a3a40;padding:6px 10px}
     html.style.overflow = overflow;
     focused?.focus?.({ preventScroll: true });
   };
-  host.__felarisClose = close;
+  host.__velunoClose = close;
   shadow.querySelector('[data-close]').onclick = close;
   window.addEventListener('keydown', onKey, true);
   html.style.overflow = 'hidden';

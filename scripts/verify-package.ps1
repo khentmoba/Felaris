@@ -2,10 +2,10 @@ $ErrorActionPreference = 'Stop'
 $releaseDirectory = Join-Path $PSScriptRoot '..\target\release'
 $cargo = Get-Content (Join-Path $PSScriptRoot '..\Cargo.toml') -Raw
 $version = [regex]::Match($cargo, 'version\s*=\s*"([^"]+)"').Groups[1].Value
-foreach ($name in @('felaris.exe', 'felaris-setup.exe')) {
+foreach ($name in @('veluno.exe', 'veluno-setup.exe')) {
     $path = Join-Path $releaseDirectory $name
     $info = [Diagnostics.FileVersionInfo]::GetVersionInfo($path)
-    if ($info.ProductName.Trim() -ne 'Felaris' -or -not $info.FileVersion.Trim().StartsWith($version)) { throw "$name has incorrect Windows metadata" }
+    if ($info.ProductName.Trim() -ne 'Veluno' -or -not $info.FileVersion.Trim().StartsWith($version)) { throw "$name has incorrect Windows metadata" }
     $bytes = [IO.File]::ReadAllBytes($path)
     $pe = [BitConverter]::ToInt32($bytes, 0x3c)
     if ([BitConverter]::ToUInt16($bytes, $pe + 24 + 68) -ne 2) { throw "$name is not a Windows GUI application" }
@@ -25,4 +25,4 @@ foreach ($name in @('felaris.exe', 'felaris-setup.exe')) {
         if ($resourceTypes -notcontains $type) { throw "$name is missing an icon or version resource" }
     }
 }
-Write-Host "Verified Felaris ${version}: Windows GUI subsystem, icons, and version metadata for the app and setup."
+Write-Host "Verified Veluno ${version}: Windows GUI subsystem, icons, and version metadata for the app and setup."

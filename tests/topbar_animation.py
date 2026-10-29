@@ -20,5 +20,5 @@ def check_topbar_animation(executable):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exe', default='target/debug/felaris.exe')
+    parser.add_argument('--exe', default='target/debug/veluno.exe')
     check_topbar_animation(parser.parse_args().exe)

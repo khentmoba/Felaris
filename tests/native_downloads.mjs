@@ -14,7 +14,7 @@ async function until(probe, label) {
 }
 
 try {
-  const sidebar = await connect(page => page.title === 'Felaris', chromePort);
+  const sidebar = await connect(page => page.title === 'Veluno', chromePort);
   if (process.argv.includes('--restored')) {
     await until(()=>sidebar.evaluate('currentState?.dismissed_update_version==="999.0.0"'),'dismissal restored from disk');
     await sidebar.evaluate('updateState({...currentState,update_available:{version:"999.0.0"}});true');
@@ -33,7 +33,7 @@ try {
     assert.equal(await sidebar.evaluate('updateState({...currentState,update_available:{version:"999.0.0"}});document.getElementById("update-banner").hidden'),true,'same release does not reappear on state changes');
     assert.equal(await sidebar.evaluate('updateState({...currentState,update_available:{version:"999.0.1"}});document.getElementById("update-banner").hidden'),false,'newer releases can notify');
     await sidebar.evaluate('updateState({...currentState,update_available:null});true');
-    const command = (action, payload = {}) => sidebar.evaluate(`Felaris.send(${JSON.stringify(action)},${JSON.stringify(payload)});true`);
+    const command = (action, payload = {}) => sidebar.evaluate(`Veluno.send(${JSON.stringify(action)},${JSON.stringify(payload)});true`);
     await command('new_tab', { url: origin + '/download-source' });
     const source = await connect(page => page.url === origin + '/download-source', contentPort);
     await until(() => source.evaluate('document.readyState==="complete"'), 'source page');
@@ -85,7 +85,7 @@ try {
     await command('new_tab', { url: origin + '/download' });
     await until(async () => {
       const contents = await readFile(join(artifacts, 'profile', 'smoke-download.txt')).catch(() => Buffer.alloc(0));
-      return contents.toString() === 'Felaris download fixture\n' && await sidebar.evaluate(`currentState.tabs.length===${before}&&currentState.active_tab_id===${sourceId}`);
+      return contents.toString() === 'Veluno download fixture\n' && await sidebar.evaluate(`currentState.tabs.length===${before}&&currentState.active_tab_id===${sourceId}`);
     }, 'fast direct download completed and tab removed');
     assert.equal(await source.evaluate('document.getElementById("note").value'), 'Keep my draft');
     await until(() => sidebar.evaluate('currentState.active_downloads===0'), 'fast download completes');
@@ -95,12 +95,12 @@ try {
     await fetch(origin + '/release-downloads');
     await until(() => sidebar.evaluate('currentState.active_downloads===0'), 'redirected download completes');
 
-    await command('new_tab', { url: 'felaris://newtab' });
-    await until(() => sidebar.evaluate('currentState.tabs.find(t=>t.id===currentState.active_tab_id)?.url==="felaris://newtab"&&!currentState.is_loading'), 'Home document committed');
+    await command('new_tab', { url: 'veluno://newtab' });
+    await until(() => sidebar.evaluate('currentState.tabs.find(t=>t.id===currentState.active_tab_id)?.url==="veluno://newtab"&&!currentState.is_loading'), 'Home document committed');
     const homeId = await sidebar.evaluate('currentState.active_tab_id');
     await fetch(origin + '/hold-downloads');
     await command('navigate', { url: origin + '/slow-download' });
-    await until(() => sidebar.evaluate(`currentState.active_downloads===1&&currentState.tabs.find(t=>t.id===${homeId})?.url==='felaris://newtab'&&!currentState.is_loading`), 'same-tab download keeps Home');
+    await until(() => sidebar.evaluate(`currentState.active_downloads===1&&currentState.tabs.find(t=>t.id===${homeId})?.url==='veluno://newtab'&&!currentState.is_loading`), 'same-tab download keeps Home');
     await fetch(origin + '/release-downloads');
     await until(() => sidebar.evaluate('currentState.active_downloads===0'), 'Home download completes');
     await command('switch_tab', { id: sourceId });
@@ -130,7 +130,7 @@ try {
 } catch (error) {
   if (artifacts) {
     try {
-      const sidebar = await connect(page => page.title === 'Felaris', chromePort);
+      const sidebar = await connect(page => page.title === 'Veluno', chromePort);
       await writeFile(join(artifacts, 'download-state.json'), JSON.stringify(await sidebar.evaluate('({items:currentState.download_items,active:currentState.active_downloads})'), null, 2));
     } catch {}
     await writeDiagnostics([chromePort, contentPort], artifacts, error, true);

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<title>Felaris UI regression checks</title>
+<title>Veluno UI regression checks</title>
 <style>
 body { margin:0; display:flex; height:100vh; background:#101011; }
 iframe { border:0; height:100%; display:block; }
@@ -18,7 +18,7 @@ iframe { border:0; height:100%; display:block; }
 window.messages=[];
 window.fixtureState={
  tabs:[
-  {id:1,workspace_id:1,title:'New Tab',url:'felaris://newtab',is_pinned:false,is_sleeping:false},
+  {id:1,workspace_id:1,title:'New Tab',url:'veluno://newtab',is_pinned:false,is_sleeping:false},
   {id:2,workspace_id:1,title:'The Rust Programming Language',url:'https://doc.rust-lang.org/book/',is_pinned:true,is_sleeping:false},
   {id:3,workspace_id:1,title:'GitHub · Build and ship software',url:'https://github.com',is_pinned:false,is_sleeping:false},
   {id:4,workspace_id:1,title:'A long title to check truncation safely',url:'https://example.com',is_pinned:false,is_sleeping:true},
@@ -31,9 +31,9 @@ async function load(frame,file,common) {
  const html=await fetch('../src/'+file).then(r=>r.text());
  await new Promise(resolve=>{frame.onload=resolve;frame.srcdoc=html.replace('__COMMON_SCRIPT__',common).replace('__SHORTCUTS__','[]');});
  frame.contentWindow.ipc={postMessage:json=>messages.push(JSON.parse(json))};
- if(frame.contentWindow.Felaris) {
-  frame.contentWindow.Felaris.send=(action,payload={})=>messages.push({action,...payload});
-  frame.contentWindow.Felaris.navigate=url=>messages.push({action:'navigate',url});
+ if(frame.contentWindow.Veluno) {
+  frame.contentWindow.Veluno.send=(action,payload={})=>messages.push({action,...payload});
+  frame.contentWindow.Veluno.navigate=url=>messages.push({action:'navigate',url});
  }
 }
 window.runChecks=async()=>{
@@ -48,7 +48,7 @@ window.runChecks=async()=>{
  check('default browser action returns when the association changes',!d.getElementById('btn-default-browser').hidden);
  check('current workspace tabs only',d.querySelectorAll('.tab').length===4);
  check('sleeping tab icon explains sleep and how to wake',d.querySelector('.tab.sleeping .sleep-icon')?.parentElement.title==='This tab is sleeping to save memory. Select the tab to wake it.');
- check('newtab tab uses Felaris logo icon',d.querySelector('.tab-main[data-tab-id="1"] use')?.getAttribute('href')==='#felaris');
+ check('newtab tab uses Veluno logo icon',d.querySelector('.tab-main[data-tab-id="1"] use')?.getAttribute('href')==='#veluno');
  check('sidebar shortcut dock removed',!d.querySelector('.essentials,.essential'));
  const github=d.querySelector('.tab[data-tab-id="3"] .favicon');
  check('missing sidebar favicon tries the site icon',github.querySelector('img')?.src==='https://github.com/favicon.ico');
@@ -122,13 +122,13 @@ window.runChecks=async()=>{
  w.focusAddress();check('full URL editing',d.getElementById('url-input').value==='https://doc.rust-lang.org/book/');
  const input=p.getElementById('search-input');input.value='rust async';p.getElementById('search-form').requestSubmit();
  check('new tab search IPC',messages.at(-1).url==='https://search.brave.com/search?q=rust%20async');
- const homeSuggestions=page.contentWindow.Felaris.suggestions;
- page.contentWindow.Felaris.suggestions=value=>homeSuggestions(value,{shortcuts:[{title:'GitHub',url:'https://github.com'}]});
+ const homeSuggestions=page.contentWindow.Veluno.suggestions;
+ page.contentWindow.Veluno.suggestions=value=>homeSuggestions(value,{shortcuts:[{title:'GitHub',url:'https://github.com'}]});
  input.value='github';input.dispatchEvent(new Event('input'));
  check('Home selects the obvious site by default',p.querySelector('.search-option[aria-selected="true"]')?.textContent.includes('GitHub'));
  p.getElementById('search-form').requestSubmit();
  check('Home Enter opens the obvious site',messages.at(-1).url==='https://github.com');
- page.contentWindow.Felaris.suggestions=homeSuggestions;
+ page.contentWindow.Veluno.suggestions=homeSuggestions;
  input.value='rust async';input.dispatchEvent(new Event('input'));p.getElementById('search-form').requestSubmit();
  check('Home ordinary queries still search',messages.at(-1).url==='https://search.brave.com/search?q=rust%20async');
  d.getElementById('url-input').value='rust async';d.getElementById('address-form').requestSubmit();
@@ -267,7 +267,7 @@ window.runChecks=async()=>{
  check('invalid favicon uses site root icon',missing?.src===site+'/favicon.ico');
  missing.dispatchEvent(new Event('error'));
  check('failed favicon leaves fallback visible',!nd.querySelector('.option-icon img')&&nd.querySelector('.option-icon svg').style.visibility!=='hidden');
- n.openNewTab({tabs:[{id:10,title:'Internal',url:'felaris://settings'}]},[]);
+ n.openNewTab({tabs:[{id:10,title:'Internal',url:'veluno://settings'}]},[]);
  check('internal pages do not request favicons',!nd.querySelector('.option-icon img'));
  nd.body.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));await settle();
  check('backdrop cancels',messages.at(-1).action==='dismiss_new_tab');
@@ -299,7 +299,7 @@ window.runChecks=async()=>{
  check('address saved icon failure retries site favicon',failedAddressImage.src===location.origin+'/favicon.ico');
  failedAddressImage.dispatchEvent(new Event('error'));
  check('address failed icon retains visible fallback',!failedAddressIcon.querySelector('img')&&failedAddressIcon.querySelector('svg').style.visibility!=='hidden');
- check('address icons reject unsafe favicon schemes and internal targets',w.addressOptionIcon({url:location.origin+'/safe',favicon:'javascript:alert(1)'}).querySelector('img').src===location.origin+'/assets/favicon.svg'&&!w.addressOptionIcon({url:'felaris://settings'}).querySelector('img'));
+ check('address icons reject unsafe favicon schemes and internal targets',w.addressOptionIcon({url:location.origin+'/safe',favicon:'javascript:alert(1)'}).querySelector('img').src===location.origin+'/assets/favicon.svg'&&!w.addressOptionIcon({url:'veluno://settings'}).querySelector('img'));
  ai.blur();
  const controlState=structuredClone(fixtureState);
  controlState.active_tab_id=3; controlState.tabs[2].is_playing_audio=true;

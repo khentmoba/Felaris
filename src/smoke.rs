@@ -19,10 +19,10 @@ pub struct Smoke {
 
 impl Smoke {
     pub fn new() -> Option<Self> {
-        let report = std::env::var_os("FELARIS_SMOKE_TEST")?;
+        let report = std::env::var_os("VELUNO_SMOKE_TEST")?;
         // Diagnostic runs must never use the user's real browser profile.
-        std::env::var_os("FELARIS_PROFILE_DIR")?;
-        let origin = std::env::var("FELARIS_SMOKE_ORIGIN").ok()?;
+        std::env::var_os("VELUNO_PROFILE_DIR")?;
+        let origin = std::env::var("VELUNO_SMOKE_ORIGIN").ok()?;
         let url = url::Url::parse(&origin).ok()?;
         if url.host_str() != Some("127.0.0.1") {
             return None;
@@ -33,7 +33,7 @@ impl Smoke {
             phase: 0,
             ticks: 0,
             first: 0,
-            restore: std::env::var_os("FELARIS_SMOKE_RESTORE").is_some(),
+            restore: std::env::var_os("VELUNO_SMOKE_RESTORE").is_some(),
             done: false,
         })
     }
@@ -42,7 +42,7 @@ impl Smoke {
         let report = serde_json::json!({ "success":success, "message":message, "phase":self.phase, "restore":self.restore });
         let _ = profile::write_atomic(&self.report, report.to_string().as_bytes());
         self.done = true;
-        !success || std::env::var_os("FELARIS_SMOKE_HOLD").is_none()
+        !success || std::env::var_os("VELUNO_SMOKE_HOLD").is_none()
     }
 
     fn command(proxy: &EventLoopProxy<UserEvent>, command: Command) {
@@ -139,23 +139,23 @@ impl Smoke {
             if state.active_workspace_id != 2 || !state.tabs.iter().any(|tab| tab.is_pinned) {
                 return self.finish(false, "Session or pinned tabs were lost");
             }
-            if !tab.is_loading && tab.url.ends_with("/second") && tab.title == "Felaris second" {
+            if !tab.is_loading && tab.url.ends_with("/second") && tab.title == "Veluno second" {
                 self.phase = 15;
                 self.probe(
                     view,
-                    "localStorage.getItem('felaris-smoke') === 'saved'",
+                    "localStorage.getItem('veluno-smoke') === 'saved'",
                     proxy,
                 );
             }
             return false;
         }
         match self.phase {
-            0 if !tab.is_loading && tab.title == "Felaris fixture" => {
+            0 if !tab.is_loading && tab.title == "Veluno fixture" => {
                 self.first = tab.id;
                 self.phase = 1;
-                self.probe(view,"(()=>{document.getElementById('note').value='retained';localStorage.setItem('felaris-smoke','saved');return true})()",proxy);
+                self.probe(view,"(()=>{document.getElementById('note').value='retained';localStorage.setItem('veluno-smoke','saved');return true})()",proxy);
             }
-            2 if !tab.is_loading && tab.title == "Felaris second" => {
+            2 if !tab.is_loading && tab.title == "Veluno second" => {
                 self.phase = 3;
                 let _ = proxy.send_event(UserEvent::AdBlockerInstalled(Ok(())));
                 Self::command(proxy, Command::SwitchTab { id: self.first });
@@ -184,7 +184,7 @@ impl Smoke {
                 let url = serde_json::to_string(&format!("{}/popup", self.origin)).unwrap();
                 let _ = view.evaluate_script(&format!("window.open({url},'_blank')"));
             }
-            8 if !tab.is_loading && tab.title == "Felaris popup" => {
+            8 if !tab.is_loading && tab.title == "Veluno popup" => {
                 self.phase = 9;
                 let _ = view.evaluate_script("document.getElementById('download').click()");
             }
@@ -194,7 +194,7 @@ impl Smoke {
                 if std::fs::read_to_string(profile::directory().join("smoke-download.txt"))
                     .ok()
                     .as_deref()
-                    != Some("Felaris download fixture\n")
+                    != Some("Veluno download fixture\n")
                 {
                     return self.finish(false, "Download contents did not match");
                 }
@@ -219,7 +219,7 @@ impl Smoke {
                     },
                 );
             }
-            13 if !tab.is_loading && tab.error.is_none() && tab.title == "Felaris fixture" => {
+            13 if !tab.is_loading && tab.error.is_none() && tab.title == "Veluno fixture" => {
                 self.phase = 14;
                 Self::command(proxy, Command::TogglePin { id: self.first });
                 Self::command(
@@ -236,7 +236,7 @@ impl Smoke {
                 );
             }
             14 if !tab.is_loading
-                && tab.title == "Felaris second"
+                && tab.title == "Veluno second"
                 && state.active_workspace_id == 2 =>
             {
                 if let Err(error) = session.flush(state) {

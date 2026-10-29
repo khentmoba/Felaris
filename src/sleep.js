@@ -18,7 +18,7 @@
   const busy = () => edited || (activated && (beforeUnload || Boolean(window.onbeforeunload))) || captures > 0 || activeMedia.size > 0 || restored();
   const report = () => {
     if (top) return;
-    const state = { felarisFrameBusy: busy(), felarisFrameActivated: activated };
+    const state = { velunoFrameBusy: busy(), velunoFrameActivated: activated };
     const key = JSON.stringify(state);
     if (key === reported) return;
     reported = key;
@@ -26,11 +26,11 @@
   };
   const listen = window.addEventListener.bind(window);
   if (top) listen('message', event => {
-    if (typeof event.data?.felarisFrameBusy !== 'boolean') return;
+    if (typeof event.data?.velunoFrameBusy !== 'boolean') return;
     event.stopImmediatePropagation();
     // The source is null once its frame is gone.
-    if (event.source) frames.set(event.source, event.data.felarisFrameBusy);
-    if (event.data.felarisFrameActivated === true) activated = true;
+    if (event.source) frames.set(event.source, event.data.velunoFrameBusy);
+    if (event.data.velunoFrameActivated === true) activated = true;
   }, true);
   listen('load', report);
   for (const type of ['pointerdown', 'keydown']) listen(type, event => { if (event.isTrusted) { activated = true; report(); } }, true);
@@ -64,7 +64,7 @@
       }, error => { captures--; report(); throw error; });
     };
   }
-  Object.defineProperty(window, '__felarisCanSleep', { value: () => {
+  Object.defineProperty(window, '__velunoCanSleep', { value: () => {
     if (document.readyState !== 'complete' || busy()) return false;
     for (const [frame, frameBusy] of frames) {
       if (frame.closed) frames.delete(frame);

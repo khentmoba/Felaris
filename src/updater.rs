@@ -2,11 +2,10 @@ use serde::{Deserialize, Serialize};
 use std::process::Command;
 
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const GITHUB_REPO: &str = "khentmoba/Felaris";
+pub const GITHUB_REPO: &str = "khentmoba/Veluno";
 pub const MANIFEST_URL: &str =
-    "https://raw.githubusercontent.com/khentmoba/Felaris/main/version.json";
-pub const GITHUB_LATEST_API: &str =
-    "https://api.github.com/repos/khentmoba/Felaris/releases/latest";
+    "https://raw.githubusercontent.com/khentmoba/Veluno/main/version.json";
+pub const GITHUB_LATEST_API: &str = "https://api.github.com/repos/khentmoba/Veluno/releases/latest";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Version {
@@ -53,7 +52,7 @@ struct GhRelease {
     assets: Option<Vec<GhAsset>>,
 }
 
-const SETUP_TEMP: &str = "felaris-update-setup.exe";
+const SETUP_TEMP: &str = "veluno-update-setup.exe";
 
 pub fn cleanup_old_version() {
     let _ = std::fs::remove_file(std::env::temp_dir().join(SETUP_TEMP));
@@ -108,7 +107,7 @@ fn fetch_github_latest() -> Option<UpdateManifest> {
         "--max-time",
         "6",
         "-H",
-        "User-Agent: Felaris-Browser",
+        "User-Agent: Veluno-Browser",
         GITHUB_LATEST_API,
     ])?;
 
@@ -116,7 +115,7 @@ fn fetch_github_latest() -> Option<UpdateManifest> {
     let exe_asset = release.assets.as_ref().and_then(|assets| {
         assets
             .iter()
-            .find(|a| a.name.eq_ignore_ascii_case("felaris.exe"))
+            .find(|a| a.name.eq_ignore_ascii_case("veluno.exe"))
             .map(|a| a.browser_download_url.clone())
     });
 
@@ -126,7 +125,7 @@ fn fetch_github_latest() -> Option<UpdateManifest> {
         download_url: exe_asset,
         summary: release
             .body
-            .unwrap_or_else(|| "Felaris update available.".to_string()),
+            .unwrap_or_else(|| "Veluno update available.".to_string()),
     })
 }
 
@@ -138,12 +137,23 @@ pub fn download_and_apply_update(download_url: &str) -> Result<(), String> {
         .ok_or_else(|| "Invalid executable parent directory".to_string())?;
     validate_download_url(download_url)?;
 
-    // Copies made by felaris-setup.exe update through it so Windows keeps the right version.
+    // Copies made by veluno-setup.exe update through it so Windows keeps the right version.
     let installed = target_dir.join("unins000.exe").is_file();
+    let legacy = download_url.ends_with("/felaris.exe");
     let (asset, file) = if installed {
-        ("felaris-setup.exe", std::env::temp_dir().join(SETUP_TEMP))
+        (
+            if legacy {
+                "felaris-setup.exe"
+            } else {
+                "veluno-setup.exe"
+            },
+            std::env::temp_dir().join(SETUP_TEMP),
+        )
     } else {
-        ("felaris.exe", target_dir.join("felaris.exe.new"))
+        (
+            if legacy { "felaris.exe" } else { "veluno.exe" },
+            target_dir.join("veluno.exe.new"),
+        )
     };
     let release = download_url.rsplit_once('/').map_or("", |(base, _)| base);
     download(&format!("{release}/{asset}"), &file)?;
@@ -209,7 +219,7 @@ fn verify_download(sums_url: &str, asset: &str, file: &std::path::Path) -> Resul
             bytes.len()
         ));
     }
-    if asset == "felaris.exe" && !valid_executable(&bytes) {
+    if matches!(asset, "veluno.exe" | "felaris.exe") && !valid_executable(&bytes) {
         return Err(
             "The downloaded file is not a compatible Windows app. Your current version was kept."
                 .into(),
@@ -312,13 +322,18 @@ fn validate_download_url(value: &str) -> Result<(), String> {
         || url.host_str() != Some("github.com")
         || !url.username().is_empty()
         || url.password().is_some()
-        || !url
-            .path()
-            .starts_with("/khentmoba/Felaris/releases/download/")
-        || !url.path().ends_with("/felaris.exe")
+        || ![
+            "/khentmoba/Veluno/releases/download/",
+            "/khentmoba/Felaris/releases/download/",
+        ]
+        .iter()
+        .any(|prefix| url.path().starts_with(prefix))
+        || !["/veluno.exe", "/felaris.exe"]
+            .iter()
+            .any(|asset| url.path().ends_with(asset))
         || url.port().is_some()
     {
-        return Err("Update address is not an official Felaris release.".into());
+        return Err("Update address is not an official Veluno release.".into());
     }
     Ok(())
 }
@@ -350,10 +365,10 @@ mod tests {
     #[cfg(windows)]
     fn failed_update_launch_restores_the_previous_binary() {
         let directory =
-            std::env::temp_dir().join(format!("felaris-rollback-{}", std::process::id()));
+            std::env::temp_dir().join(format!("veluno-rollback-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
-        let current = directory.join("felaris.exe");
-        let new = directory.join("felaris.exe.new");
+        let current = directory.join("veluno.exe");
+        let new = directory.join("veluno.exe.new");
         std::fs::write(&current, b"previous app").unwrap();
         std::fs::write(&new, b"not executable").unwrap();
         assert!(replace_and_launch(&current, &new).is_err());
@@ -367,17 +382,23 @@ mod tests {
 
     #[test]
     fn updates_only_accept_official_https_app_assets() {
+        for address in [
+            "https://github.com/khentmoba/Felaris/releases/download/v0.3.2/felaris.exe",
+            "https://github.com/khentmoba/Veluno/releases/download/v0.3.2/felaris.exe",
+        ] {
+            assert!(validate_download_url(address).is_ok(), "{address}");
+        }
         assert!(
             validate_download_url(
-                "https://github.com/khentmoba/Felaris/releases/download/v0.2.0/felaris.exe"
+                "https://github.com/khentmoba/Veluno/releases/download/v0.2.0/veluno.exe"
             )
             .is_ok()
         );
         for address in [
-            "http://github.com/khentmoba/Felaris/releases/download/v0.2.0/felaris.exe",
-            "https://github.com.evil.test/khentmoba/Felaris/releases/download/v0.2.0/felaris.exe",
-            "https://github.com/other/project/releases/download/v0.2.0/felaris.exe",
-            "https://github.com/khentmoba/Felaris/releases/download/v0.2.0/felaris-setup.exe",
+            "http://github.com/khentmoba/Veluno/releases/download/v0.2.0/veluno.exe",
+            "https://github.com.evil.test/khentmoba/Veluno/releases/download/v0.2.0/veluno.exe",
+            "https://github.com/other/project/releases/download/v0.2.0/veluno.exe",
+            "https://github.com/khentmoba/Veluno/releases/download/v0.2.0/veluno-setup.exe",
         ] {
             assert!(validate_download_url(address).is_err(), "{address}");
         }
@@ -405,14 +426,14 @@ mod tests {
 
     #[test]
     fn checksum_is_matched_by_exact_asset_name() {
-        let sums = "aaa111  felaris.exe
-bbb222  felaris-setup.exe
+        let sums = "aaa111  veluno.exe
+bbb222  veluno-setup.exe
 ";
         assert_eq!(
-            checksum_for(sums, "felaris-setup.exe").as_deref(),
+            checksum_for(sums, "veluno-setup.exe").as_deref(),
             Some("bbb222")
         );
-        assert_eq!(checksum_for(sums, "felaris.exe").as_deref(), Some("aaa111"));
+        assert_eq!(checksum_for(sums, "veluno.exe").as_deref(), Some("aaa111"));
         assert_eq!(checksum_for(sums, "other.exe"), None);
     }
 
@@ -459,8 +480,8 @@ bbb222  felaris-setup.exe
     fn test_parse_manifest_json() {
         let raw = r#"{
             "version": "0.2.0",
-            "release_url": "https://github.com/khentmoba/Felaris/releases/tag/v0.2.0",
-            "download_url": "https://github.com/khentmoba/Felaris/releases/download/v0.2.0/felaris.exe",
+            "release_url": "https://github.com/khentmoba/Veluno/releases/tag/v0.2.0",
+            "download_url": "https://github.com/khentmoba/Veluno/releases/download/v0.2.0/veluno.exe",
             "summary": "Zen UI update"
         }"#;
 
@@ -468,7 +489,7 @@ bbb222  felaris-setup.exe
         assert_eq!(parsed.version, "0.2.0");
         assert_eq!(
             parsed.download_url.as_deref(),
-            Some("https://github.com/khentmoba/Felaris/releases/download/v0.2.0/felaris.exe")
+            Some("https://github.com/khentmoba/Veluno/releases/download/v0.2.0/veluno.exe")
         );
         assert!(is_newer(&parsed.version, "0.1.0"));
     }

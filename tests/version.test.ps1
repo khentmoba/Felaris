@@ -12,7 +12,7 @@ try {
     foreach ($version in @('1.2.3', '1.2.4')) {
         Set-Content -LiteralPath 'Cargo.toml' -Encoding ASCII -Value @"
 [package]
-name = "felaris-version-test"
+name = "veluno-version-test"
 version = "$version"
 edition = "2024"
 [build-dependencies]
@@ -20,7 +20,7 @@ embed-resource = "3.0"
 "@
         cargo build --offline --quiet
         if ($LASTEXITCODE -ne 0) { throw 'Version fixture build failed' }
-        $info = [Diagnostics.FileVersionInfo]::GetVersionInfo("$fixture\target\debug\felaris-version-test.exe")
+        $info = [Diagnostics.FileVersionInfo]::GetVersionInfo("$fixture\target\debug\veluno-version-test.exe")
         if ($info.FileVersion -ne $version -or $info.ProductVersion -ne $version) {
             throw "Incremental build expected $version; found file=$($info.FileVersion), product=$($info.ProductVersion)"
         }

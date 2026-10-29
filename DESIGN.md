@@ -1,4 +1,4 @@
-# Felaris interface
+# Veluno interface
 
 ## Direction
 
@@ -7,7 +7,7 @@ Operate mode: a Zen-inspired desktop sidebar, not a browser feature clone. Keep 
 ## Surfaces
 
 - `src/ui.html`: 260px expanded sidebar; 56px compact rail. Navigation, address field, workspace heading, new-tab/search actions, pinned and ordinary tab groups, sleep state, and bottom workspace dock.
-- `src/start_page.html`: quiet, left-aligned startup/Home page with eight shortcuts ranked by user visit frequency (`LOCALAPPDATA/Felaris/shortcuts.json`) and padded with default sites. Shortcuts use two columns of compact icon-and-label rows, collapsing to one below 360px; scrolling remains available at the minimum desktop window size.
+- `src/start_page.html`: quiet, left-aligned startup/Home page with eight shortcuts ranked by user visit frequency (`LOCALAPPDATA/Veluno/shortcuts.json`) and padded with default sites. Shortcuts use two columns of compact icon-and-label rows, collapsing to one below 360px; scrolling remains available at the minimum desktop window size.
 - `src/new_tab.html`: Zen-style floating new-tab search in a separate transparent, normally hidden WebView. It covers the client area without replacing or modifying the current page.
 - `src/browser.js`: shared address resolution and keyboard shortcuts. Embedded into both local pages and initialized before remote content. Management IPC from content requires the injected trusted-key handler's per-process token; ordinary page scripts do not receive that token through the public helper.
 
@@ -36,7 +36,7 @@ User-requested black theme: sidebar `#101011`, page `#0c0c0e`, neutral accent `#
 Two Gemini 3.8 Flash research subagents investigated mainstream browsers and Zen. Applied the structural patterns, not every proposed capability or unverified implementation detail.
 
 - [Zen Workspaces](https://docs.zen-browser.app/user-manual/workspaces): bottom workspace switching and scoped tabs.
-- [Zen Compact Mode](https://docs.zen-browser.app/user-manual/compact-mode): a content-first compact rail; full floating/edge-hover behavior is not implemented across Felaris's native child WebViews.
+- [Zen Compact Mode](https://docs.zen-browser.app/user-manual/compact-mode): a content-first compact rail; full floating/edge-hover behavior is not implemented across Veluno's native child WebViews.
 - [Zen desktop source](https://github.com/zen-browser/desktop): essentials/pinned/ordinary tab hierarchy as the reference, without importing Zen branding or source assets.
 - [Chromium omnibox principles](https://www.chromium.org/user-experience/omnibox/): one search/address entry point and familiar keyboard behavior.
 - [Edge sleeping tabs](https://blogs.windows.com/msedgedev/2020/12/09/sleeping-tabs-beta-performance/): quiet dormant-tab treatment instead of noisy resource claims.

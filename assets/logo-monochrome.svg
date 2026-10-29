@@ -1,14 +1,6 @@
-<svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Orbital Trajectory Crescent -->
-  <path d="M 64 16 C 36 14 14 32 14 54 C 14 74 30 87 50 87 C 68 87 81 77 86 64 C 81 68 70 76 52 76 C 36 76 25 64 25 52 C 25 36 38 23 64 23 Z" 
-        fill="#f5f5f7"/>
-
-  <!-- Aerodynamic Feline Keel & F-Wings -->
-  <path d="M 32 74 C 37 72 41 68 43 60 L 43 31 C 43 27 46 24 50 24 L 72 24 C 74 24 75 26 74 28 L 71 33 C 70 34.5 68.5 35 67 35 L 52 35 L 52 46 L 64 46 C 66 46 67 48 66 50 L 64 54 C 63 55.5 61.5 56 60 56 L 52 56 L 52 62 C 52 72 42 77 34 77 C 32 77 30 76.5 30 76.5 C 31 75.5 31.8 74.8 32 74 Z" 
-        fill="#f5f5f7"/>
-
-  <!-- Polaris Star -->
-  <path d="M 78 30 Q 78 42 74 46 Q 78 50 78 62 Q 78 50 82 46 Q 78 42 78 30 Z" fill="#38bdf8"/>
-  <path d="M 62 46 Q 74 46 78 42 Q 82 46 94 46 Q 82 46 78 50 Q 74 46 62 46 Z" fill="#38bdf8"/>
-  <circle cx="78" cy="46" r="2.8" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Veluno</title>
+  <desc id="desc">An ivory folded ribbon forms a flowing V with an open curved return.</desc>
+  <path fill="#F2EFE7" d="M176 242H298C312 242 322 249 328 263L493 650C498 663 505 670 513 670C522 670 530 662 536 648L679 310C696 270 725 242 770 242H848L632 746C610 797 570 824 517 824C463 824 421 797 399 746L176 242Z"/>
+  <path fill="#F2EFE7" d="M848 242L752 466C723 535 677 573 611 573H568L616 459H636C654 459 667 446 676 424L712 338C728 299 731 269 716 254C732 246 750 242 770 242H848Z"/>
 </svg>

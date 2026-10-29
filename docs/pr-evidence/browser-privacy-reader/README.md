@@ -1,7 +1,7 @@
 # Privacy, reader view, and bookmark import evidence
 
 These screenshots come from `tests/native_ui.mjs` in the native regression run
-for this change. The run uses a debug `felaris.exe`, a temporary profile, a
+for this change. The run uses a debug `veluno.exe`, a temporary profile, a
 loopback fixture server, and a 640 x 480 Settings viewport. All page content is
 synthetic.
 

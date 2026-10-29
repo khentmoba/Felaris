@@ -86,7 +86,7 @@ pub fn read(id: &str) -> Result<Vec<Bookmark>, String> {
         }
     }
     if !read_any {
-        return Err(format!("Felaris could not read the {name} bookmarks file."));
+        return Err(format!("Veluno could not read the {name} bookmarks file."));
     }
     let mut seen = std::collections::HashSet::new();
     bookmarks.retain(|bookmark| seen.insert(bookmark.url.clone()));
@@ -225,7 +225,7 @@ mod tests {
 
     #[test]
     fn profiles_are_found_default_first() {
-        let base = std::env::temp_dir().join(format!("felaris-import-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("veluno-import-{}", std::process::id()));
         for profile in ["Profile 10", "Default", "Profile 2", "System Profile"] {
             std::fs::create_dir_all(base.join(profile)).unwrap();
             std::fs::write(base.join(profile).join("Bookmarks"), "{}").unwrap();

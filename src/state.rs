@@ -126,7 +126,7 @@ impl BrowserState {
             id: 1,
             workspace_id: 1,
             title: "New Tab".to_string(),
-            url: "felaris://newtab".to_string(),
+            url: "veluno://newtab".to_string(),
             is_pinned: false,
             is_sleeping: false,
             is_loading: false,
@@ -158,7 +158,7 @@ impl BrowserState {
             shortcuts: Self::load_shortcuts(),
             next_tab_id: 2,
             activity_clock: 0,
-            homepage: "felaris://newtab".to_string(),
+            homepage: "veluno://newtab".to_string(),
             welcome_dismissed: false,
             closed_tabs: Vec::new(),
             bookmarks: Vec::new(),
@@ -197,6 +197,16 @@ impl BrowserState {
 
     pub(crate) fn from_session(json: &str) -> Option<Self> {
         let mut state: Self = serde_json::from_str(json).ok()?;
+        for tab in state.tabs.iter_mut().chain(state.closed_tabs.iter_mut()) {
+            if let Some(url) = crate::profile::normalize_url(&tab.url) {
+                tab.url = url;
+            }
+        }
+        for bookmark in &mut state.bookmarks {
+            if let Some(url) = crate::profile::normalize_url(&bookmark.url) {
+                bookmark.url = url;
+            }
+        }
         // Fold the old preset spaces into General without losing their tabs or pins.
         if state.profiles_version == 0
             && state.workspaces.len() == 3
@@ -267,9 +277,9 @@ impl BrowserState {
         state.update_status = None;
         state.update_available = None;
         state.homepage = if state.welcome_dismissed {
-            "felaris://blank"
+            "veluno://blank"
         } else {
-            "felaris://newtab"
+            "veluno://newtab"
         }
         .into();
         Some(state)
@@ -285,9 +295,9 @@ impl BrowserState {
             id,
             workspace_id: self.active_workspace_id,
             title: match target_url.as_str() {
-                "felaris://newtab" | "felaris://blank" => "New Tab".to_string(),
-                "felaris://settings" => "Settings".to_string(),
-                "felaris://history" => "History".to_string(),
+                "veluno://newtab" | "veluno://blank" => "New Tab".to_string(),
+                "veluno://settings" => "Settings".to_string(),
+                "veluno://history" => "History".to_string(),
                 _ => target_url.clone(),
             },
             url: target_url.clone(),
@@ -330,9 +340,9 @@ impl BrowserState {
     pub fn close_tab(&mut self, tab_id: usize) -> Option<usize> {
         let idx = self.tabs.iter().position(|t| t.id == tab_id)?;
         let removed = self.tabs.remove(idx);
-        if removed.url == "felaris://newtab" {
+        if removed.url == "veluno://newtab" {
             self.welcome_dismissed = true;
-            self.homepage = "felaris://blank".into();
+            self.homepage = "veluno://blank".into();
         }
         self.closed_tabs.push(removed);
         if self.closed_tabs.len() > 30 {
@@ -1189,6 +1199,27 @@ mod tests {
     }
 
     #[test]
+    fn legacy_sessions_keep_internal_tabs_closed_tabs_and_bookmarks() {
+        let mut state = BrowserState::new();
+        state.tabs[0].url = "felaris://newtab".into();
+        state.tabs[0].is_pinned = true;
+        let settings = state.add_tab(Some("veluno://settings".into()), false);
+        state.close_tab(settings);
+        state.closed_tabs[0].url = "felaris://settings".into();
+        let mut json = serde_json::to_value(&state).unwrap();
+        json["bookmarks"] = serde_json::json!([
+            {"title": "Saved settings", "url": "felaris://settings"}
+        ]);
+        let mut restored = BrowserState::from_session(&json.to_string()).unwrap();
+        assert_eq!(restored.tabs[0].url, "veluno://newtab");
+        assert!(restored.tabs[0].is_pinned);
+        assert_eq!(restored.bookmarks[0].url, "veluno://settings");
+        assert_eq!(restored.closed_tabs[0].url, "veluno://settings");
+        restored.restore_closed_tab().unwrap();
+        assert_eq!(restored.active_tab().unwrap().url, "veluno://settings");
+    }
+
+    #[test]
     fn saved_session_restores_pins_workspaces_and_unique_ids() {
         let mut state = BrowserState::new();
         state.toggle_pin(1);
@@ -1379,7 +1410,7 @@ mod tests {
         legacy.as_object_mut().unwrap().remove("welcome_dismissed");
         let restored = BrowserState::from_session(&legacy.to_string()).unwrap();
         assert!(!restored.welcome_dismissed);
-        assert_eq!(restored.homepage, "felaris://newtab");
+        assert_eq!(restored.homepage, "veluno://newtab");
     }
 
     #[test]
@@ -1387,13 +1418,13 @@ mod tests {
         let mut state = BrowserState::new();
         state.close_tab(1);
         assert_eq!(state.tabs.len(), 1);
-        assert_eq!(state.active_tab().unwrap().url, "felaris://blank");
+        assert_eq!(state.active_tab().unwrap().url, "veluno://blank");
         let mut restored =
             BrowserState::from_session(&serde_json::to_string(&state).unwrap()).unwrap();
         assert!(restored.welcome_dismissed);
-        assert_eq!(restored.homepage, "felaris://blank");
+        assert_eq!(restored.homepage, "veluno://blank");
         restored.add_tab(None, false);
-        assert_eq!(restored.active_tab().unwrap().url, "felaris://blank");
+        assert_eq!(restored.active_tab().unwrap().url, "veluno://blank");
         assert!(state.can_restore_closed_tab);
         state.restore_closed_tab();
         assert_eq!(state.tabs.len(), 2);

@@ -68,7 +68,7 @@ def assert_sidebar_above_content(process_id, palette_open=False):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exe', default='target/debug/felaris.exe')
+    parser.add_argument('--exe', default='target/debug/veluno.exe')
     args = parser.parse_args()
     check_topbar_animation(args.exe)
     check_cache_recovery(args.exe)
@@ -219,7 +219,7 @@ def main():
             checks.append('An address without a trailing slash finishes loading')
 
             command('navigate', url=origin + '/spa')
-            wait(lambda snapshot: active(snapshot)['url'] == origin + '/route' and active(snapshot)['title'] == 'Felaris route', 'pushState URL update')
+            wait(lambda snapshot: active(snapshot)['url'] == origin + '/route' and active(snapshot)['title'] == 'Veluno route', 'pushState URL update')
             command('back')
             loaded(origin + '/')
             command('forward')
@@ -317,7 +317,7 @@ def main():
                 assert content(f'{origin}/capacity/3', f"(async()=>{{window.media=new Audio('{origin}/tone.wav');media.muted=true;media.loop=true;document.body.append(media);await media.play();return !media.paused}})()")
                 content(f'{origin}/capacity/3', 'window.mediaMarker="retained playback";true')
                 latencies.append(switch(4))
-                assert not content(f'{origin}/capacity/3', '__felarisCanSleep()'), 'hidden playback must stay protected even if WebView2 pauses it'
+                assert not content(f'{origin}/capacity/3', '__velunoCanSleep()'), 'hidden playback must stay protected even if WebView2 pauses it'
                 command('navigate', url=origin + '/slow')
                 loaded(origin + '/slow')
                 content(origin + '/slow', "document.getElementById('download').click();true")

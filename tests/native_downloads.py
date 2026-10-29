@@ -11,7 +11,7 @@ from native_smoke import Fixture
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exe', default='target/debug/felaris.exe')
+    parser.add_argument('--exe', default='target/debug/veluno.exe')
     args = parser.parse_args()
     app = NativeApp(args.exe, 'native-downloads')
     server = ThreadingHTTPServer(('127.0.0.1', 0), Fixture)

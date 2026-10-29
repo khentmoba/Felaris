@@ -1,15 +1,30 @@
 use std::path::{Path, PathBuf};
 
 pub fn directory() -> PathBuf {
-    std::env::var_os("FELARIS_PROFILE_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            std::env::var_os("LOCALAPPDATA")
-                .or_else(|| std::env::var_os("APPDATA"))
+    static DIRECTORY: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    DIRECTORY
+        .get_or_init(|| {
+            std::env::var_os("VELUNO_PROFILE_DIR")
+                .or_else(|| std::env::var_os("FELARIS_PROFILE_DIR"))
                 .map(PathBuf::from)
-                .unwrap_or_else(std::env::temp_dir)
-                .join("Felaris")
+                .unwrap_or_else(|| {
+                    let base = std::env::var_os("LOCALAPPDATA")
+                        .or_else(|| std::env::var_os("APPDATA"))
+                        .map(PathBuf::from)
+                        .unwrap_or_else(std::env::temp_dir);
+                    migrate_directory(&base)
+                })
         })
+        .clone()
+}
+
+fn migrate_directory(base: &Path) -> PathBuf {
+    let current = base.join("Veluno");
+    let legacy = base.join("Felaris");
+    if !current.exists() && legacy.is_dir() && std::fs::rename(&legacy, &current).is_err() {
+        return legacy;
+    }
+    current
 }
 
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
@@ -32,11 +47,15 @@ pub fn allowed_url(value: &str) -> bool {
 pub fn is_internal(value: &str) -> bool {
     matches!(
         value,
-        "felaris://newtab" | "felaris://blank" | "felaris://settings" | "felaris://history"
+        "veluno://newtab" | "veluno://blank" | "veluno://settings" | "veluno://history"
     )
 }
 
 pub fn normalize_url(value: &str) -> Option<String> {
+    if let Some(page) = value.strip_prefix("felaris://") {
+        let migrated = format!("veluno://{page}");
+        return is_internal(&migrated).then_some(migrated);
+    }
     if is_internal(value) {
         return Some(value.into());
     }
@@ -115,8 +134,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn legacy_profile_moves_without_overwriting_a_current_profile() {
+        let base = std::env::temp_dir().join(format!("veluno-migration-{}", std::process::id()));
+        let legacy = base.join("Felaris");
+        let current = base.join("Veluno");
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(legacy.join("session.json"), b"saved tabs").unwrap();
+        assert_eq!(migrate_directory(&base), current);
+        assert!(!legacy.exists());
+        assert_eq!(
+            std::fs::read(current.join("session.json")).unwrap(),
+            b"saved tabs"
+        );
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(legacy.join("session.json"), b"other tabs").unwrap();
+        assert_eq!(migrate_directory(&base), current);
+        assert_eq!(
+            std::fs::read(current.join("session.json")).unwrap(),
+            b"saved tabs"
+        );
+        assert_eq!(
+            std::fs::read(legacy.join("session.json")).unwrap(),
+            b"other tabs"
+        );
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn legacy_internal_urls_are_migrated_without_accepting_unknown_pages() {
+        for page in ["newtab", "blank", "settings", "history"] {
+            assert_eq!(
+                normalize_url(&format!("felaris://{page}")),
+                Some(format!("veluno://{page}"))
+            );
+        }
+        assert!(normalize_url("felaris://other").is_none());
+        assert!(normalize_url("felaris://settings/../../other").is_none());
+    }
+
+    #[test]
     fn atomic_writes_replace_the_previous_file() {
-        let directory = std::env::temp_dir().join(format!("felaris-atomic-{}", std::process::id()));
+        let directory = std::env::temp_dir().join(format!("veluno-atomic-{}", std::process::id()));
         let path = directory.join("session.json");
         write_atomic(&path, b"first").unwrap();
         write_atomic(&path, b"second").unwrap();
@@ -149,14 +207,14 @@ mod tests {
             Some("https://example.com/caf%C3%A9")
         );
         assert_eq!(
-            normalize_url("felaris://newtab").as_deref(),
-            Some("felaris://newtab")
+            normalize_url("veluno://newtab").as_deref(),
+            Some("veluno://newtab")
         );
         assert_eq!(
-            normalize_url("felaris://settings").as_deref(),
-            Some("felaris://settings")
+            normalize_url("veluno://settings").as_deref(),
+            Some("veluno://settings")
         );
-        assert!(normalize_url("felaris://other").is_none());
+        assert!(normalize_url("veluno://other").is_none());
     }
 
     #[test]

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Felaris Upstream Sync & Conflict Inspector
+Veluno Upstream Sync & Conflict Inspector
 Fetches updates from upstream and analyzes potential conflicts against local work
 WITHOUT modifying the working tree or dirtying Git index.
 """
@@ -39,7 +39,7 @@ def main():
 
     branch = args.branch or get_current_branch()
     print(f"\n=======================================================")
-    print(f" Felaris Upstream Sync & Conflict Detection")
+    print(f" Veluno Upstream Sync & Conflict Detection")
     print(f" Target Upstream: {args.upstream} | Branch: {branch}")
     print(f"=======================================================\n")
 

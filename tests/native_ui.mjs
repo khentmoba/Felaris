@@ -23,7 +23,7 @@ async function press(view, key, modifiers = 0) {
 }
 
 try {
-  const sidebar = await connect(page => page.title === 'Felaris');
+  const sidebar = await connect(page => page.title === 'Veluno');
   await sidebar.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
   const menuOpacity = await sidebar.evaluate(`(() => {
     const menu = document.getElementById('app-menu');
@@ -45,7 +45,7 @@ try {
   const originalTab = await sidebar.evaluate('currentState.active_tab_id');
   await command('new_tab', { url: origin + '/search-match' });
   const searchMatch = await connect(page => page.url === origin + '/search-match', contentPort);
-  await until(() => searchMatch.evaluate(`location.href === ${JSON.stringify(origin + '/search-match')} && document.readyState === "complete" && document.title === "Felaris fixture"`), 'search fixture loaded');
+  await until(() => searchMatch.evaluate(`location.href === ${JSON.stringify(origin + '/search-match')} && document.readyState === "complete" && document.title === "Veluno fixture"`), 'search fixture loaded');
   await searchMatch.evaluate('document.title = "YouTube search fixture";true');
   await until(() => sidebar.evaluate('currentState.tabs.some(tab=>tab.title === "YouTube search fixture")'), 'search fixture title');
   const matchId = await sidebar.evaluate('currentState.active_tab_id');
@@ -63,7 +63,7 @@ try {
   const count = await sidebar.evaluate('currentState.tabs.length');
   await command('new_tab', { url: origin + '/keyboard' });
   const content = await connect(page => page.url === origin + '/keyboard', contentPort);
-  await until(() => content.evaluate(`location.href === ${JSON.stringify(origin + '/keyboard')} && document.readyState === 'complete' && !!window.Felaris`), 'keyboard fixture');
+  await until(() => content.evaluate(`location.href === ${JSON.stringify(origin + '/keyboard')} && document.readyState === 'complete' && !!window.Veluno`), 'keyboard fixture');
   await sidebar.evaluate(`(()=>{const update=window.updateAddressHistory;window.addressSuggestionCalls=0;window.updateAddressHistory=entries=>{window.addressSuggestionCalls++;update(entries)}})()`);
   await content.evaluate('window.ipc.postMessage(JSON.stringify({action:"address_suggestions"}));true');
   await new Promise(resolve => setTimeout(resolve, 200));
@@ -82,14 +82,14 @@ try {
   await press(palette, 'Enter');
   await until(() => sidebar.evaluate(`currentState.tabs.length === ${count + 2}`), 'Enter creates one tab');
   const submitted = await connect(page => page.url === origin + '/submitted', contentPort);
-  await until(() => submitted.evaluate(`location.href === ${JSON.stringify(origin + '/submitted')} && document.readyState === 'complete' && !!window.Felaris`), 'submitted page ready for keyboard input');
+  await until(() => submitted.evaluate(`location.href === ${JSON.stringify(origin + '/submitted')} && document.readyState === 'complete' && !!window.Veluno`), 'submitted page ready for keyboard input');
   await submitted.call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'w', modifiers: 2, windowsVirtualKeyCode: 87 }, { allowTargetClose: true });
   await until(() => sidebar.evaluate(`currentState.tabs.length === ${count + 1}`), 'Ctrl+W closes tab');
   await content.call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'w', modifiers: 2, windowsVirtualKeyCode: 87 });
   await press(content, 'T', 10);
   await until(() => sidebar.evaluate(`currentState.tabs.length === ${count + 2}`), 'Ctrl+Shift+T restores tab');
   const restored = await connect(page => page.url === origin + '/submitted', contentPort);
-  await until(() => restored.evaluate(`location.href === ${JSON.stringify(origin + '/submitted')} && document.readyState === 'complete' && !!window.Felaris`), 'restored page ready for keyboard input');
+  await until(() => restored.evaluate(`location.href === ${JSON.stringify(origin + '/submitted')} && document.readyState === 'complete' && !!window.Veluno`), 'restored page ready for keyboard input');
   await press(restored, 'B', 10);
   await until(() => sidebar.evaluate('currentState.sidebar_collapsed'), 'Ctrl+Shift+B collapses sidebar');
   await press(restored, 'l', 2);
@@ -114,10 +114,10 @@ try {
   await press(palette, 'Escape');
   await until(() => palette.evaluate('input.readOnly'), 'reduced-motion cancel');
   const beforePageIpc = await sidebar.evaluate('currentState.tabs.length');
-  await restored.evaluate('Felaris.send("new_tab"); Felaris.send("duplicate_tab", { id: 1 }); Felaris.send("move_tab_to_workspace", { id: 1, workspace_id: 2 }); Felaris.send("expand_popup", { url: "https://example.com" })');
+  await restored.evaluate('Veluno.send("new_tab"); Veluno.send("duplicate_tab", { id: 1 }); Veluno.send("move_tab_to_workspace", { id: 1, workspace_id: 2 }); Veluno.send("expand_popup", { url: "https://example.com" })');
   await new Promise(resolve => setTimeout(resolve, 200));
   assert.equal(await sidebar.evaluate('currentState.tabs.length'), beforePageIpc, 'untrusted page IPC cannot create or mutate tabs');
-  const popupBar = await connect(page => page.title === 'Felaris Popup');
+  const popupBar = await connect(page => page.title === 'Veluno Popup');
   await restored.evaluate(`window.authDone = false; window.open(${JSON.stringify(origin + '/oauth/login')}, 'oauth', 'width=480,height=620'); true`);
   const oauthPopup = await connect(page => page.url === origin + '/oauth/login', contentPort);
   await until(() => oauthPopup.evaluate('document.readyState === "complete" && !!window.opener'), 'OAuth popup has live window.opener');
@@ -137,7 +137,7 @@ try {
   await until(() => sidebar.evaluate(`currentState.tabs.find(tab=>tab.id===currentState.active_tab_id)?.url === '${origin}/x'`), 'Enter opens pointer-selected X result');
   console.log('Native pointer movement selects X and Enter opens the same result.');
 
-  const permission = await connect(page => page.title === 'Felaris — Site permission');
+  const permission = await connect(page => page.title === 'Veluno — Site permission');
   for (const [site, allow] of [[origin, false], [origin.replace('127.0.0.1', 'localhost'), true]]) {
     await command('new_tab', { url: site + '/permission' });
     const requester = await connect(page => page.url === site + '/permission', contentPort);
@@ -206,7 +206,7 @@ try {
   for (const selected of [true, false]) {
     assert.deepEqual(await settings.evaluate(`(() => {
       window.setDefaultBrowser(${selected});
-      return { hidden: document.getElementById('set-default-browser').hidden, selected: document.getElementById('default-browser-status').textContent === 'Felaris is your default browser.' };
+      return { hidden: document.getElementById('set-default-browser').hidden, selected: document.getElementById('default-browser-status').textContent === 'Veluno is your default browser.' };
     })()`), { hidden: selected, selected });
   }
   await settings.call('Emulation.setDeviceMetricsOverride', { width: 640, height: 480, deviceScaleFactor: 1, mobile: false });
@@ -214,20 +214,20 @@ try {
   assert.equal(await settings.evaluate('document.documentElement.scrollWidth<=innerWidth'), true, 'Settings fits the minimum viewport');
   assert.equal(await settings.evaluate(`document.querySelector('[data-section="search"] .note').textContent.includes('bookmarks, history, and shortcuts')`), true);
   assert.equal(await settings.evaluate(`(() => {
-    let requested=0; const original=Felaris.send,originalConfirm=window.confirm;
-    try { Felaris.send=()=>requested++; window.confirm=()=>false; document.getElementById('clear-range').value='all'; document.getElementById('clear-data-button').click(); return requested===0; }
-    finally { Felaris.send=original; window.confirm=originalConfirm; }
+    let requested=0; const original=Veluno.send,originalConfirm=window.confirm;
+    try { Veluno.send=()=>requested++; window.confirm=()=>false; document.getElementById('clear-range').value='all'; document.getElementById('clear-data-button').click(); return requested===0; }
+    finally { Veluno.send=original; window.confirm=originalConfirm; }
   })()`), true, 'cancelling the all-time Clear browsing data confirmation keeps data');
   assert.deepEqual(await settings.evaluate(`(() => {
-    let sent; const original=Felaris.send;
+    let sent; const original=Veluno.send;
     try {
-      Felaris.send=(action,payload)=>sent={action,...payload};
+      Veluno.send=(action,payload)=>sent={action,...payload};
       document.getElementById('clear-range').value='hour';
       for (const box of document.querySelectorAll('[data-kind]')) box.checked=box.dataset.kind==='cache';
       document.getElementById('clear-data-button').click();
       window.dataCleared(true);
       return sent;
-    } finally { Felaris.send=original; }
+    } finally { Veluno.send=original; }
   })()`), { action: 'clear_browsing_data', range: 'hour', kinds: { history: false, site_data: false, cache: true, passwords: false } });
   assert.equal(await settings.evaluate(`(() => { window.showSection('privacy'); return document.getElementById('title').textContent; })()`), 'Privacy and security');
   assert.equal(await settings.evaluate(`document.getElementById('tracking').querySelectorAll('[aria-checked="true"]').length`), 1, 'one tracking prevention level is selected');
@@ -278,24 +278,24 @@ try {
     return true;
   })()`);
   await command('toggle_reader');
-  await until(() => article.evaluate(`!!document.getElementById('__felaris-reader') && document.documentElement.style.overflow === 'hidden'`), 'reader view opens over the page');
+  await until(() => article.evaluate(`!!document.getElementById('__veluno-reader') && document.documentElement.style.overflow === 'hidden'`), 'reader view opens over the page');
   await writeFile(join(artifacts, 'reader-view.png'), Buffer.from((await article.call('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
   assert.equal(await article.evaluate(`document.querySelector('nav') !== null && document.querySelector('article p') !== null`), true, 'reader view leaves the page DOM in place');
   await command('toggle_reader');
-  await until(() => article.evaluate(`!document.getElementById('__felaris-reader') && document.documentElement.style.overflow === ''`), 'reader view closes and restores scrolling');
+  await until(() => article.evaluate(`!document.getElementById('__veluno-reader') && document.documentElement.style.overflow === ''`), 'reader view closes and restores scrolling');
   await article.evaluate(`document.body.innerHTML = '<p>Too short.</p>'; true`);
   await command('toggle_reader');
   await until(() => sidebar.evaluate(`(currentState.update_status || '').startsWith("Reader view isn't available")`), 'short pages report reader view is unavailable');
-  assert.equal(await article.evaluate(`document.getElementById('__felaris-reader')`), null);
+  assert.equal(await article.evaluate(`document.getElementById('__veluno-reader')`), null);
   console.log('Settings opens at Privacy, and reader view opens over an article, closes cleanly, and declines short pages.');
-  await article.evaluate(`localStorage.setItem('felaris-clear', '1'); true`);
+  await article.evaluate(`localStorage.setItem('veluno-clear', '1'); true`);
   await command('set_setting', { key: 'tracking_prevention', value: 'strict' });
   await command('set_setting', { key: 'save_passwords', value: true });
   assert.equal(await sidebar.evaluate(`(currentState.update_status || '').startsWith('This setting needs')`), false, 'privacy settings apply to live tabs');
   await command('clear_browsing_data', { range: 'hour', kinds: { site_data: true, cache: true } });
   await until(() => sidebar.evaluate(`currentState.update_status === 'Browsing data from the last hour was cleared.'`), 'Clear browsing data reports success');
   await article.evaluate('location.reload(); true');
-  await until(() => article.evaluate(`document.readyState === 'complete' && localStorage.getItem('felaris-clear') === null`), 'cleared site storage stays cleared');
+  await until(() => article.evaluate(`document.readyState === 'complete' && localStorage.getItem('veluno-clear') === null`), 'cleared site storage stays cleared');
   console.log('Privacy settings apply without errors and Clear browsing data removes recent site storage.');
   await checkBrowserControls(sidebar, command, origin, contentPort, artifacts);
 } catch (error) {

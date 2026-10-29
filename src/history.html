@@ -73,7 +73,7 @@ function row(entry,label,removeLabel,onRemove) {
    img.src=candidates.shift(); icon.append(img);
   }
  } catch {}
- open.append(time,icon,name,host); open.onclick=()=>Felaris.navigate(entry.url);
+ open.append(time,icon,name,host); open.onclick=()=>Veluno.navigate(entry.url);
  const remove=document.createElement('button'); remove.className='remove'; remove.title=removeLabel; remove.setAttribute('aria-label',removeLabel+': '+(entry.title||entry.url));
  remove.innerHTML='<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></svg>';
  remove.onclick=onRemove;
@@ -83,7 +83,7 @@ function render() {
  const query=$('find').value.trim().toLowerCase();
  const matches=entry=>!query||(entry.title+' '+entry.url).toLowerCase().includes(query);
  const marked=bookmarks.filter(matches);
- $('bookmark-list').replaceChildren(...marked.map(entry=>row(entry,'★','Remove bookmark',()=>{ Felaris.send('toggle_bookmark',{url:entry.url}); bookmarks=bookmarks.filter(item=>item.url!==entry.url); render(); })));
+ $('bookmark-list').replaceChildren(...marked.map(entry=>row(entry,'★','Remove bookmark',()=>{ Veluno.send('toggle_bookmark',{url:entry.url}); bookmarks=bookmarks.filter(item=>item.url!==entry.url); render(); })));
  $('bookmarks').hidden=!marked.length;
  const shown=entries.filter(matches);
  const groups=new Map();
@@ -92,7 +92,7 @@ function render() {
  for(const [label,items] of groups) {
   const heading=document.createElement('h2'); heading.textContent=label;
   const list=document.createElement('ul');
-  for(const entry of items) list.append(row(entry,clock(entry.time),'Remove from history',()=>{ Felaris.send('delete_history',{url:entry.url}); entries=entries.filter(item=>item.url!==entry.url); render(); }));
+  for(const entry of items) list.append(row(entry,clock(entry.time),'Remove from history',()=>{ Veluno.send('delete_history',{url:entry.url}); entries=entries.filter(item=>item.url!==entry.url); render(); }));
   nodes.push(heading,list);
  }
  $('list').replaceChildren(...nodes);
@@ -102,7 +102,7 @@ function render() {
 }
 $('find').oninput=render;
 $('find').onkeydown=e=>{ if(e.key==='Escape') { $('find').value=''; render(); } };
-$('clear').onclick=()=>{ if(!confirm('Clear all browsing history?')) return; Felaris.send('clear_history'); entries=[]; render(); };
+$('clear').onclick=()=>{ if(!confirm('Clear all browsing history?')) return; Veluno.send('clear_history'); entries=[]; render(); };
 document.addEventListener('keydown',e=>{ if(e.ctrlKey&&!e.shiftKey&&!e.altKey&&e.key.toLowerCase()==='f') { e.preventDefault(); $('find').focus(); } });
 render();
 </script>

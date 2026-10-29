@@ -3,7 +3,7 @@
 Measured with `python -B tests/native_memory.py` on Windows 11, WebView2 155.0.4283.62, release builds.
 Each tab is its own `*.localhost` site (its own renderer) with a synthetic page: 200k-object JS heap,
 3,000 paragraphs, and a 1200×800 canvas. MiB = summed private working set (Task Manager's "Memory")
-/ private commit, across `felaris.exe` and every `msedgewebview2.exe` child. Headless test window.
+/ private commit, across `veluno.exe` and every `msedgewebview2.exe` child. Headless test window.
 
 ## Hidden tabs get `MemoryUsageTargetLevel = Low` (30 tabs, 12 live WebViews, two runs each)
 

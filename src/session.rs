@@ -71,7 +71,7 @@ mod tests {
 
     #[test]
     fn flush_orders_writes_and_preserves_a_valid_backup() {
-        let directory = std::env::temp_dir().join(format!("felaris-writer-{}", std::process::id()));
+        let directory = std::env::temp_dir().join(format!("veluno-writer-{}", std::process::id()));
         let path = directory.join("session.json");
         let writer = SessionWriter::at(path.clone(), |_| {});
         let mut state = BrowserState::new();
@@ -92,7 +92,7 @@ mod tests {
     #[test]
     fn flush_reports_write_failures() {
         let directory =
-            std::env::temp_dir().join(format!("felaris-writer-error-{}", std::process::id()));
+            std::env::temp_dir().join(format!("veluno-writer-error-{}", std::process::id()));
         let path = directory.join("session.json");
         std::fs::create_dir_all(&path).unwrap();
         let writer = SessionWriter::at(path.clone(), |_| {});

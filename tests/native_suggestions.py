@@ -10,7 +10,7 @@ from native_app import NativeApp
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exe', default='target/debug/felaris.exe')
+    parser.add_argument('--exe', default='target/debug/veluno.exe')
     parser.add_argument('--baseline', required=True)
     args = parser.parse_args()
     app = NativeApp(args.exe, 'native-suggestions')

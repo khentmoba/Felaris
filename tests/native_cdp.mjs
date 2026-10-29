@@ -74,9 +74,9 @@ export async function writeDiagnostics(ports, directory, error, screenshots = fa
               width: innerWidth, height: innerHeight, reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
               sidebarCollapsed: state?.sidebar_collapsed, sidebarPeek: state?.sidebar_peek,
               activeTab: tab && { id: tab.id, title: tab.title, url: tab.url, loading: tab.is_loading, sleeping: tab.is_sleeping },
-              shortcutBridge: !!window.Felaris, inputReadOnly: document.querySelector('input')?.readOnly };
+              shortcutBridge: !!window.Veluno, inputReadOnly: document.querySelector('input')?.readOnly };
           })()`);
-          if (screenshots && (target.title === 'Felaris' || target.url.startsWith('http:'))) {
+          if (screenshots && (target.title === 'Veluno' || target.url.startsWith('http:'))) {
             const shot = await view.call('Page.captureScreenshot', { format: 'png' });
             entry.screenshot = `view-${targets.length}.png`;
             await writeFile(join(directory, entry.screenshot), Buffer.from(shot.data, 'base64'));

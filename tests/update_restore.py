@@ -71,4 +71,4 @@ def check_update_restore(executable):
 
 
 if __name__ == '__main__':
-    check_update_restore('target/debug/felaris.exe')
+    check_update_restore('target/debug/veluno.exe')

@@ -10,9 +10,11 @@ const navigator = { serviceWorker: { controller: {} } };
 const location = { href: 'https://example.com/meeting', origin: 'https://example.com' };
 const context = vm.createContext({ window, navigator, location, URL });
 vm.runInContext(fs.readFileSync('src/browser.js', 'utf8'), context);
-const resolve = window.Felaris.resolveAddress;
+const resolve = window.Veluno.resolveAddress;
 for (const [input, expected] of [
-  ['', null], ['  ', null], ['felaris://newtab', 'felaris://newtab'],
+  ['', null], ['  ', null], ['veluno://newtab', 'veluno://newtab'],
+  ['felaris://newtab', 'veluno://newtab'], ['veluno://settings', 'veluno://settings'],
+  ['felaris://history', 'veluno://history'],
   ['example.com/docs', 'https://example.com/docs'], ['HTTPS://example.com', 'HTTPS://example.com'],
   ['localhost:5173', 'http://localhost:5173'], ['127.0.0.1:8080/a', 'http://127.0.0.1:8080/a'],
   ['[::1]:8080', 'http://[::1]:8080'], ['file:///C:/test.html', 'file:///C:/test.html'],
@@ -20,8 +22,8 @@ for (const [input, expected] of [
   ['rust & café #東京', 'https://search.brave.com/search?q=rust%20%26%20caf%C3%A9%20%23%E6%9D%B1%E4%BA%AC'],
   ['javascript:alert(1)', 'https://search.brave.com/search?q=javascript%3Aalert(1)'],
 ]) assert.equal(resolve(input), expected, input);
-context.Felaris=window.Felaris;
-const suggest=window.Felaris.suggestions;
+context.Veluno=window.Veluno;
+const suggest=window.Veluno.suggestions;
 const sources={tabs:[{id:1,title:'YouTube tab',url:'https://youtube.com'}],bookmarks:[{title:'Duplicate',url:'https://youtube.com/'}],shortcuts:[{title:'YouTube',url:'https://youtube.com'},{title:'GitHub',url:'https://github.com'}]};
 const suggestions=suggest('you',sources,[{title:'YouTube Studio',url:'https://studio.youtube.com'}]);
 assert.equal(suggestions[0].id,1,'An obvious open-tab match leads the search fallback');
@@ -126,17 +128,18 @@ for (const file of ['src/ui.html', 'src/start_page.html', 'src/new_tab.html', 's
   assert.ok(!html.includes('__COMMON_SCRIPT__'));
 }
 const uiHtml = fs.readFileSync('src/ui.html', 'utf8');
-assert.ok(uiHtml.includes('<symbol id="felaris"'), 'src/ui.html must define #felaris logo symbol');
-assert.ok(uiHtml.includes("icon('felaris')"), 'src/ui.html must render #felaris icon for felaris://newtab');
+assert.ok(uiHtml.includes('<symbol id="veluno"'), 'src/ui.html must define #veluno logo symbol');
+assert.ok(uiHtml.includes("icon('veluno')"), 'src/ui.html must render #veluno icon for veluno://newtab');
 const expectedAssets = [
-  'app-icon-polaris.jpg',
   'favicon.svg',
-  'felaris-icon.png',
   'icon.ico',
   'icon_64.rgba',
   'logo-monochrome.svg',
   'logo-wordmark.svg',
   'logo.svg',
+  'veluno-icon.png',
+  'veluno-logo.png',
+  'veluno-logo.svg',
 ];
 assert.deepEqual(fs.readdirSync('assets').sort(), expectedAssets, 'assets/ must contain only canonical branding files');
 for (const required of ['scripts/build.py', 'scripts/generate-icons.py', 'scripts/notify_discord.py', '.agents/skills/discord-release/SKILL.md']) {
@@ -144,7 +147,7 @@ for (const required of ['scripts/build.py', 'scripts/generate-icons.py', 'script
 }
 assert.ok(
   fs.readFileSync('scripts/notify_discord.py', 'utf8').includes('LOCALAPPDATA'),
-  'scripts/notify_discord.py must support LOCALAPPDATA/Felaris/discord_webhook.txt fallback across worktrees',
+  'scripts/notify_discord.py must support LOCALAPPDATA/Veluno/discord_webhook.txt fallback across worktrees',
 );
 console.log('Address resolution, shortcut routing, asset hygiene, and embedded script syntax passed.');
 require('./sleep.test.cjs');

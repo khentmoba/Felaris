@@ -1,4 +1,4 @@
-# Felaris
+# Veluno
 
 <!-- impeccable:product-schema 1 -->
 
@@ -20,7 +20,7 @@ Preserve the existing Rust/wry/tao stack, sidebar, workspaces, new-tab shortcuts
 
 ## Brand Commitments
 
-Keep the Felaris name. The user explicitly requested Zen Browser's sidebar and floating new-tab search flow as the primary references, and a cohesive black theme.
+Keep the Veluno name. The user explicitly requested Zen Browser's sidebar and floating new-tab search flow as the primary references, and a cohesive black theme.
 
 ## Product Principles
 

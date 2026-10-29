@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Felaris Upstream Sync & Conflict Inspector PowerShell Wrapper
+    Veluno Upstream Sync & Conflict Inspector PowerShell Wrapper
 #>
 param(
     [string]$Upstream = "upstream",

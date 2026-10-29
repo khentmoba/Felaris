@@ -100,7 +100,7 @@ impl Instance {
             }
         }
         Err(
-            "Felaris is already running but could not receive the link. Close it and try again."
+            "Veluno is already running but could not receive the link. Close it and try again."
                 .into(),
         )
     }

@@ -1,25 +1,28 @@
 ---
 name: discord-release
-description: Package Felaris, publish GitHub release assets, and announce the Windows installer in Discord #felaris-releases. Use for releases or release announcements.
+description: Package Veluno, publish GitHub release assets, and announce the Windows installer in Discord #veluno-releases. Use for releases or release announcements.
 ---
 
-# Discord & GitHub Release Pipeline for Felaris
+# Discord & GitHub Release Pipeline for Veluno
 
-Builds and verifies Felaris, publishes GitHub release assets, and announces the
-Windows installer in Discord `#felaris-releases`.
+Builds and verifies Veluno, publishes GitHub release assets, and announces the
+Windows installer in Discord `#veluno-releases`.
 
 ## Artifact selection
 
-Discord distributes `target/release/felaris-setup.exe`. The notifier attaches it
+Discord distributes `target/release/veluno-setup.exe`. The notifier attaches it
 when it exists and is at most 10 MiB. Otherwise, including `--no-upload`, it links
-to `felaris-setup.exe` on the matching GitHub release. Verify that asset exists
+to `veluno-setup.exe` on the matching GitHub release. Verify that asset exists
 before announcing a link, especially with `--skip-github` or a notification-only
 request. Use `--installer <path>` for a custom installer location; `--exe` remains
 a compatibility alias and must also receive an installer.
 
-GitHub retains `felaris.exe`, `felaris-setup.exe`, and `SHA256SUMS`. Keep the raw
-`felaris.exe` asset and `version.json` download URL for the built-in auto-updater.
-Discord's download and installation instructions use `felaris-setup.exe`.
+GitHub retains `veluno.exe`, `veluno-setup.exe`, and `SHA256SUMS`, plus identical
+`felaris.exe` and `felaris-setup.exe` compatibility copies for installed legacy updaters.
+The manifest uses the old repository redirect and `felaris.exe` filename; keep both
+compatibility copies in `SHA256SUMS`. Keep the raw
+`veluno.exe` asset and `version.json` download URL for the built-in auto-updater.
+Discord's download and installation instructions use `veluno-setup.exe`.
 
 ## Quick Commands
 
@@ -55,7 +58,7 @@ request uses the existing release without a version bump or rebuild.
 5. Verify the tag points to the release commit and all three assets are uploaded.
    Inspect `python scripts/notify_discord.py --dry-run` before a manual announcement.
    Confirm Discord returned a message ID and that the message attaches
-   `felaris-setup.exe` or links to that installer on the matching release. Retain
+   `veluno-setup.exe` or links to that installer on the matching release. Retain
    the release URL and message ID in the result.
 
 GitHub publication reads committed metadata, verifies the package, and pins the tag
@@ -68,6 +71,6 @@ explicit Discord-only path. Preparation and publication are separate commands;
 - The webhook URL is resolved in order from:
   1. `DISCORD_WEBHOOK_URL` environment variable
   2. `scripts/discord_webhook.txt` or `discord_webhook.txt` (excluded in `.gitignore`)
-  3. `%LOCALAPPDATA%\Felaris\discord_webhook.txt` (shared across all git worktrees)
+  3. `%LOCALAPPDATA%\Veluno\discord_webhook.txt` (shared across all git worktrees)
 - **Security Rule**: Never commit `discord_webhook.txt`.
-- Channel: `#felaris-releases` (`1561759599609258109`) in the Felary Discord server.
+- Channel: `#veluno-releases` (`1561759599609258109`) in the Felary Discord server.

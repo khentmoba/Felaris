@@ -25,7 +25,7 @@ class Fixture(BaseHTTPRequestHandler):
 self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', event => {
   if (new URL(event.request.url).pathname !== '/cache-recovery/bootstrap.js') return;
-  event.respondWith(caches.open('felaris-poisoned').then(async cache =>
+  event.respondWith(caches.open('veluno-poisoned').then(async cache =>
     await cache.match(event.request) || fetch(event.request)));
 });'''
                 content_type = 'text/javascript'
@@ -88,16 +88,16 @@ self.addEventListener('fetch', event => {
             self.wfile.write(body)
             return
         if self.path in ('/download', '/slow-download'):
-            body = b'x' * 65536 if self.path == '/slow-download' else b'Felaris download fixture\n'
+            body = b'x' * 65536 if self.path == '/slow-download' else b'Veluno download fixture\n'
             self.send_response(200)
             self.send_header('Content-Type', 'application/octet-stream')
-            self.send_header('Content-Disposition', 'attachment; filename="felaris-smoke.txt"')
+            self.send_header('Content-Disposition', 'attachment; filename="veluno-smoke.txt"')
         else:
             title = {'/': 'fixture', '/second': 'second', '/next': 'next', '/popup': 'popup'}.get(self.path, 'fixture')
-            extra = "<script>setTimeout(()=>{history.pushState({},'', '/route');document.title='Felaris route'},300)</script>" if self.path == '/spa' else ''
+            extra = "<script>setTimeout(()=>{history.pushState({},'', '/route');document.title='Veluno route'},300)</script>" if self.path == '/spa' else ''
             download = '/slow-download' if self.path == '/slow' else '/download'
-            body = f'''<!doctype html><html><meta charset="utf-8"><title>Felaris {title}</title>
-<body style="font:16px system-ui;padding:40px"><h1>Felaris {title}</h1>
+            body = f'''<!doctype html><html><meta charset="utf-8"><title>Veluno {title}</title>
+<body style="font:16px system-ui;padding:40px"><h1>Veluno {title}</h1>
 <label>Keep this draft <input id="note"></label><p><a href="/next">Next page</a></p>
 <p><a href="/popup" target="_blank">Open a new tab</a></p>
 <a id="download" href="{download}">Download test file</a>{extra}</body></html>'''.encode()
@@ -127,14 +127,14 @@ def await_report(process, path):
                 raise AssertionError(result)
             return
         if process.poll() is not None:
-            raise AssertionError(f'Felaris exited with {process.returncode} before writing {path}')
+            raise AssertionError(f'Veluno exited with {process.returncode} before writing {path}')
         time.sleep(.1)
     raise AssertionError(f'Native test timed out; see {path.parent}')
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exe', default='target/debug/felaris.exe')
+    parser.add_argument('--exe', default='target/debug/veluno.exe')
     args = parser.parse_args()
     executable = Path(args.exe).resolve()
     artifacts = Path('target/native-smoke') / str(uuid.uuid4())
@@ -143,9 +143,9 @@ def main():
     server = ThreadingHTTPServer(('127.0.0.1', 0), Fixture)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = f'http://127.0.0.1:{server.server_port}'
-    environment = {**os.environ, 'FELARIS_PROFILE_DIR': str(artifacts / 'profile'),
-                   'FELARIS_SMOKE_ORIGIN': origin, 'FELARIS_SMOKE_TEST': str(artifacts / 'first.json'),
-                   'FELARIS_SMOKE_HOLD': '1'}
+    environment = {**os.environ, 'VELUNO_PROFILE_DIR': str(artifacts / 'profile'),
+                   'VELUNO_SMOKE_ORIGIN': origin, 'VELUNO_SMOKE_TEST': str(artifacts / 'first.json'),
+                   'VELUNO_SMOKE_HOLD': '1'}
     process = None
     try:
         with (artifacts / 'first.log').open('w') as log:
@@ -154,8 +154,8 @@ def main():
             session = json.loads((artifacts / 'profile/session.json').read_text(encoding='utf-8'))
             assert session['active_workspace_id'] == 2
             assert any(tab['is_pinned'] for tab in session['tabs'])
-            secondary = {key: value for key, value in environment.items() if not key.startswith('FELARIS_SMOKE_')}
-            secondary['FELARIS_SMOKE_TEST'] = environment['FELARIS_SMOKE_TEST']
+            secondary = {key: value for key, value in environment.items() if not key.startswith('VELUNO_SMOKE_')}
+            secondary['VELUNO_SMOKE_TEST'] = environment['VELUNO_SMOKE_TEST']
             assert subprocess.run([str(executable), origin + '/second'], env=secondary, timeout=15).returncode == 0
             deadline = time.monotonic() + 10
             while time.monotonic() < deadline:
@@ -169,15 +169,15 @@ def main():
             process.kill()
             process.wait(timeout=10)
         time.sleep(1)
-        environment.pop('FELARIS_SMOKE_HOLD')
-        environment['FELARIS_SMOKE_TEST'] = str(artifacts / 'restored.json')
-        environment['FELARIS_SMOKE_RESTORE'] = '1'
+        environment.pop('VELUNO_SMOKE_HOLD')
+        environment['VELUNO_SMOKE_TEST'] = str(artifacts / 'restored.json')
+        environment['VELUNO_SMOKE_RESTORE'] = '1'
         with (artifacts / 'restored.log').open('w') as log:
             process = subprocess.Popen([str(executable)], env=environment, stdout=log, stderr=log)
             await_report(process, artifacts / 'restored.json')
             assert process.wait(timeout=10) == 0
         (artifacts / 'profile/session.json').write_text('{truncated', encoding='utf-8')
-        environment['FELARIS_SMOKE_TEST'] = str(artifacts / 'recovered.json')
+        environment['VELUNO_SMOKE_TEST'] = str(artifacts / 'recovered.json')
         with (artifacts / 'recovered.log').open('w') as log:
             process = subprocess.Popen([str(executable)], env=environment, stdout=log, stderr=log)
             await_report(process, artifacts / 'recovered.json')

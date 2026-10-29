@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Felaris</title>
+<title>Veluno</title>
 <style>
 :root { color-scheme: dark; --bg:#101011; --surface:#1b1b1e; --hover:#252528; --active:#2e2e33; --line:#333338; --text:#f5f5f7; --muted:#b2b2b8; --accent:#dedee3; font-family:"Segoe UI",system-ui,sans-serif; font-size:13px; }
 * { box-sizing:border-box; }
@@ -107,7 +107,7 @@ button:active:not(:disabled),summary:active { transform:scale(.97); transition-d
 <button data-action="open_history"><span class="item"><svg><use href="#clock"/></svg>History and bookmarks</span><kbd>Ctrl H</kbd></button>
 <button data-action="open_downloads"><span class="item"><svg><use href="#download"/></svg>Downloads</span><kbd>Ctrl J</kbd></button>
 <button data-action="toggle_reader"><span class="item"><svg><use href="#book"/></svg>Reader view</span><kbd>F9</kbd></button>
-<button data-action="screenshot" title="Save the visible page as a PNG in Pictures\Felaris"><span class="item"><svg><use href="#camera"/></svg>Save screenshot</span></button>
+<button data-action="screenshot" title="Save the visible page as a PNG in Pictures\Veluno"><span class="item"><svg><use href="#camera"/></svg>Save screenshot</span></button>
 <button data-action="print"><span class="item"><svg><use href="#print"/></svg>Print…</span></button>
 <div class="zoom"><span class="item"><svg><use href="#zoom"/></svg>Zoom</span><span class="zoom-controls"><button data-action="zoom" data-delta="-10" title="Zoom out" aria-label="Zoom out">−</button><button id="zoom-level" data-action="zoom" data-delta="0" title="Reset zoom">100%</button><button data-action="zoom" data-delta="10" title="Zoom in" aria-label="Zoom in">+</button></span></div>
 <hr>
@@ -141,7 +141,7 @@ button:active:not(:disabled),summary:active { transform:scale(.97); transition-d
 <input id="tab-search" type="search" aria-label="Filter tabs in this workspace" placeholder="Find a tab…" hidden>
 <section class="tabs" aria-label="Tabs in this workspace"><div id="pinned-tabs" class="tab-group" aria-label="Pinned tabs"></div><div id="tabs-container" class="tab-group" aria-label="Open tabs"></div><p class="empty" id="empty-tabs" hidden>No matching tabs.<br>Try a different title or address.</p></section>
 <div class="update-banner" id="update-banner" hidden>
-<div class="update-header"><svg aria-hidden="true"><use href="#felaris"/></svg><span id="update-text">Update available</span><button class="icon" id="dismiss-update" aria-label="Dismiss update notification" title="Dismiss update notification"><svg><use href="#close"/></svg></button></div>
+<div class="update-header"><svg aria-hidden="true"><use href="#veluno"/></svg><span id="update-text">Update available</span><button class="icon" id="dismiss-update" aria-label="Dismiss update notification" title="Dismiss update notification"><svg><use href="#close"/></svg></button></div>
 <button id="btn-apply-update" class="update-btn">Update now</button>
 </div>
 <div class="feedback">
@@ -168,7 +168,8 @@ button:active:not(:disabled),summary:active { transform:scale(.97); transition-d
 <symbol id="moon" viewBox="0 0 24 24"><path d="M20 14a8 8 0 0 1-10-10 8.5 8.5 0 1 0 10 10Z"/></symbol><symbol id="more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol><symbol id="code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18"/></symbol><symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></symbol>
 <symbol id="star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-2.9-5.5 2.9 1-6.2L3 9.6l6.2-.9z"/></symbol><symbol id="lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol><symbol id="warn" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Zm0 6v5m0 3v.5"/></symbol><symbol id="private" viewBox="0 0 24 24"><path d="M3 11h18M6 11l2-6h8l2 6"/><circle cx="7.5" cy="16" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/><path d="M10 16h4"/></symbol>
 <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol><symbol id="print" viewBox="0 0 24 24"><path d="M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z"/></symbol><symbol id="zoom" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol><symbol id="gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/></symbol><symbol id="camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol><symbol id="exit" viewBox="0 0 24 24"><path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9"/></symbol>
-<symbol id="felaris" viewBox="0 0 24 24"><path d="M15 3.8A9 9 0 1 0 19.8 14.5"/><path d="M9.5 18c0-3 1-5 1-5V7c0-.6.5-1 1.1-1H16"/><path d="M10.5 11H15"/><path d="M19 3.5v3M17.5 5h3"/></symbol>
+<symbol id="veluno" viewBox="0 0 1024 1024">  <path fill="currentColor" stroke="none" d="M176 242H298C312 242 322 249 328 263L493 650C498 663 505 670 513 670C522 670 530 662 536 648L679 310C696 270 725 242 770 242H848L632 746C610 797 570 824 517 824C463 824 421 797 399 746L176 242Z"/>
+  <path fill="currentColor" stroke="none" d="M848 242L752 466C723 535 677 573 611 573H568L616 459H636C654 459 667 446 676 424L712 338C728 299 731 269 716 254C732 246 750 242 770 242H848Z"/></symbol>
 </defs></svg>
 <script>__COMMON_SCRIPT__</script>
 <script>
@@ -182,7 +183,7 @@ function clearDrag() { draggedTab=null; clearDropMarkers(); document.querySelect
 function moveTab(tab,down) {
  const peers=currentState.tabs.filter(t=>t.workspace_id===tab.workspace_id&&t.is_pinned===tab.is_pinned);
  const target=peers[peers.findIndex(t=>t.id===tab.id)+(down?1:-1)];
- if(target)Felaris.send('reorder_tab',{id:tab.id,target:target.id,after:down});
+ if(target)Veluno.send('reorder_tab',{id:tab.id,target:target.id,after:down});
 }
 let tabSignature='',tabLayoutSignature='';
 reducedMotion.addEventListener('change',()=>{if(reducedMotion.matches)document.getAnimations().filter(animation=>animation.id==='tab-layout').forEach(animation=>animation.finish());});
@@ -191,7 +192,7 @@ let inside=false,hideTimer;
 const syncCollapsed=()=>{ document.body.classList.toggle('floating',!!currentState.sidebar_collapsed); document.body.classList.toggle('collapsed',!!currentState.sidebar_collapsed&&!currentState.sidebar_peek); };
 function showToast(message,undo=false) { clearTimeout(toastTimer); $('toast-message').textContent=message; $('toast-undo').hidden=!undo; $('toast').hidden=false; toastTimer=setTimeout(()=> $('toast').hidden=true,6000); }
 function activeTab() { return currentState.tabs.find(t=>t.id===currentState.active_tab_id); }
-function displayAddress(url) { if(!url || url==='felaris://newtab') return ''; try { const parsed=new URL(url); return parsed.protocol==='https:'?parsed.hostname:url; } catch { return url; } }
+function displayAddress(url) { if(!url || url==='veluno://newtab') return ''; try { const parsed=new URL(url); return parsed.protocol==='https:'?parsed.hostname:url; } catch { return url; } }
 function renderTabs() {
  const tabs=currentState.tabs.filter(t=>t.workspace_id===currentState.active_workspace_id);
  const query=$('tab-search').value.trim().toLowerCase();
@@ -245,28 +246,28 @@ function renderTabs() {
     img.src=source; favicon.append(img);
    }
   } catch {}
-  if(tab.url==='felaris://newtab') { favicon.replaceChildren(icon('felaris')); }
+  if(tab.url==='veluno://newtab') { favicon.replaceChildren(icon('veluno')); }
   const label=document.createElement('span'); label.className='tab-title'; label.textContent=tab.title||tab.url;
   select.dataset.tabId=tab.id; select.setAttribute('aria-label',(tab.title||tab.url)+(tab.is_pinned?', pinned':'')+(tab.is_sleeping?', sleeping':'')+(tab.error?', page unavailable':''));
   select.onkeydown=event=>{ if(event.altKey&&event.shiftKey&&['ArrowUp','ArrowDown'].includes(event.key)) { event.preventDefault(); event.stopPropagation(); moveTab(tab,event.key==='ArrowDown'); return; } if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)) { event.preventDefault(); const items=[...document.querySelectorAll('.tab-main')]; const index=items.indexOf(select); items[event.key==='Home'?0:event.key==='End'?items.length-1:(index+(event.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus(); } };
-  select.append(favicon,label); select.onclick=()=>Felaris.send('switch_tab',{id:tab.id});
+  select.append(favicon,label); select.onclick=()=>Veluno.send('switch_tab',{id:tab.id});
   row.append(select);
   if(tab.is_playing_audio||tab.is_muted) {
    const audio=document.createElement('button'); audio.className='audio-toggle'; audio.dataset.tabId=tab.id;
    audio.title=tab.is_muted?'Unmute tab':'Mute tab'; audio.setAttribute('aria-label',audio.title+': '+(tab.title||tab.url)); audio.setAttribute('aria-pressed',String(!!tab.is_muted));
-   audio.append(icon(tab.is_muted?'muted':'audio')); audio.onclick=()=>Felaris.send('toggle_mute',{id:tab.id}); row.append(audio);
+   audio.append(icon(tab.is_muted?'muted':'audio')); audio.onclick=()=>Veluno.send('toggle_mute',{id:tab.id}); row.append(audio);
   }
   row.draggable=true;
   row.ondragstart=e=>{ if(e.target.closest('.close-tab,.audio-toggle')) { e.preventDefault(); return; } draggedTab=tab.id; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',String(tab.id)); row.classList.add('dragging'); };
   row.ondragover=e=>{ const source=currentState.tabs.find(t=>t.id===draggedTab); if(!source||source.id===tab.id||source.workspace_id!==tab.workspace_id||source.is_pinned!==tab.is_pinned)return; e.preventDefault(); clearDropMarkers(); row.classList.add(e.clientY>row.getBoundingClientRect().top+row.offsetHeight/2?'drop-after':'drop-before'); e.dataTransfer.dropEffect='move'; };
-  row.ondrop=e=>{ e.preventDefault(); const after=e.clientY>row.getBoundingClientRect().top+row.offsetHeight/2; if(draggedTab!=null)Felaris.send('reorder_tab',{id:draggedTab,target:tab.id,after}); clearDrag(); };
+  row.ondrop=e=>{ e.preventDefault(); const after=e.clientY>row.getBoundingClientRect().top+row.offsetHeight/2; if(draggedTab!=null)Veluno.send('reorder_tab',{id:draggedTab,target:tab.id,after}); clearDrag(); };
   row.ondragend=clearDrag;
 
   if(tab.is_sleeping) {
    const sleep=document.createElement('span'); sleep.title='This tab is sleeping to save memory. Select the tab to wake it.'; sleep.style.display='flex';
    const moon=icon('moon'); moon.classList.add('sleep-icon'); sleep.append(moon); row.append(sleep);
   }
-  const close=document.createElement('button'); close.className='close-tab'; close.dataset.tabId=tab.id; close.title='Close tab'; close.setAttribute('aria-label','Close '+(tab.title||'tab')); close.append(icon('close')); close.onclick=()=>Felaris.send('close_tab',{id:tab.id}); row.append(close);
+  const close=document.createElement('button'); close.className='close-tab'; close.dataset.tabId=tab.id; close.title='Close tab'; close.setAttribute('aria-label','Close '+(tab.title||'tab')); close.append(icon('close')); close.onclick=()=>Veluno.send('close_tab',{id:tab.id}); row.append(close);
   row.onauxclick=e=>{ if(e.button===1) { e.preventDefault(); close.click(); } };
   row.oncontextmenu=e=>{ e.preventDefault(); openTabContextMenu(tab,e.clientY); };
   (tab.is_pinned?pinned:normal).push(row);
@@ -310,7 +311,7 @@ window.updateState = state => {
  if($('spaces').dataset.signature!==spacesSignature) {
   $('spaces').dataset.signature=spacesSignature;
   $('spaces').replaceChildren();
-  for(const [index,space] of state.workspaces.entries()) { const button=document.createElement('button'); button.className='space'; button.dataset.spaceId=space.id; button.title=space.name+(index<9?` (Alt+${index+1})`:''); button.setAttribute('aria-label',space.name); button.textContent=space.name; button.onclick=()=>Felaris.send('switch_workspace',{id:space.id}); $('spaces').append(button); }
+  for(const [index,space] of state.workspaces.entries()) { const button=document.createElement('button'); button.className='space'; button.dataset.spaceId=space.id; button.title=space.name+(index<9?` (Alt+${index+1})`:''); button.setAttribute('aria-label',space.name); button.textContent=space.name; button.onclick=()=>Veluno.send('switch_workspace',{id:space.id}); $('spaces').append(button); }
  }
  for(const button of $('spaces').children) button.setAttribute('aria-pressed',String(Number(button.dataset.spaceId)===state.active_workspace_id));
  renderTabs();
@@ -361,14 +362,14 @@ window.updateState = state => {
    detail.textContent=item.status==='complete'?`Complete · ${bytes(item.received)}`:item.status==='cancelled'?`Cancelled · ${bytes(item.received)} received`:item.status==='interrupted'?`Interrupted · ${bytes(item.received)} received`:`Downloading · ${bytes(item.received)}${item.total>0?` of ${bytes(item.total)} (${Math.min(100,Math.floor(item.received/item.total*100))}%)`:''}`;
    row.append(name,detail);
    if(item.status==='downloading') { const progress=document.createElement('progress'); progress.setAttribute('aria-label',`Downloading ${name.textContent}`); if(item.total>0) { progress.max=item.total; progress.value=item.received; } row.append(progress); }
-   if(item.status==='downloading') { const button=document.createElement('button'); button.textContent='Cancel'; button.onclick=()=>Felaris.send('cancel_download',{id:item.id}); row.append(button); }
-   if(item.status==='complete') { const button=document.createElement('button'); button.textContent='Show in folder'; button.onclick=()=>Felaris.send('reveal_download',{id:item.id}); row.append(button); }
+   if(item.status==='downloading') { const button=document.createElement('button'); button.textContent='Cancel'; button.onclick=()=>Veluno.send('cancel_download',{id:item.id}); row.append(button); }
+   if(item.status==='complete') { const button=document.createElement('button'); button.textContent='Show in folder'; button.onclick=()=>Veluno.send('reveal_download',{id:item.id}); row.append(button); }
    return row;
   }));
  }
  if(state.update_available && state.dismissed_update_version!==state.update_available.version) {
   $('update-banner').hidden=false;
-  $('update-text').textContent=`Felaris v${state.update_available.version} available`;
+  $('update-text').textContent=`Veluno v${state.update_available.version} available`;
  } else {
   $('update-banner').hidden=true;
  }
@@ -378,9 +379,9 @@ window.updateState = state => {
  }
 };
 window.focusAddress=()=>{ let tries=0; const focus=()=>{ $('url-input').focus(); $('url-input').select(); if(document.activeElement!==$('url-input')&&++tries<10) setTimeout(focus,50); }; focus(); };
-for(const [id,action] of Object.entries({'btn-back':'back','btn-forward':'forward','btn-reload':'reload','btn-add-tab':'new_tab','btn-toggle-sidebar':'toggle_sidebar','btn-reopen-tab':'restore_closed_tab'})) $(id).onclick=()=>Felaris.send(action);
-$('btn-reload').onclick=()=>Felaris.send(currentState.is_loading?'stop':'reload');
-$('btn-home').onclick=()=>Felaris.navigate('felaris://newtab');
+for(const [id,action] of Object.entries({'btn-back':'back','btn-forward':'forward','btn-reload':'reload','btn-add-tab':'new_tab','btn-toggle-sidebar':'toggle_sidebar','btn-reopen-tab':'restore_closed_tab'})) $(id).onclick=()=>Veluno.send(action);
+$('btn-reload').onclick=()=>Veluno.send(currentState.is_loading?'stop':'reload');
+$('btn-home').onclick=()=>Veluno.navigate('veluno://newtab');
 let addressOptions=[],addressSelected=-1,addressHistory=[],addressComposing=false,addressQuery='',addressChosen=false;
 function closeAddressResults() {
  $('address-results').hidden=true;
@@ -418,7 +419,7 @@ function addressOptionIcon(option) {
 }
 function renderAddressResults() {
  addressQuery=$('url-input').value;
- addressOptions=Felaris.suggestions(addressQuery,currentState,addressHistory);
+ addressOptions=Veluno.suggestions(addressQuery,currentState,addressHistory);
  const results=$('address-results'); results.replaceChildren();
  addressOptions.forEach((option,index)=>{
   const row=document.createElement('div'); row.id='address-option-'+index; row.className='address-option'; row.setAttribute('role','option');
@@ -447,13 +448,13 @@ window.updateAddressHistory=entries=>{
 function submitAddress() {
  if(addressComposing) return;
  const option=addressQuery===$('url-input').value?addressOptions[addressSelected]:null;
- const url=option?.url||Felaris.resolveAddress($('url-input').value);
+ const url=option?.url||Veluno.resolveAddress($('url-input').value);
  if(!url) return;
- if(option?.id!=null) Felaris.send('switch_tab',{id:option.id}); else Felaris.navigate(url);
+ if(option?.id!=null) Veluno.send('switch_tab',{id:option.id}); else Veluno.navigate(url);
  $('url-input').blur(); closeAddressResults();
 }
 $('address-form').onsubmit=e=>{ e.preventDefault(); submitAddress(); };
-$('url-input').onfocus=()=>{ const active=activeTab(); if(!$('url-input').value || $('url-input').value===displayAddress(active?.url)) $('url-input').value=active?.url==='felaris://newtab'?'':active?.url||''; $('url-input').select(); renderAddressResults(); Felaris.send('address_suggestions'); };
+$('url-input').onfocus=()=>{ const active=activeTab(); if(!$('url-input').value || $('url-input').value===displayAddress(active?.url)) $('url-input').value=active?.url==='veluno://newtab'?'':active?.url||''; $('url-input').select(); renderAddressResults(); Veluno.send('address_suggestions'); };
 $('url-input').oninput=()=>{if(!addressComposing)renderAddressResults();};
 $('url-input').addEventListener('compositionstart',()=>{addressComposing=true;closeAddressResults();});
 $('url-input').addEventListener('compositionend',()=>{addressComposing=false;if(document.activeElement===$('url-input'))renderAddressResults();});
@@ -470,20 +471,20 @@ $('btn-copy-url').onclick=async()=>{ try { await navigator.clipboard.writeText(a
 $('btn-search-tabs').onclick=()=>{ const show=$('tab-search').hidden; $('tab-search').hidden=!show; $('btn-search-tabs').setAttribute('aria-expanded',String(show)); if(show) $('tab-search').focus(); else { $('tab-search').value=''; renderTabs(); } };
 $('tab-search').oninput=renderTabs;
 $('tab-search').onkeydown=e=>{ if(e.key==='Escape') { $('tab-search').value=''; $('tab-search').hidden=true; $('btn-search-tabs').setAttribute('aria-expanded','false'); $('btn-search-tabs').focus(); renderTabs(); } };
-$('btn-bookmark').onclick=()=>Felaris.send('toggle_bookmark');
-$('btn-pin-tab').onclick=()=>Felaris.send('toggle_pin',{id:currentState.active_tab_id});
-$('btn-clear-tabs').onclick=()=>Felaris.send('clear_unpinned_tabs');
-$('btn-ram-saver').onclick=()=>Felaris.send('sleep_inactive_tabs');
-$('toast-undo').onclick=()=>{ Felaris.send('restore_closed_tab'); $('toast').hidden=true; };
-$('close-downloads').onclick=()=>Felaris.send('close_downloads');
-$('dismiss-update').onclick=()=>{ const version=currentState.update_available?.version; if(version) { currentState.dismissed_update_version=version; $('update-banner').hidden=true; Felaris.send('dismiss_update',{version}); } };
-$('btn-downloads').onclick=()=>Felaris.send('open_downloads');
-$('btn-default-browser').onclick=()=>Felaris.send('default_browser');
+$('btn-bookmark').onclick=()=>Veluno.send('toggle_bookmark');
+$('btn-pin-tab').onclick=()=>Veluno.send('toggle_pin',{id:currentState.active_tab_id});
+$('btn-clear-tabs').onclick=()=>Veluno.send('clear_unpinned_tabs');
+$('btn-ram-saver').onclick=()=>Veluno.send('sleep_inactive_tabs');
+$('toast-undo').onclick=()=>{ Veluno.send('restore_closed_tab'); $('toast').hidden=true; };
+$('close-downloads').onclick=()=>Veluno.send('close_downloads');
+$('dismiss-update').onclick=()=>{ const version=currentState.update_available?.version; if(version) { currentState.dismissed_update_version=version; $('update-banner').hidden=true; Veluno.send('dismiss_update',{version}); } };
+$('btn-downloads').onclick=()=>Veluno.send('open_downloads');
+$('btn-default-browser').onclick=()=>Veluno.send('default_browser');
 $('activity-message').onclick=()=>{ const button=$('activity-message'); button.setAttribute('aria-expanded',String(button.getAttribute('aria-expanded')!=='true')); };
 $('dismiss-status').onclick=()=>{ $('activity').hidden=true; };
-$('btn-check-update').onclick=()=>Felaris.send('check_updates');
-$('btn-apply-update').onclick=()=>{ Felaris.send('apply_update'); $('btn-apply-update').disabled=true; $('btn-apply-update').textContent='Updating…'; };
-document.querySelectorAll('.app-menu [data-action]').forEach(button=>button.onclick=()=>Felaris.send(button.dataset.action,button.dataset.delta===undefined?{}:{delta:Number(button.dataset.delta)}));
+$('btn-check-update').onclick=()=>Veluno.send('check_updates');
+$('btn-apply-update').onclick=()=>{ Veluno.send('apply_update'); $('btn-apply-update').disabled=true; $('btn-apply-update').textContent='Updating…'; };
+document.querySelectorAll('.app-menu [data-action]').forEach(button=>button.onclick=()=>Veluno.send(button.dataset.action,button.dataset.delta===undefined?{}:{delta:Number(button.dataset.delta)}));
 const menus=[$('app-menu'),$('browser-menu'),$('profiles')];
 const tabMenu=$('tab-context-menu');
 const closeTabMenu=()=>{ if(!tabMenu.hidden) { tabMenu.hidden=true; scheduleHide(); } };
@@ -495,26 +496,26 @@ function openTabContextMenu(tab,clientY) {
   btn.onclick=()=>{ closeTabMenu(); onSelect(); };
   tabMenu.append(btn);
  };
- addItem(tab.is_pinned?'Unpin tab':'Pin tab',()=>Felaris.send('toggle_pin',{id:tab.id}));
- addItem(tab.is_muted?'Unmute tab':'Mute tab',()=>Felaris.send('toggle_mute',{id:tab.id}));
+ addItem(tab.is_pinned?'Unpin tab':'Pin tab',()=>Veluno.send('toggle_pin',{id:tab.id}));
+ addItem(tab.is_muted?'Unmute tab':'Mute tab',()=>Veluno.send('toggle_mute',{id:tab.id}));
  addItem('Move tab up',()=>moveTab(tab,false));
  addItem('Move tab down',()=>moveTab(tab,true));
- addItem('Duplicate tab',()=>Felaris.send('duplicate_tab',{id:tab.id}));
- addItem(tab.is_sleeping?'Wake tab':'Sleep tab',()=>Felaris.send(tab.is_sleeping?'switch_tab':'toggle_sleep',{id:tab.id}),tab.id===currentState.active_tab_id);
+ addItem('Duplicate tab',()=>Veluno.send('duplicate_tab',{id:tab.id}));
+ addItem(tab.is_sleeping?'Wake tab':'Sleep tab',()=>Veluno.send(tab.is_sleeping?'switch_tab':'toggle_sleep',{id:tab.id}),tab.id===currentState.active_tab_id);
  const privateIds=(currentState.workspaces||[]).filter(w=>w.private).map(w=>w.id);
  const others=privateIds.includes(tab.workspace_id)?[]:(currentState.workspaces||[]).filter(w=>w.id!==tab.workspace_id&&!w.private);
  if(others.length) {
   tabMenu.append(document.createElement('hr'));
-  for(const space of others) addItem(`Move to ${space.name}`,()=>Felaris.send('move_tab_to_workspace',{id:tab.id,workspace_id:space.id}));
+  for(const space of others) addItem(`Move to ${space.name}`,()=>Veluno.send('move_tab_to_workspace',{id:tab.id,workspace_id:space.id}));
  }
  tabMenu.append(document.createElement('hr'));
- addItem('Close tab',()=>Felaris.send('close_tab',{id:tab.id}));
+ addItem('Close tab',()=>Veluno.send('close_tab',{id:tab.id}));
  tabMenu.hidden=false;
  const maxTop=Math.max(8,window.innerHeight-tabMenu.offsetHeight-8);
  tabMenu.style.top=`${Math.min(Math.max(8,clientY),maxTop)}px`;
  tabMenu.querySelector('button:not(:disabled)')?.focus();
 }
-const peek=open=>{ if(currentState.sidebar_collapsed&&currentState.sidebar_peek!==open) Felaris.send('peek',{open}); };
+const peek=open=>{ if(currentState.sidebar_collapsed&&currentState.sidebar_peek!==open) Veluno.send('peek',{open}); };
 const scheduleHide=()=>{ clearTimeout(hideTimer); hideTimer=setTimeout(()=>{ if(!inside&&$('site-panel').hidden&&tabMenu.hidden&&!menus.some(menu=>menu.open)&&document.activeElement!==$('url-input')&&document.activeElement!==$('tab-search')) peek(false); },250); };
 document.documentElement.addEventListener('mouseenter',()=>{ inside=true; clearTimeout(hideTimer); peek(true); });
 document.documentElement.addEventListener('mouseleave',()=>{ inside=false; scheduleHide(); });
@@ -539,7 +540,7 @@ $('delete-workspace').onclick=()=>{
 };
 $('cancel-delete-workspace').onclick=resetWorkspaceEditor;
 $('confirm-delete-workspace').onclick=()=>{
- Felaris.send('delete_workspace',{id:currentState.active_workspace_id,destination:Number($('workspace-destination').value)});
+ Veluno.send('delete_workspace',{id:currentState.active_workspace_id,destination:Number($('workspace-destination').value)});
  resetWorkspaceEditor(); $('profiles').open=false;
 };
 let siteTarget=null;
@@ -555,7 +556,7 @@ $('security').onclick=()=>{
 $('close-site').onclick=()=>closeSitePanel();
 $('clear-site').onclick=()=>{ $('site-confirm').hidden=false; $('clear-site').hidden=true; $('cancel-clear-site').focus(); };
 $('cancel-clear-site').onclick=()=>{ $('site-confirm').hidden=true; $('clear-site').hidden=false; $('clear-site').focus(); };
-$('confirm-clear-site').onclick=()=>{ if(siteTarget)Felaris.send('clear_site_data',siteTarget); closeSitePanel(); };
+$('confirm-clear-site').onclick=()=>{ if(siteTarget)Veluno.send('clear_site_data',siteTarget); closeSitePanel(); };
 document.addEventListener('click',e=>{ if(!$('site-panel').hidden&&!$('address-form').contains(e.target))closeSitePanel(false); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('site-panel').hidden) { e.preventDefault();closeSitePanel(); } });
 $('profile-form').onsubmit=e=>{
@@ -566,7 +567,7 @@ $('profile-form').onsubmit=e=>{
  error.textContent=duplicate?'A workspace with that name already exists.':!name?'Enter a workspace name.':'';
  error.hidden=!error.textContent;
  if(error.textContent) { input.focus(); return; }
- if(renamingWorkspace!=null)Felaris.send('rename_workspace',{id:renamingWorkspace,name}); else Felaris.send('create_profile',{name});
+ if(renamingWorkspace!=null)Veluno.send('rename_workspace',{id:renamingWorkspace,name}); else Veluno.send('create_profile',{name});
  resetWorkspaceEditor();
  input.value=''; $('profiles').open=false; document.querySelector('#profiles summary')?.focus();
 };
@@ -581,7 +582,7 @@ document.addEventListener('click',e=>{ for(const menu of menus) if(!menu.contain
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') { closeTabMenu(); for(const menu of menus) if(menu.open) { menu.open=false; menu.querySelector('summary').focus(); } } });
 const sideResizeDir=e=>e.clientX<5?(e.clientY<8?'nw':e.clientY>window.innerHeight-8?'sw':'w'):e.clientY<5?'n':e.clientY>window.innerHeight-5?'s':'';
 document.addEventListener('mousemove',e=>{ const dir=sideResizeDir(e); document.body.style.cursor=dir==='nw'?'nwse-resize':dir==='sw'?'nesw-resize':dir==='w'?'ew-resize':dir==='n'||dir==='s'?'ns-resize':''; });
-document.addEventListener('mousedown',e=>{ if(e.button!==0||e.target.closest('button,input,summary,a')) return; const dir=sideResizeDir(e); if(dir) { e.preventDefault(); Felaris.send('resize_window',{direction:dir}); } });
+document.addEventListener('mousedown',e=>{ if(e.button!==0||e.target.closest('button,input,summary,a')) return; const dir=sideResizeDir(e); if(dir) { e.preventDefault(); Veluno.send('resize_window',{direction:dir}); } });
 </script>
 </body>
 </html>

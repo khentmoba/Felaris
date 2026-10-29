@@ -18,7 +18,7 @@ async function until(probe, label) {
 }
 
 try {
-  const sidebar = await connect(page => page.title === 'Felaris', chromePort);
+  const sidebar = await connect(page => page.title === 'Veluno', chromePort);
   const command = (action, payload = {}) => sidebar.evaluate(`window.ipc.postMessage(${JSON.stringify(JSON.stringify({ action, ...payload }))});true`);
   const url = origin + '/cache-recovery/';
   await command('new_tab', { url });
@@ -51,7 +51,7 @@ try {
       tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
     });
     db.close();
-    const cache = await caches.open('felaris-poisoned');
+    const cache = await caches.open('veluno-poisoned');
     await cache.put('/cache-recovery/bootstrap.js', new Response('stale bootstrap', { status: 503 }));
   })()`);
   await page.call('Page.reload');
@@ -60,7 +60,7 @@ try {
   await until(() => sidebar.evaluate('currentState.update_status?.includes("Some page scripts failed")'), 'browser reports failed startup script');
   await command('reload');
   await until(() => page.evaluate('window.fixtureReady === true'), 'normal Reload recovers failed cached scripts');
-  assert.equal(await page.evaluate('caches.has("felaris-poisoned").then(async exists => !exists || !(await (await caches.open("felaris-poisoned")).match("/cache-recovery/bootstrap.js")))'), true);
+  assert.equal(await page.evaluate('caches.has("veluno-poisoned").then(async exists => !exists || !(await (await caches.open("veluno-poisoned")).match("/cache-recovery/bootstrap.js")))'), true);
   assert.equal(await page.evaluate('document.cookie.includes("cache_fixture_session=kept")'), true);
   assert.equal(await page.evaluate('localStorage.getItem("cache_fixture_auth")'), 'kept');
   assert.equal(await page.evaluate('Notification.permission'), 'granted');

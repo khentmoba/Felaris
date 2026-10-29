@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Felaris — New tab search</title>
+<title>Veluno — New tab search</title>
 <style>
 /* A dark root color-scheme makes the WebView canvas opaque; scope it to the panel. */
 :root { color-scheme:normal; font-family:"Segoe UI",system-ui,sans-serif; color:#f5f5f7; --muted:#b2b2b8; --line:#323236; --focus:#dedee3; }
@@ -69,10 +69,10 @@ function finish(action,payload={}) {
  const from={opacity:style.opacity,transform:style.transform};
  const scrimOpacity=getComputedStyle(scrim).opacity;
  document.getAnimations().forEach(animation=>animation.cancel());
- if(reducedMotion.matches) {Felaris.send(action,payload);return;}
+ if(reducedMotion.matches) {Veluno.send(action,payload);return;}
  scrim.animate([{opacity:scrimOpacity},{opacity:0}],{duration:100,fill:'forwards',id:'palette-scrim'});
  const exit=panel.animate([from,{opacity:0,transform:'translateY(-6px) scale(.99)'}],{duration:100,easing:'cubic-bezier(.4,0,1,1)',fill:'forwards',id:'palette-close'});
- exit.finished.then(()=>Felaris.send(action,payload)).catch(()=>{});
+ exit.finished.then(()=>Veluno.send(action,payload)).catch(()=>{});
 }
 const dismiss=()=>finish('dismiss_new_tab');
 function select(index,scroll=true) {
@@ -83,7 +83,7 @@ function select(index,scroll=true) {
  else input.removeAttribute('aria-activedescendant');
 }
 function render() {
- options=Felaris.suggestions(input.value,state,historyEntries);
+ options=Veluno.suggestions(input.value,state,historyEntries);
  results.replaceChildren();
  options.forEach((option,index)=>{
   const row=document.createElement('div'); row.id='new-tab-option-'+index; row.className='option'; row.setAttribute('role','option');

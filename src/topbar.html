@@ -2,13 +2,15 @@
 <html><head><meta charset="UTF-8"><style>
 :root { color-scheme:dark; font-family:"Segoe UI",system-ui,sans-serif; }
 html,body { margin:0; height:100%; overflow:hidden; background:#101011; user-select:none; }
-#bar { position:absolute; top:0; left:0; height:3px; width:0; opacity:0; background:#dedee3; border-radius:0 2px 2px 0; z-index:1; }
+#bar { position:absolute; top:0; left:0; height:3px; width:100%; transform:scaleX(0); transform-origin:left; opacity:0; background:#dedee3; border-radius:0 2px 2px 0; z-index:1; }
 .chrome { position:absolute; bottom:0; left:0; right:0; height:34px; display:flex; background:#101011; border-bottom:1px solid #333338; visibility:hidden; transition:visibility 0s linear 280ms; }
 body.open .chrome { visibility:visible; transition:none; }
 #drag { flex:1; min-width:0; display:flex; align-items:center; gap:8px; padding:0 12px; overflow:hidden; }
 .chrome button { width:46px; border:0; background:none; color:#f5f5f7; display:grid; place-items:center; cursor:default; }
 .chrome button:hover { background:#252528; } #close:hover { background:#c42b1c; }
 svg { width:10px; height:10px; fill:none; stroke:currentColor; stroke-width:1; }
+button { transition:background-color 160ms cubic-bezier(.2,0,0,1),color 160ms cubic-bezier(.2,0,0,1); }
+@media(prefers-reduced-motion:reduce) { button { transition-duration:80ms; } }
 </style></head><body><div id="bar"></div>
 <div class="chrome"><div id="drag"></div>
 <button id="min" aria-label="Minimize"><svg viewBox="0 0 10 10"><path d="M0 5.5h10"/></svg></button>
@@ -17,10 +19,26 @@ svg { width:10px; height:10px; fill:none; stroke:currentColor; stroke-width:1; }
 <script>
 const send=(action,payload={})=>window.ipc.postMessage(JSON.stringify({action,...payload}));
 const bar=document.getElementById('bar');
-window.setLoading=on=>{
- if(on){ bar.style.transition='none'; bar.style.opacity=1; bar.style.width='0'; bar.offsetWidth; bar.style.transition='width 12s cubic-bezier(.1,.6,.2,1)'; bar.style.width='85%'; }
- else { bar.style.transition='width 160ms ease-out,opacity 320ms ease 160ms'; bar.style.width='100%'; bar.style.opacity=0; }
-};
+let loadingNow=false;
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+function animateLoading(on) {
+ if(on===loadingNow) return;
+ loadingNow=on;
+ const style=getComputedStyle(bar);
+ const from={transform:style.transform,opacity:style.opacity};
+ bar.getAnimations().forEach(animation=>animation.cancel());
+ bar.style.opacity=on?1:0;
+ bar.style.transform=on?'scaleX(.72)':'scaleX(0)';
+ if(reducedMotion.matches) return;
+ if(on) bar.animate([{transform:'scaleX(.03)',opacity:1},{transform:'scaleX(.85)',opacity:1}],{duration:12000,easing:'cubic-bezier(.1,.6,.2,1)',fill:'forwards',id:'loading-progress'});
+ else bar.animate([from,{transform:'scaleX(1)',opacity:1,offset:.35},{transform:'scaleX(1)',opacity:0}],{duration:420,easing:'cubic-bezier(.2,0,0,1)',id:'loading-progress'});
+}
+reducedMotion.addEventListener('change',()=>{
+ bar.getAnimations().forEach(animation=>animation.cancel());
+ bar.style.transform=loadingNow?'scaleX(.72)':'scaleX(0)';
+ bar.style.opacity=loadingNow?1:0;
+});
+window.setLoading=animateLoading;
 let leaveTimer;
 document.documentElement.addEventListener('mouseenter',()=>{
  clearTimeout(leaveTimer);

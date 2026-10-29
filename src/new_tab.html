@@ -28,8 +28,8 @@ kbd { font:11px "Segoe UI",system-ui,sans-serif; color:#dedee3; border:1px solid
 .sr-only { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 [hidden] { display:none!important; }
 @media(max-width:500px) { body { padding:40px 12px 12px; } form { padding:12px; gap:10px; } input { font-size:15px; } }
-.close,.option { transition:background-color 120ms ease,color 120ms ease; }
-.close:active { transform:scale(.94); }
+.close,.option { transition:background-color 160ms cubic-bezier(.2,0,0,1),color 160ms cubic-bezier(.2,0,0,1),transform 180ms cubic-bezier(.16,1,.3,1); }
+.close:active { transform:scale(.96); transition-duration:70ms; }
 @media(prefers-reduced-motion:reduce) { .close,.option { transition-duration:80ms; } .close:active { transform:none; } }
 </style>
 </head>
@@ -125,13 +125,16 @@ function submit() {
  finish(option.id?'switch_tab':'submit_new_tab',option.id?{id:option.id}:{url:option.url});
 }
 window.openNewTab=(browserState,recentHistory=browserState?.history||historyEntries)=>{
+ const interrupted=panel.getAnimations().some(animation=>animation.id.startsWith('palette-')&&animation.playState!=='finished');
+ const from=interrupted?{opacity:getComputedStyle(panel).opacity,transform:getComputedStyle(panel).transform}:{opacity:.6,transform:'translateY(-12px) scale(.985)'};
+ const scrimOpacity=interrupted?getComputedStyle(scrim).opacity:0;
  document.getAnimations().forEach(animation=>animation.cancel());
  state=browserState||{tabs:[],workspaces:[],shortcuts:[]};
  historyEntries=Array.isArray(recentHistory)?recentHistory:[];
  input.value=''; input.readOnly=false; submitting=false; composing=false; render(); input.focus();
  if(!reducedMotion.matches) {
-  scrim.animate([{opacity:0},{opacity:1}],{duration:180,id:'palette-scrim'});
-  panel.animate([{opacity:.6,transform:'translateY(-10px) scale(.985)'},{opacity:1,transform:'translateY(0) scale(1)'}],{duration:220,easing:'cubic-bezier(.16,1,.3,1)',id:'palette-open'});
+  scrim.animate([{opacity:scrimOpacity},{opacity:1}],{duration:220,easing:'cubic-bezier(.2,0,0,1)',id:'palette-scrim'});
+  panel.animate([from,{opacity:1,transform:'translateY(0) scale(1)'}],{duration:280,easing:'cubic-bezier(.16,1,.3,1)',id:'palette-open'});
  }
 };
 input.addEventListener('compositionstart',()=>{composing=true;});

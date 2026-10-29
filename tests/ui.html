@@ -112,6 +112,9 @@ window.runChecks=async()=>{
  check('status and undo messages do not overlap',statusRect.bottom<=toastRect.top||toastRect.bottom<=statusRect.top);
  d.getElementById('toast-undo').click();check('undo IPC',messages.at(-1).action==='restore_closed_tab');
  d.getElementById('dismiss-status').click();
+ w.updateState({...structuredClone(fixtureState),update_status:'Checking for updates…'});
+ w.updateState({...structuredClone(fixtureState),update_status:'Veluno is up to date (v0.0.0).'});
+ check('up-to-date result expires instead of staying pinned',d.getElementById('activity').hidden&&!d.getElementById('toast').hidden&&d.getElementById('toast-undo').hidden);
  w.updateState({...structuredClone(fixtureState),tabs:[...fixtureState.tabs,{id:6,workspace_id:1,title:'<img src=x onerror=alert(1)>',url:'https://example.net'}]});
  check('untrusted titles stay text',!d.querySelector('.tab-title img'));
  check('tab motion respects reduced motion',w.matchMedia('(prefers-reduced-motion: reduce)').matches?!d.getAnimations().some(animation=>animation.id==='tab-layout'):d.getAnimations().some(animation=>animation.id==='tab-layout'));

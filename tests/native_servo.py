@@ -268,7 +268,7 @@ def launch_on_desktop(arguments, env, log):
 
 
 class App:
-    def __init__(self, executable, url, profile=None):
+    def __init__(self, executable, url, profile=None, engine='servo'):
         self.work = REPO / 'target' / 'native-servo' / str(uuid.uuid4())
         self.work.mkdir(parents=True)
         with socket.socket() as s:
@@ -282,7 +282,7 @@ class App:
                    FELARIS_SMOKE_BROWSER_ARGUMENTS=f'--remote-debugging-port={self.port} --remote-debugging-address=127.0.0.1')
         self.log_path = self.work / 'app.log'
         self.log = self.log_path.open('w', encoding='utf-8')
-        self.pid = launch_on_desktop([str(executable), '--engine=servo', url], env, self.log)
+        self.pid = launch_on_desktop([str(executable), f'--engine={engine}', url], env, self.log)
         try:
             self.eval('true')
         except Exception:
@@ -354,6 +354,14 @@ def run(executable, only):
         return not only or name in only
 
     try:
+        for engine in ('webview2', 'servo'):
+            if scenario(f'startup-{engine}'):
+                app = App(executable, origin, engine=engine)
+                try:
+                    results.append(check(f'{engine} private-desktop startup responds', app.eval('true') == 'true'))
+                    results.append(check(f'{engine} private-desktop startup exits cleanly', app.exit_cleanly()))
+                finally:
+                    app.close()
         if scenario('download'):
             target = downloads / f'{RUN_PREFIX}-naïve.txt'
             target.unlink(missing_ok=True)
@@ -603,7 +611,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--exe', default=str(REPO / 'target/debug/felaris.exe'))
     parser.add_argument('--only', nargs='*', default=[],
-                        choices=['download', 'cancel', 'stalled', 'memory', 'color', 'cache', 'popup', 'permission', 'privacy', 'private-session', 'crash'])
+                        choices=['startup-webview2', 'startup-servo', 'download', 'cancel', 'stalled', 'memory', 'color', 'cache', 'popup', 'permission', 'privacy', 'private-session', 'crash'])
     arguments = parser.parse_args()
     DESKTOP_NAME = 'FelarisTests-' + str(uuid.uuid4())
     DESKTOP = user32.CreateDesktopW(DESKTOP_NAME, None, None, 0, 0x1FF, None)

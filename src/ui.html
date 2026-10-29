@@ -88,12 +88,13 @@ button:active:not(:disabled),summary:active { transform:scale(.97); transition-d
 .site-panel { position:absolute; top:48px; left:0; width:100%; max-height:calc(100vh - 110px); overflow:auto; padding:12px; background:var(--surface); border:1px solid var(--line); border-radius:10px; z-index:25; font-size:12px; }
 .site-heading { display:flex; align-items:center; justify-content:space-between; } .site-panel p { color:var(--muted); line-height:1.5; margin:10px 0; } #site-origin { color:var(--text); overflow-wrap:anywhere; user-select:text; }
 .site-panel>button,.site-actions button { padding:9px 8px; background:var(--active); text-align:left; width:100%; } .site-actions { display:flex; gap:8px; }
-.feedback { flex-shrink:0; display:flex; flex-direction:column; gap:0; border-radius:8px; background:var(--surface); }
+.feedback { flex-shrink:0; display:flex; flex-direction:column; gap:0; border:1px solid var(--line); border-radius:10px; background:var(--surface); overflow:hidden; }
 .feedback:has(>.activity[hidden]):has(>.toast[hidden]) { display:none; }
-.feedback .activity,.feedback .toast { border:0; border-radius:0; background:none; box-shadow:none; padding:5px 8px; font-size:12px; min-height:32px; }
-.feedback .activity { padding-right:30px; max-height:min(120px,25vh); }
+.feedback .activity,.feedback .toast { border:0; border-radius:0; background:none; box-shadow:none; padding:4px 4px 4px 12px; font-size:12px; min-height:32px; }
+.feedback .activity:not([hidden])+.toast { border-top:1px solid var(--line); }
+.feedback .activity { padding-right:32px; max-height:min(120px,25vh); } .feedback .activity .icon { top:4px; right:4px; }
 #activity-message { display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; width:100%; padding:3px 0; text-align:left; line-height:1.5; overflow-wrap:anywhere; }
-#activity-message[aria-expanded="true"] { display:block; } .feedback .toast { display:flex; align-items:center; gap:8px; } #toast-message { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .feedback .toast button { display:inline; margin:0; padding:3px 0; flex-shrink:0; }
+#activity-message[aria-expanded="true"] { display:block; } .feedback .toast { display:flex; align-items:center; gap:8px; } #toast-message { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .feedback .toast button { display:inline; margin:0; padding:3px 10px; flex-shrink:0; border-radius:6px; background:var(--active); color:var(--text); font-size:11px; font-weight:600; } .feedback .toast button:hover { background:#3a3a40; }
 </style>
 </head>
 <body>
@@ -146,7 +147,7 @@ button:active:not(:disabled),summary:active { transform:scale(.97); transition-d
 </div>
 <div class="feedback">
 <div class="activity" id="activity" role="status" aria-live="polite" hidden><button id="activity-message" aria-expanded="false" title="Expand message"></button><button class="icon" id="dismiss-status" aria-label="Dismiss message" title="Dismiss message"><svg><use href="#close"/></svg></button></div>
-<div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-message"></span><button id="toast-undo" hidden>Reopen tab</button></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-message"></span><button id="toast-undo" title="Reopen closed tab (Ctrl+Shift+T)" hidden>Undo</button></div>
 </div>
 <footer class="footer">
 <section class="downloads-panel" id="downloads-panel" aria-label="Downloads" hidden><div class="downloads-heading"><strong>Downloads</strong><button class="icon" id="close-downloads" aria-label="Close downloads"><svg><use href="#close"/></svg></button></div><p id="downloads-empty">No downloads this session.</p><div id="download-items"></div></section>
@@ -374,7 +375,7 @@ window.updateState = state => {
   $('update-banner').hidden=true;
  }
  if(state.update_status && previous.update_status!==state.update_status) {
-  if(/^(Download complete|Download cancelled|Site data cleared)/.test(state.update_status)) showToast(state.update_status);
+  if(/^(Download complete|Download cancelled|Site data cleared|Veluno is up to date)/.test(state.update_status)) { if($('activity-message').textContent===previous.update_status) $('activity').hidden=true; showToast(state.update_status); }
   else { $('activity-message').textContent=state.update_status; $('activity-message').setAttribute('aria-expanded','false'); $('activity').hidden=false; }
  }
 };

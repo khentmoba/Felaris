@@ -1,6 +1,13 @@
 use crate::{
-    desktop, extensions, history, instance::Instance, permission, profile, recovery,
-    session::SessionWriter, settings, start_page, state::BrowserState, ui, updater,
+    desktop,
+    engine::{self, Engine, PopupView, TabSpec, TabView},
+    extensions, history,
+    instance::Instance,
+    permission, profile, recovery,
+    session::SessionWriter,
+    settings, start_page,
+    state::BrowserState,
+    ui, updater,
 };
 use serde::Deserialize;
 use std::{
@@ -16,7 +23,7 @@ use tao::{
     event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy},
     window::{CursorIcon, Fullscreen, Icon, ResizeDirection, Window, WindowBuilder},
 };
-use wry::{NewWindowResponse, PageLoadEvent, Rect, WebContext, WebView, WebViewBuilder};
+use wry::{PageLoadEvent, Rect, WebContext, WebViewBuilder};
 
 /// Hidden tabs past this sleep even under the live-WebView budget, releasing their renderer.
 const IDLE_SLEEP: std::time::Duration = std::time::Duration::from_secs(30 * 60);
@@ -221,6 +228,9 @@ struct ContentCommand {
 
 #[derive(Debug)]
 pub enum UserEvent {
+    /// Sent by engines that need the event loop to run their work (Servo).
+    #[cfg_attr(not(feature = "servo"), allow(dead_code))]
+    EngineWake,
     Audio(usize, u64, bool, bool),
     SiteDataCleared(usize, u64, String, Result<(), String>),
     SiteFilesCleared(recovery::Page, Result<(), String>),
@@ -329,17 +339,52 @@ fn ease(progress: f64) -> f64 {
     1. - (1. - progress).powi(3)
 }
 
+/// The floating sign-in window. Its content view is created by the engine.
 #[derive(Clone)]
-struct PopupHost {
-    main: Rc<Window>,
-    window: Rc<Window>,
-    view: Rc<RefCell<Option<WebView>>>,
-    url: Rc<RefCell<String>>,
-    auth_seen: Rc<Cell<bool>>,
-    headless: bool,
+pub struct PopupHost {
+    pub main: Rc<Window>,
+    pub window: Rc<Window>,
+    pub view: Rc<RefCell<Option<Box<dyn PopupView>>>>,
+    pub url: Rc<RefCell<String>>,
+    pub auth_seen: Rc<Cell<bool>>,
+    pub headless: bool,
 }
 
-fn popup_bounds(window: &Window) -> (Rect, Rect) {
+impl PopupHost {
+    /// Sizes, places and shows the window for a new popup at `url`. The page's requested size
+    /// is clamped; without a position the window is centered over the main window.
+    pub fn present(
+        &self,
+        url: &str,
+        size: Option<LogicalSize<f64>>,
+        position: Option<LogicalPosition<f64>>,
+    ) {
+        let size = size
+            .map(|s| LogicalSize::new(s.width.clamp(380., 920.), s.height.clamp(440., 860.)))
+            .unwrap_or_else(|| LogicalSize::new(500., 660.));
+        self.window.set_inner_size(size);
+        if let Some(position) = position {
+            self.window.set_outer_position(position);
+        } else if let Ok(outer) = self.main.outer_position() {
+            let scale = self.main.scale_factor();
+            let main_pos = outer.to_logical::<f64>(scale);
+            let main_size = self.main.inner_size().to_logical::<f64>(scale);
+            let x = main_pos.x + ((main_size.width - size.width) * 0.5).max(24.);
+            let y = main_pos.y + ((main_size.height - size.height) * 0.5).max(32.);
+            self.window.set_outer_position(LogicalPosition::new(x, y));
+        }
+        self.window.set_title("Sign in — Felaris");
+        if !self.headless {
+            self.window.set_minimized(false);
+            self.window.set_visible(true);
+            self.window.set_focus();
+        }
+        *self.url.borrow_mut() = url.to_string();
+        self.auth_seen.set(false);
+    }
+}
+
+pub fn popup_bounds(window: &Window) -> (Rect, Rect) {
     let size = window.inner_size().to_logical::<f64>(window.scale_factor());
     let bar = ui::POPUP_BAR_HEIGHT;
     (
@@ -402,94 +447,7 @@ fn border_resize_direction(
     })
 }
 
-#[cfg(windows)]
-fn open_popup(
-    host: &PopupHost,
-    url: &str,
-    features: &wry::NewWindowFeatures,
-    private: bool,
-    proxy: &EventLoopProxy<UserEvent>,
-) -> Option<NewWindowResponse> {
-    use wry::{WebViewBuilderExtWindows, WebViewExtWindows};
-    let size = features
-        .size
-        .map(|s| LogicalSize::new(s.width.clamp(380., 920.), s.height.clamp(440., 860.)))
-        .unwrap_or_else(|| LogicalSize::new(500., 660.));
-    host.window.set_inner_size(size);
-    if let Some(pos) = features.position {
-        host.window.set_outer_position(pos);
-    } else if let Ok(outer) = host.main.outer_position() {
-        let scale = host.main.scale_factor();
-        let main_pos = outer.to_logical::<f64>(scale);
-        let main_size = host.main.inner_size().to_logical::<f64>(scale);
-        let x = main_pos.x + ((main_size.width - size.width) * 0.5).max(24.);
-        let y = main_pos.y + ((main_size.height - size.height) * 0.5).max(32.);
-        host.window.set_outer_position(LogicalPosition::new(x, y));
-    }
-    host.window.set_title("Sign in — Felaris");
-    if !host.headless {
-        host.window.set_minimized(false);
-        host.window.set_visible(true);
-        host.window.set_focus();
-    }
-    *host.url.borrow_mut() = url.to_string();
-    host.auth_seen.set(false);
-    let title_proxy = proxy.clone();
-    let nav_proxy = proxy.clone();
-    let tab_proxy = proxy.clone();
-    let (_, content_rect) = popup_bounds(&host.window);
-    let mut builder = WebViewBuilder::new()
-        .with_environment(features.opener.environment.clone())
-        .with_incognito(private)
-        .with_bounds(content_rect)
-        .with_focused(!host.headless)
-        .with_clipboard(true)
-        .with_document_title_changed_handler(move |text| {
-            let _ = title_proxy.send_event(UserEvent::PopupTitle(text));
-        })
-        .with_navigation_handler(move |target| {
-            let allowed = profile::allowed_url(&target)
-                || target == "about:blank"
-                || target.starts_with("data:text/html;");
-            if !allowed {
-                let _ = nav_proxy.send_event(UserEvent::Status(
-                    "This link uses an unsupported application protocol.".into(),
-                ));
-            }
-            allowed
-        })
-        .with_new_window_req_handler(move |target, _| {
-            if profile::allowed_url(&target) {
-                let _ =
-                    tab_proxy.send_event(UserEvent::Command(Command::NewTab { url: Some(target) }));
-            }
-            NewWindowResponse::Deny
-        });
-    if host.headless
-        && let Ok(arguments) = std::env::var("FELARIS_SMOKE_CONTENT_BROWSER_ARGUMENTS")
-    {
-        builder = builder.with_additional_browser_args(arguments);
-    }
-    let view = builder.build_as_child(&*host.window).ok()?;
-    let _ = desktop::attach_popup(&view, proxy.clone());
-    let raw = view.webview();
-    *host.view.borrow_mut() = Some(view);
-    let _ = proxy.send_event(UserEvent::PopupState(url.to_string(), true));
-    Some(NewWindowResponse::Create { webview: raw })
-}
-
-#[cfg(not(windows))]
-fn open_popup(
-    _: &PopupHost,
-    _: &str,
-    _: &wry::NewWindowFeatures,
-    _: bool,
-    _: &EventLoopProxy<UserEvent>,
-) -> Option<NewWindowResponse> {
-    None
-}
-
-fn load(view: &WebView, state: &BrowserState, url: &str) -> wry::Result<()> {
+fn load(view: &dyn TabView, state: &BrowserState, url: &str) -> Result<(), String> {
     if url == "felaris://newtab" {
         view.load_html(&start_page::get_start_page_html(state))
     } else if url == "felaris://blank" {
@@ -499,179 +457,119 @@ fn load(view: &WebView, state: &BrowserState, url: &str) -> wry::Result<()> {
     } else if url == "felaris://history" {
         view.load_html(&ui::get_history_html(&state.bookmarks, &state.shortcuts))
     } else {
-        view.load_url(url)
+        view.load_url(url, false)
     }
+}
+
+/// Turns a tab's IPC message into an app event. Internal pages (`local`) may change settings;
+/// web pages may only send shortcuts, and only with the tab's current token.
+pub fn content_message(
+    id: usize,
+    generation: u64,
+    token: &str,
+    body: &str,
+    local: bool,
+) -> Option<UserEvent> {
+    let message = serde_json::from_str::<ContentCommand>(body).ok()?;
+    let trusted = message.shortcut_token.as_deref() == Some(token);
+    if trusted
+        && let Command::ResourceLoadFailed {
+            document_url,
+            resource_url,
+        } = message.command
+    {
+        return Some(UserEvent::ResourceLoadFailed(
+            id,
+            generation,
+            document_url,
+            resource_url,
+        ));
+    }
+    let allowed = (local
+        && matches!(
+            message.command,
+            Command::Navigate { .. }
+                | Command::Retry
+                | Command::SetSetting { .. }
+                | Command::DeleteHistory { .. }
+                | Command::ClearHistory
+                | Command::InstallAdBlocker
+                | Command::OpenExtensionsFolder
+                | Command::DefaultBrowser
+                | Command::CheckUpdates
+                | Command::ClearBrowsingData { .. }
+                | Command::ImportBookmarks { .. }
+                | Command::ToggleBookmark { url: Some(_) }
+        ))
+        || (trusted
+            && matches!(
+                message.command,
+                Command::Back
+                    | Command::Forward
+                    | Command::Reload
+                    | Command::ReloadFresh
+                    | Command::Stop
+                    | Command::NewTab { .. }
+                    | Command::CloseActiveTab
+                    | Command::FocusAddress
+                    | Command::ToggleSidebar
+                    | Command::RestoreClosedTab
+                    | Command::SleepInactiveTabs
+                    | Command::CycleTab { .. }
+                    | Command::SwitchProfile { .. }
+                    | Command::OpenDownloads
+                    | Command::OpenHistory
+                    | Command::Zoom { .. }
+                    | Command::ToggleFullscreen
+                    | Command::ToggleBookmark { url: None }
+                    | Command::NewPrivateTab
+                    | Command::ToggleReader
+                    | Command::OpenSettings { .. }
+            ));
+    allowed.then_some(UserEvent::Command(message.command))
 }
 
 fn content(
     window: &Window,
-    context: &mut WebContext,
+    engine: &mut dyn Engine,
     state: &mut BrowserState,
     id: usize,
-    proxy: &EventLoopProxy<UserEvent>,
-    popup_host: &PopupHost,
     fresh: bool,
-) -> wry::Result<WebView> {
+) -> Result<Box<dyn TabView>, String> {
     let generation = std::collections::hash_map::RandomState::new().hash_one(id);
     let private = state.is_private(id);
+    let bounds = bounds(window, state, 0., 0.).1;
     let tab = state
         .tabs
         .iter_mut()
         .find(|tab| tab.id == id)
-        .ok_or_else(|| std::io::Error::other("This tab no longer exists."))?;
+        .ok_or("This tab no longer exists.")?;
     let url = tab.url.clone();
     let failed = tab.error.is_some();
+    let muted = tab.is_muted;
     tab.generation = generation;
     tab.has_capture = false;
     let token = generation.to_string();
     let script = ui::script().replace("__SHORTCUT_TOKEN__", &token);
-    let ipc = proxy.clone();
-    let title = proxy.clone();
-    let popup = proxy.clone();
-    let popup_host = popup_host.clone();
-    let navigation = proxy.clone();
-    let mut builder = WebViewBuilder::new_with_web_context(context)
-        .with_bounds(bounds(window, state, 0., 0.).1)
-        .with_visible(false)
-        .with_focused(false)
-        .with_incognito(private)
-        .with_initialization_script(&script)
-        .with_initialization_script(include_str!("sleep.js"))
-        .with_document_title_changed_handler(move |text| {
-            let _ = title.send_event(UserEvent::Title(id, generation, text));
-        })
-        .with_navigation_handler(move |url| {
-            let allowed = profile::allowed_url(&url)
-                || url == "about:blank"
-                || url.starts_with("data:text/html;");
-            if !allowed {
-                let _ = navigation.send_event(UserEvent::Status(
-                    "This link uses an unsupported application protocol.".into(),
-                ));
-            }
-            allowed
-        })
-        .with_new_window_req_handler(move |url, features| {
-            let is_popup = features.size.is_some()
-                || features.position.is_some()
-                || profile::is_auth_url(&url);
-            if is_popup
-                && (url == "about:blank" || profile::allowed_url(&url))
-                && let Some(response) = open_popup(&popup_host, &url, &features, private, &popup)
-            {
-                return response;
-            }
-            if profile::allowed_url(&url) {
-                let _ = popup.send_event(UserEvent::Command(Command::NewTab { url: Some(url) }));
-            }
-            NewWindowResponse::Deny
-        })
-        .with_ipc_handler(move |request| {
-            if let Ok(message) = serde_json::from_str::<ContentCommand>(request.body()) {
-                let local = request
-                    .uri()
-                    .scheme_str()
-                    .is_none_or(|scheme| scheme == "data")
-                    || request.uri() == "about:blank";
-                let trusted = message.shortcut_token.as_deref() == Some(&token);
-                if trusted
-                    && let Command::ResourceLoadFailed {
-                        document_url,
-                        resource_url,
-                    } = &message.command
-                {
-                    let _ = ipc.send_event(UserEvent::ResourceLoadFailed(
-                        id,
-                        generation,
-                        document_url.clone(),
-                        resource_url.clone(),
-                    ));
-                    return;
-                }
-                if (local
-                    && matches!(
-                        message.command,
-                        Command::Navigate { .. }
-                            | Command::Retry
-                            | Command::SetSetting { .. }
-                            | Command::DeleteHistory { .. }
-                            | Command::ClearHistory
-                            | Command::InstallAdBlocker
-                            | Command::OpenExtensionsFolder
-                            | Command::DefaultBrowser
-                            | Command::CheckUpdates
-                            | Command::ClearBrowsingData { .. }
-                            | Command::ImportBookmarks { .. }
-                            | Command::ToggleBookmark { url: Some(_) }
-                    ))
-                    || (trusted
-                        && matches!(
-                            message.command,
-                            Command::Back
-                                | Command::Forward
-                                | Command::Reload
-                                | Command::ReloadFresh
-                                | Command::Stop
-                                | Command::NewTab { .. }
-                                | Command::CloseActiveTab
-                                | Command::FocusAddress
-                                | Command::ToggleSidebar
-                                | Command::RestoreClosedTab
-                                | Command::SleepInactiveTabs
-                                | Command::CycleTab { .. }
-                                | Command::SwitchProfile { .. }
-                                | Command::OpenDownloads
-                                | Command::OpenHistory
-                                | Command::Zoom { .. }
-                                | Command::ToggleFullscreen
-                                | Command::ToggleBookmark { url: None }
-                                | Command::NewPrivateTab
-                                | Command::ToggleReader
-                                | Command::OpenSettings { .. }
-                        ))
-                {
-                    let _ = ipc.send_event(UserEvent::Command(message.command));
-                }
-            }
-        });
-    if std::env::var_os("FELARIS_SMOKE_TEST").is_some() {
-        #[cfg(windows)]
-        if let Ok(arguments) = std::env::var("FELARIS_SMOKE_CONTENT_BROWSER_ARGUMENTS") {
-            use wry::WebViewBuilderExtWindows;
-            builder = builder.with_additional_browser_args(arguments);
-        }
-        builder = builder.with_download_started_handler(|_, path| {
-            *path = profile::directory().join("smoke-download.txt");
-            true
-        });
-    }
-    #[cfg(windows)]
-    if extensions::enabled_at_startup() {
-        use wry::WebViewBuilderExtWindows;
-        let _ = std::fs::create_dir_all(extensions::directory());
-        builder = builder
-            .with_browser_extensions_enabled(true)
-            .with_extensions_path(extensions::directory());
-    }
-    let view = builder.build_as_child(window)?;
-    desktop::attach(&view, id, generation, proxy.clone())?;
-    // Older WebView2 runtimes lack some of these settings; pages still work without them.
-    let _ = desktop::apply_privacy(&view, &settings::get());
-    if let Some(tab) = state.tabs.iter().find(|tab| tab.id == id) {
-        let _ = desktop::mute(&view, tab.is_muted);
-    }
+    let view = engine.create_tab(
+        window,
+        TabSpec {
+            id,
+            generation,
+            private,
+            muted,
+            bounds,
+            script,
+            token,
+        },
+    )?;
     if failed {
         view.load_html(include_str!("error.html"))?;
     } else {
         if fresh && (url.starts_with("https://") || url.starts_with("http://")) {
-            let mut headers = wry::http::HeaderMap::new();
-            headers.insert(
-                wry::http::header::CACHE_CONTROL,
-                wry::http::HeaderValue::from_static("no-cache"),
-            );
-            view.load_url_with_headers(&url, headers)?;
+            view.load_url(&url, true)?;
         } else {
-            load(&view, state, &url)?;
+            load(&*view, state, &url)?;
         }
         if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id) {
             tab.is_loading = true;
@@ -683,7 +581,7 @@ fn content(
 /// Applies a page event from one tab's WebView, ignoring events from a replaced WebView.
 fn tab_event(
     state: &mut BrowserState,
-    views: &mut HashMap<usize, WebView>,
+    views: &mut HashMap<usize, Box<dyn TabView>>,
     prompt: &mut permission::Prompt,
     event: UserEvent,
 ) {
@@ -830,6 +728,50 @@ fn may_exit(state: &BrowserState, session: &SessionWriter) -> bool {
     true
 }
 
+/// WebView2 unless this build includes Servo and Felaris was started with `--engine=servo`.
+fn start_engine(
+    args: &[String],
+    event_loop: &tao::event_loop::EventLoopWindowTarget<UserEvent>,
+    window: &Window,
+    directory: &std::path::Path,
+    popup_host: &PopupHost,
+    proxy: &EventLoopProxy<UserEvent>,
+) -> Box<dyn Engine> {
+    if args.iter().any(|arg| arg == "--engine=servo") {
+        #[cfg(feature = "servo")]
+        match engine::servo::ServoEngine::new(
+            event_loop,
+            window,
+            directory,
+            popup_host.clone(),
+            proxy.clone(),
+        ) {
+            Ok(engine) => return Box::new(engine),
+            Err(error) => desktop::message(
+                "Servo engine unavailable",
+                &format!(
+                    "{error}
+
+Felaris will use WebView2."
+                ),
+                false,
+            ),
+        };
+        #[cfg(not(feature = "servo"))]
+        desktop::message(
+            "Servo engine unavailable",
+            "This build of Felaris does not include the Servo engine. Felaris will use WebView2.",
+            false,
+        );
+    }
+    let _ = (event_loop, window);
+    Box::new(engine::webview2::WebView2::new(
+        directory,
+        popup_host.clone(),
+        proxy.clone(),
+    ))
+}
+
 fn start_ad_blocker_install(proxy: &EventLoopProxy<UserEvent>) {
     let proxy = proxy.clone();
     extensions::install_in_background(move |result| {
@@ -935,7 +877,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     for url in urls {
         state.add_tab(Some(url), false);
     }
-    let mut context = WebContext::new(Some(directory.join("WebView2")));
+    let mut engine = start_engine(args, &event_loop, &window, &directory, &popup_host, &proxy);
     let mut chrome_context = WebContext::new(Some(directory.join("Chrome")));
     let ui_proxy = proxy.clone();
     let ready = proxy.clone();
@@ -1074,19 +1016,18 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     };
     let mut last_frame = std::time::Instant::now();
     let mut rounded: HashMap<usize, (u32, u32, i32)> = HashMap::new();
-    let mut views = HashMap::new();
+    let mut views: HashMap<usize, Box<dyn TabView>> = HashMap::new();
     let initial_id = state.active_tab_id;
     views.insert(
         initial_id,
         content(
             &window,
-            &mut context,
+            &mut *engine,
             &mut state,
             initial_id,
-            &proxy,
-            &popup_host,
             refresh_after_update,
-        )?,
+        )
+        .map_err(std::io::Error::other)?,
     );
     let mut palette_open = false;
     let mut palette_shown = true;
@@ -1101,6 +1042,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
     let mut downloads: HashMap<usize, usize> = HashMap::new();
     let mut download_only = HashSet::new();
     let mut last_download_host = None;
+    let mut private_open = false;
     let mut check_busy = false;
     let mut zooms: HashMap<usize, u32> = HashMap::new();
     let mut smoke = crate::smoke::Smoke::new();
@@ -1146,6 +1088,9 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         *flow = ControlFlow::Wait;
         let tick = matches!(event, Event::UserEvent(UserEvent::Frame));
         match event {
+            // Engines see window events first; they only consume their own surface's.
+            Event::UserEvent(UserEvent::EngineWake) => { engine.wake(); return; },
+            Event::WindowEvent { window_id, ref event, .. } if engine.window_event(window_id, event) => return,
             Event::WindowEvent { window_id, event: WindowEvent::Focused(true), .. } if window_id == window.id() => {
                 state.is_default_browser = desktop::is_default_browser();
                 for tab in state.tabs.iter().filter(|tab| tab.url == "felaris://settings") {
@@ -1249,7 +1194,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         match result {
                             Ok(()) => {
                                 if let Some(view) = views.get(&page.id) {
-                                    if let Err(error) = desktop::reload_fresh(view, page, proxy.clone()) {
+                                    if let Err(error) = view.reload_fresh(page, proxy.clone()) {
                                         state.update_status = Some(format!("Could not reload fresh site files: {error}"));
                                     } else {
                                         state.update_status = Some("Site files refreshed. Your sign-in and saved site data were kept.".into());
@@ -1282,10 +1227,10 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             let (id, generation, last_active, url) = (tab.id, tab.generation, tab.last_active, tab.url.clone());
                             let checked = proxy.clone();
                             if let Some(view) = views.get(&id) {
-                                if !desktop::quiet(view) { sleep_pending.remove(&(id, generation)); continue; }
-                                if view.evaluate_script_with_callback("window.__felarisCanSleep?.() === true", move |result| {
+                                if !view.is_quiet() { sleep_pending.remove(&(id, generation)); continue; }
+                                if view.evaluate_script_with_callback("window.__felarisCanSleep?.() === true", Box::new(move |result| {
                                     let _ = checked.send_event(UserEvent::SleepChecked(id, generation, last_active, url.clone(), result == "true"));
-                                }).is_err() { sleep_pending.remove(&(id, generation)); }
+                                })).is_err() { sleep_pending.remove(&(id, generation)); }
                             }
                         }
                         if !downloads_changed { return; }
@@ -1298,7 +1243,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         sleep_pending.remove(&(id, generation));
                         if safe && (views.len() > 12 || hidden_at.get(&id).is_some_and(|at| at.elapsed() >= IDLE_SLEEP)) && id != state.active_tab_id
                             && downloads.get(&id).copied().unwrap_or(0) == 0
-                            && views.get(&id).is_some_and(desktop::quiet)
+                            && views.get(&id).is_some_and(|view| view.is_quiet())
                             && let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id
                                 && tab.generation == generation && tab.last_active == last_active && tab.url == url
                                 && !tab.is_pinned && !tab.has_capture && !tab.is_loading && !tab.is_sleeping) {
@@ -1353,7 +1298,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                         popup_host.window.set_visible(false);
                         if !headless { window.set_focus(); }
                     },
-                    UserEvent::Frame => {},
+                    UserEvent::Frame | UserEvent::EngineWake => {},
                     UserEvent::PaletteReady => { palette_needs_open = palette_open; },
                     UserEvent::External(urls) => {
                         if !headless { window.set_minimized(false); window.set_focus(); }
@@ -1365,9 +1310,9 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             Command::Navigate { url } => if let Some(url) = profile::normalize_url(&url) {
                                 state.update_active_tab(url.clone(), None);
                                 if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == state.active_tab_id) { tab.error = None; tab.pending_url = Some(url.clone()); tab.is_loading = true; }
-                                if let Some(view) = views.get(&state.active_tab_id) { let _ = load(view, &state, &url); if !headless { let _ = view.focus(); } }
+                                if let Some(view) = views.get(&state.active_tab_id) { let _ = load(&**view, &state, &url); if !headless { let _ = view.focus(); } }
                             },
-                            Command::Back | Command::Forward => if let Some(view) = views.get(&state.active_tab_id) { desktop::navigate(view, matches!(command, Command::Back)); },
+                            Command::Back | Command::Forward => if let Some(view) = views.get(&state.active_tab_id) { view.navigate(matches!(command, Command::Back)); },
                             Command::Reload | Command::Retry => if let Some(tab) = state.active_tab() {
                                 if recovery.needs_reload(tab) && !tab.is_loading {
                                     let _ = proxy.send_event(UserEvent::Command(Command::ReloadFresh));
@@ -1377,7 +1322,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                 let crashed = tab.error.is_some() && views.get(&id).and_then(|view| view.url().ok()).is_some_and(|url| url == "about:blank" || url.starts_with("data:"));
                                 if crashed { views.remove(&id); }
                                 if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id) { tab.error = None; tab.pending_url = Some(url.clone()); tab.is_loading = true; }
-                                if let Some(view) = views.get(&id) { let _ = if profile::is_internal(&url) { load(view, &state, &url) } else { view.reload() }; }
+                                if let Some(view) = views.get(&id) { let _ = if profile::is_internal(&url) { load(&**view, &state, &url) } else { view.reload() }; }
                             },
                             Command::ReloadFresh => if let Some(tab) = state.active_tab() {
                                 if profile::web_origin(&tab.url).is_none() || tab.error.is_some() {
@@ -1385,7 +1330,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                 } else if let Some(view) = views.get(&tab.id)
                                     && let Some(page) = recovery.begin(tab) {
                                         state.update_status = Some("Refreshing this site's cached files. Your sign-in and saved site data are kept.".into());
-                                        if let Err(error) = desktop::clear_site_files(view, page.clone(), proxy.clone()) {
+                                        if let Err(error) = view.clear_site_files(page.clone(), proxy.clone()) {
                                             recovery.finish(&page, state.active_tab());
                                             state.update_status = Some(format!("Could not refresh site files: {error}"));
                                         }
@@ -1471,7 +1416,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             Command::ToggleMute { id } => {
                                 if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id) {
                                     let muted = !tab.is_muted;
-                                    match views.get(&id).map_or(Ok(()), |view| desktop::mute(view, muted)) {
+                                    match views.get(&id).map_or(Ok(()), |view| view.set_muted(muted)) {
                                         Ok(()) => tab.is_muted = muted,
                                         Err(error) => state.update_status = Some(format!("Could not change tab audio: {error}")),
                                     }
@@ -1481,7 +1426,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                 if let Some(tab) = state.active_tab().filter(|tab| tab.id == id
                                     && profile::web_origin(tab.pending_url.as_ref().unwrap_or(&tab.url)).as_deref() == Some(&origin))
                                     && let Some(view) = views.get(&id)
-                                    && let Err(error) = desktop::clear_site_data(view, id, tab.generation, &origin, proxy.clone()) {
+                                    && let Err(error) = view.clear_site_data(id, tab.generation, &origin, proxy.clone()) {
                                         state.update_status = Some(format!("Could not clear site data: {error}"));
                                     }
                             },
@@ -1500,7 +1445,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                 state.downloads_open = true;
                                 let id = downloads.iter().find(|(_, count)| **count > 0).map(|(id,_)| *id)
                                     .or(last_download_host.filter(|id| views.contains_key(id))).unwrap_or(state.active_tab_id);
-                                if let Some(view) = views.get(&id) && let Err(error) = desktop::downloads(view) { state.update_status = Some(error); }
+                                if let Some(view) = views.get(&id) && let Err(error) = view.open_downloads() { state.update_status = Some(error); }
                             },
                             Command::OpenSettings { section } => {
                                 let live = state.tabs.iter().find(|tab| tab.url == "felaris://settings").and_then(|tab| views.get(&tab.id));
@@ -1523,8 +1468,8 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                         let _ = palette.evaluate_script(&script);
                                         for view in views.values() { let _ = view.evaluate_script(&script); }
                                     } else if matches!(key.as_str(), "tracking_prevention" | "save_passwords" | "autofill") {
-                                        if let Some(error) = views.values().find_map(|view| desktop::apply_privacy(view, &current).err()) {
-                                            state.update_status = Some(format!("This setting needs a newer WebView2 Runtime: {error}"));
+                                        if let Some(error) = views.values().find_map(|view| view.apply_privacy(&current).err()) {
+                                            state.update_status = Some(format!("Could not apply this setting: {error}"));
                                         }
                                     } else if key == "ad_blocker" {
                                         if current.ad_blocker { start_ad_blocker_install(&proxy); }
@@ -1542,7 +1487,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                 let cleared = proxy.clone();
                                 let report = move |result| { let _ = cleared.send_event(UserEvent::BrowsingDataCleared(result, label)); };
                                 match regular {
-                                    Some(view) => if let Err(error) = desktop::clear_browsing_data(view, kinds, range, report) {
+                                    Some(view) => if let Err(error) = view.clear_browsing_data(kinds, range, Box::new(report)) {
                                         let _ = proxy.send_event(UserEvent::BrowsingDataCleared(Err(error), label));
                                     },
                                     None if profile_data => report(Err("Open a regular tab, then try again.".into())),
@@ -1569,14 +1514,14 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                                     state.update_status = Some("Reader view works on web articles.".into());
                                 } else if let Some(view) = views.get(&tab.id) {
                                     let (id, toggled) = (tab.id, proxy.clone());
-                                    let _ = view.evaluate_script_with_callback(include_str!("reader.js"), move |result| {
+                                    let _ = view.evaluate_script_with_callback(include_str!("reader.js"), Box::new(move |result| {
                                         let _ = toggled.send_event(UserEvent::ReaderToggled(id, result));
-                                    });
+                                    }));
                                 }
                             },
                             Command::Screenshot => if let Some(tab) = state.active_tab() && let Some(view) = views.get(&tab.id) {
                                 let saved = proxy.clone();
-                                if let Err(error) = desktop::screenshot(view, &tab.title, move |result| { let _ = saved.send_event(UserEvent::ScreenshotSaved(result)); }) {
+                                if let Err(error) = view.screenshot(&tab.title, Box::new(move |result| { let _ = saved.send_event(UserEvent::ScreenshotSaved(result)); })) {
                                     state.update_status = Some(format!("Could not save a screenshot: {error}"));
                                 }
                             },
@@ -1622,7 +1567,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
                             last_download_host = Some(id);
                             if blank && state.discard_download_tab(id) {
                                 download_only.insert(id);
-                                if let Some(view) = views.get(&id) { desktop::show(view, false); }
+                                if let Some(view) = views.get(&id) { view.show(false); }
                             } else if let Some(tab) = state.tabs.iter_mut().find(|tab| tab.id == id) {
                                 tab.is_loading = false; tab.pending_url = None; tab.error = None;
                                 if let Some(url) = document.or_else(|| tab.document_url.clone()) { tab.url = url; }
@@ -1674,13 +1619,18 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             _ => return,
         }
         downloads = desktop::download_counts(&views);
+        for (id, count) in engine.downloads() { *downloads.entry(id).or_default() += count; }
         state.active_downloads = downloads.values().sum();
         state.download_items = desktop::download_items();
         let awake: HashSet<_> = state.tabs.iter().filter(|tab| !tab.is_sleeping).map(|tab| tab.id).collect();
-        let download_hosts = desktop::download_hosts();
+        let mut download_hosts = desktop::download_hosts();
+        download_hosts.extend(downloads.iter().filter(|(_, count)| **count > 0).map(|(id, _)| *id));
         // Active and resumable transfers retain their owner; keep one completed owner for Downloads.
         download_only.retain(|id| download_hosts.contains(id) || last_download_host == Some(*id));
         views.retain(|id,_| awake.contains(id) || download_only.contains(id));
+        let private_now = state.tabs.iter().any(|tab| state.is_private(tab.id));
+        if private_open && !private_now { engine.end_private_session(); }
+        private_open = private_now;
         for tab in &mut state.tabs { if !views.contains_key(&tab.id) { tab.is_playing_audio = false; } }
         downloads.retain(|id, count| *count > 0 || awake.contains(id));
         sleep_pending.retain(|(id, _)| views.contains_key(id));
@@ -1693,7 +1643,7 @@ pub fn run(args: &[String]) -> wry::Result<()> {
         }
         let mut created = false;
         if let std::collections::hash_map::Entry::Vacant(entry) = views.entry(active_id) {
-            match content(&window, &mut context, &mut state, active_id, &proxy, &popup_host, false) {
+            match content(&window, &mut *engine, &mut state, active_id, false) {
                 Ok(view) => {
                     if state.active_tab().is_some_and(|tab| tab.error.is_some()) { let _ = view.load_html(include_str!("error.html")); }
                     entry.insert(view);
@@ -1731,14 +1681,14 @@ pub fn run(args: &[String]) -> wry::Result<()> {
             last_content_bounds = Some(geometry);
         }
         if visible_id != Some(active_id) || created {
-            if let Some(id) = visible_id && let Some(view) = views.get(&id) { desktop::show(view, false); hidden_at.entry(id).or_insert(now); }
-            if let Some(view) = views.get(&active_id) { desktop::show(view, true); hidden_at.remove(&active_id); }
+            if let Some(id) = visible_id && let Some(view) = views.get(&id) { view.show(false); hidden_at.entry(id).or_insert(now); }
+            if let Some(view) = views.get(&active_id) { view.show(true); hidden_at.remove(&active_id); }
         }
         let physical = content_bounds.size.to_physical::<u32>(window.scale_factor());
         let radius = if window.is_maximized() || window.fullscreen().is_some() { 0 } else { (ui::CONTENT_RADIUS * window.scale_factor()) as i32 };
         let shape = (physical.width, physical.height, radius);
         rounded.retain(|id, _| views.contains_key(id));
-        for (id, view) in &views { if rounded.get(id) != Some(&shape) { desktop::round(view, shape.0 as i32, shape.1 as i32, radius); rounded.insert(*id, shape); } }
+        for (id, view) in &views { if rounded.get(id) != Some(&shape) { view.round(shape.0 as i32, shape.1 as i32, radius); rounded.insert(*id, shape); } }
         let _ = topbar.set_bounds(topbar_bounds);
         if !palette_open {
             if state.sidebar_collapsed {

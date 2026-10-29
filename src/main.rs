@@ -2,6 +2,7 @@
 
 mod app;
 mod desktop;
+mod engine;
 mod extensions;
 mod history;
 mod import;
@@ -25,6 +26,17 @@ fn has_option(args: &[String], option: &str) -> bool {
 }
 
 fn main() -> wry::Result<()> {
+    // Servo starts page content in child copies of this executable.
+    #[cfg(feature = "servo")]
+    {
+        let mut args = std::env::args().skip(1);
+        if args.next().as_deref() == Some("--content-process")
+            && let Some(token) = args.next()
+        {
+            servo::run_content_process(token);
+            return Ok(());
+        }
+    }
     #[cfg(windows)]
     {
         #[link(name = "shell32")]

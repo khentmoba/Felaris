@@ -1,0 +1,481 @@
+diff --git a/servo-net/download.rs b/servo-net/download.rs
+new file mode 100644
+index 0000000..9128042
+--- /dev/null
++++ b/servo-net/download.rs
+@@ -0,0 +1,262 @@
++/* This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
++
++//! Saves top-level navigation responses that are downloads to a file chosen by the embedder.
++//!
++//! The navigation itself is answered with an empty `204 No Content` response, which makes
++//! the script thread abort it and keep the current document. The original response body,
++//! fetched with the page's cookies and request body, is then written to the file.
++
++use std::fs::File;
++use std::io::{BufWriter, Write};
++use std::path::PathBuf;
++
++use content_security_policy::percent_encoding::percent_decode_str;
++use http::StatusCode;
++use http::header::{CONTENT_DISPOSITION, CONTENT_LENGTH};
++use net_traits::fetch::headers::extract_mime_type_as_mime;
++use net_traits::mime_classifier::{MediaType, MimeClassifier};
++use net_traits::request::{Destination, Request, RequestMode};
++use net_traits::response::{Response, ResponseBody};
++use net_traits::{FetchTaskTarget, ResourceFetchTiming, ResourceTimingType};
++use servo_url::ServoUrl;
++
++use crate::embedder::NetToEmbedderMsg;
++use crate::fetch::methods::{DoneChannel, FetchContext, Target, wait_for_response};
++
++/// What the embedder is told about a download before choosing where to save it.
++#[derive(Clone, Debug)]
++pub struct DownloadDetails {
++    pub url: ServoUrl,
++    /// The file name from `Content-Disposition`, or else from the URL. It is not sanitized.
++    pub suggested_filename: String,
++    pub mime_type: Option<String>,
++    pub content_length: Option<u64>,
++}
++
++/// Whether `response` to a top-level navigation should be saved instead of displayed: it is
++/// sent as an attachment, or Servo cannot display its content type.
++pub(crate) fn is_download(request: &Request, response: &Response) -> bool {
++    if request.mode != RequestMode::Navigate ||
++        request.destination != Destination::Document ||
++        request.target_webview_id.is_none() ||
++        response.is_network_error() ||
++        !response.status.in_range(200..=299) ||
++        response.status.in_range(204..=205)
++    {
++        return false;
++    }
++    let headers = &response.actual_response().headers;
++    let attachment = headers
++        .get(CONTENT_DISPOSITION)
++        .map(|value| String::from_utf8_lossy(value.as_bytes()).into_owned())
++        .is_some_and(|value| {
++            value
++                .split(';')
++                .next()
++                .is_some_and(|kind| kind.trim().eq_ignore_ascii_case("attachment"))
++        });
++    // A missing or explicitly unknown type is sniffed by the parser, so only a declared type
++    // that Servo has no viewer for counts.
++    let undisplayable = extract_mime_type_as_mime(headers).is_some_and(|mime| {
++        !matches!(
++            mime.essence_str(),
++            "unknown/unknown" | "application/unknown" | "*/*"
++        ) && matches!(
++                MimeClassifier::get_media_type(&mime),
++                None | Some(MediaType::Font)
++            )
++    });
++    attachment || undisplayable
++}
++
++fn details(request: &Request, response: &Response) -> DownloadDetails {
++    let headers = &response.actual_response().headers;
++    let url = response
++        .actual_response()
++        .url()
++        .cloned()
++        .unwrap_or_else(|| request.current_url());
++    let disposition = headers
++        .get(CONTENT_DISPOSITION)
++        .map(|value| String::from_utf8_lossy(value.as_bytes()).into_owned());
++    let suggested_filename = disposition
++        .as_deref()
++        .and_then(disposition_filename)
++        .or_else(|| {
++            url.path_segments()
++                .and_then(|mut segments| segments.next_back())
++                .map(|segment| percent_decode_str(segment).decode_utf8_lossy().into_owned())
++                .filter(|name| !name.is_empty())
++        })
++        .unwrap_or_else(|| "download".into());
++    DownloadDetails {
++        url,
++        suggested_filename,
++        mime_type: extract_mime_type_as_mime(headers).map(|mime| mime.essence_str().to_owned()),
++        content_length: headers
++            .get(CONTENT_LENGTH)
++            .and_then(|value| value.to_str().ok())
++            .and_then(|value| value.parse().ok()),
++    }
++}
++
++/// The `filename*` (RFC 8187, UTF-8 only) or `filename` parameter of a `Content-Disposition`
++/// value. `filename*` wins when both are present.
++fn disposition_filename(value: &str) -> Option<String> {
++    let mut plain = None;
++    let mut extended = None;
++    for parameter in value.split(';').skip(1) {
++        let Some((name, value)) = parameter.split_once('=') else {
++            continue;
++        };
++        let value = value.trim();
++        match name.trim().to_ascii_lowercase().as_str() {
++            "filename*" => {
++                let mut parts = value.splitn(3, '\'');
++                if let (Some(charset), Some(_language), Some(encoded)) =
++                    (parts.next(), parts.next(), parts.next()) &&
++                    charset.eq_ignore_ascii_case("utf-8")
++                {
++                    extended = percent_decode_str(encoded)
++                        .decode_utf8()
++                        .ok()
++                        .map(|name| name.into_owned());
++                }
++            },
++            "filename" => {
++                plain = Some(
++                    value
++                        .strip_prefix('"')
++                        .and_then(|value| value.strip_suffix('"'))
++                        .unwrap_or(value)
++                        .replace("\\\"", "\""),
++                );
++            },
++            _ => {},
++        }
++    }
++    extended.or(plain).filter(|name| !name.trim().is_empty())
++}
++
++/// Writes the response body to a file and ignores everything else.
++struct FileTarget {
++    file: Option<BufWriter<File>>,
++    error: Option<String>,
++}
++
++impl FetchTaskTarget for FileTarget {
++    fn process_request_body(&mut self, _: &Request) {}
++    fn process_response(&mut self, _: &Request, _: &Response) {}
++    fn process_response_chunk(&mut self, _: &Request, chunk: bytes::Bytes) {
++        if let Some(file) = &mut self.file &&
++            let Err(error) = file.write_all(&chunk)
++        {
++            self.error = Some(error.to_string());
++            self.file = None;
++        }
++    }
++    fn process_response_eof(&mut self, _: &Request, _: &Response) {}
++    fn process_csp_violations(&mut self, _: &Request, _: Vec<content_security_policy::Violation>) {
++    }
++    fn process_response_length_hint(&mut self, _: &Request, _: usize) {}
++}
++
++/// Asks the embedder where to save a download, ends the navigation without replacing the
++/// page, and writes the body to the chosen file. Declining discards the response.
++pub(crate) async fn divert(
++    request: &Request,
++    response: &mut Response,
++    target: Target<'_>,
++    done_chan: &mut DoneChannel,
++    context: &FetchContext,
++) {
++    let Some(webview_id) = request.target_webview_id else {
++        return;
++    };
++    let (sender, receiver) = tokio::sync::oneshot::channel();
++    context
++        .state
++        .embedder_proxy
++        .send(NetToEmbedderMsg::RequestDownload(
++            webview_id,
++            details(request, response),
++            sender,
++        ));
++    let path: Option<PathBuf> = receiver.await.ok().flatten();
++
++    let mut no_content = Response::new(
++        request.current_url(),
++        ResourceFetchTiming::new(ResourceTimingType::Navigation),
++    );
++    no_content.status = StatusCode::NO_CONTENT.into();
++    *no_content.body.lock() = ResponseBody::Empty;
++    target.process_response(request, &no_content);
++    target.process_response_eof(request, &no_content);
++
++    let Some(path) = path else {
++        return;
++    };
++    let mut file_target = match File::create(&path) {
++        Ok(file) => FileTarget {
++            file: Some(BufWriter::new(file)),
++            error: None,
++        },
++        Err(error) => FileTarget {
++            file: None,
++            error: Some(error.to_string()),
++        },
++    };
++    if file_target.error.is_none() {
++        wait_for_response(request, response, &mut file_target, done_chan, context).await;
++    }
++    let mut result = match file_target.error.take() {
++        Some(error) => Err(error),
++        None if response.is_network_error() => Err(format!(
++            "{:?}",
++            response.get_network_error().cloned()
++        )),
++        None if response.aborted.load(std::sync::atomic::Ordering::Acquire) => {
++            Err("The download was cancelled.".into())
++        },
++        None => Ok(()),
++    };
++    if let Some(file) = file_target.file.take() &&
++        let Err(error) = file.into_inner().map_err(|error| error.into_error())
++    {
++        result = result.and(Err(error.to_string()));
++    }
++    if result.is_err() {
++        let _ = std::fs::remove_file(&path);
++    }
++    context
++        .state
++        .embedder_proxy
++        .send(NetToEmbedderMsg::DownloadFinished(webview_id, path, result));
++}
++
++#[cfg(test)]
++mod tests {
++    use super::disposition_filename;
++
++    #[test]
++    fn reads_content_disposition_filenames() {
++        assert_eq!(
++            disposition_filename("attachment; filename=\"report.pdf\"").as_deref(),
++            Some("report.pdf")
++        );
++        assert_eq!(
++            disposition_filename("attachment; filename=plain.txt").as_deref(),
++            Some("plain.txt")
++        );
++        assert_eq!(
++            disposition_filename(
++                "attachment; filename=\"fallback.txt\"; filename*=UTF-8''na%C3%AFve%20file.txt"
++            )
++            .as_deref(),
++            Some("naïve file.txt")
++        );
++        assert_eq!(disposition_filename("attachment"), None);
++    }
++}
+diff --git a/servo-net/embedder.rs b/servo-net/embedder.rs
+index 9912a7e..6123b75 100644
+--- a/servo-net/embedder.rs
++++ b/servo-net/embedder.rs
+@@ -12,6 +12,8 @@ use embedder_traits::{
+ use net_traits::CookieOperationId;
+ use servo_base::id::WebViewId;
+ use servo_url::ServoUrl;
++
++use crate::download::DownloadDetails;
+ use tokio::sync::mpsc::UnboundedSender as TokioSender;
+ use tokio::sync::oneshot::Sender as TokioOneshotSender;
+ 
+@@ -35,6 +37,14 @@ pub enum NetToEmbedderMsg {
+         bool, /* for proxy */
+         TokioOneshotSender<Option<AuthenticationResponse>>,
+     ),
++    /// Ask where to save a download from a top-level navigation. `None` discards it.
++    RequestDownload(
++        WebViewId,
++        DownloadDetails,
++        TokioOneshotSender<Option<PathBuf>>,
++    ),
++    /// A download accepted through `RequestDownload` finished. On failure the file is removed.
++    DownloadFinished(WebViewId, PathBuf, Result<(), String>),
+     /// Response to an asynchronous request from SiteDataManager with cookies result.
+     EmbedderCookieOperationResponseWithCookies(CookieOperationId, Vec<Cookie<'static>>),
+     /// Response to an asynchronous request from SiteDataManager.
+diff --git a/servo-net/fetch/methods.rs b/servo-net/fetch/methods.rs
+index 7a6b05d..31e0824 100644
+--- a/servo-net/fetch/methods.rs
++++ b/servo-net/fetch/methods.rs
+@@ -863,6 +863,17 @@ pub async fn main_fetch(
+         target.process_request_body(request);
+     }
+ 
++    // Felaris: a top-level navigation to a download saves it instead of replacing the page.
++    if crate::download::is_download(request, &response) {
++        crate::download::divert(request, &mut response, target, done_chan, context).await;
++        context
++            .state
++            .http_cache
++            .update_awaiting_consumers(request, &response)
++            .await;
++        return response;
++    }
++
+     // Step 22.
+     target.process_response(request, &response);
+     // Send Response to Devtools
+@@ -892,7 +903,7 @@ pub async fn main_fetch(
+     response
+ }
+ 
+-async fn wait_for_response(
++pub(crate) async fn wait_for_response(
+     request: &Request,
+     response: &mut Response,
+     target: Target<'_>,
+diff --git a/servo-net/lib.rs b/servo-net/lib.rs
+index c5ca178..25844ac 100644
+--- a/servo-net/lib.rs
++++ b/servo-net/lib.rs
+@@ -11,6 +11,7 @@ pub mod cookie_storage;
+ mod decoder;
+ mod devtools;
+ mod disk_cache;
++pub mod download;
+ pub mod embedder;
+ pub mod filemanager_thread;
+ mod hosts;
+diff --git a/servo/lib.rs b/servo/lib.rs
+index af1da44..dca7bd9 100644
+--- a/servo/lib.rs
++++ b/servo/lib.rs
+@@ -117,7 +117,8 @@ pub use crate::user_content_manager::UserContentManager;
+ pub use crate::webview::{WebView, WebViewBuilder};
+ pub use crate::webview_delegate::{
+     AlertDialog, AllowOrDenyRequest, AuthenticationRequest, BluetoothDeviceSelectionRequest,
+-    ColorPicker, ConfirmDialog, ContextMenu, CreateNewWebViewRequest, EmbedderControl, FilePicker,
++    ColorPicker, ConfirmDialog, ContextMenu, CreateNewWebViewRequest, DownloadRequest,
++    EmbedderControl, FilePicker,
+     InputMethodControl, NavigationRequest, PermissionRequest, PromptDialog, SelectElement,
+     SimpleDialog, WebResourceLoad, WebViewDelegate,
+ };
+diff --git a/servo/servo.rs b/servo/servo.rs
+index 578564f..4d83549 100644
+--- a/servo/servo.rs
++++ b/servo/servo.rs
+@@ -110,8 +110,8 @@ use crate::servo_delegate::{DefaultServoDelegate, ServoDelegate, ServoError};
+ use crate::site_data_manager::{CookieOperationResponse, SiteDataManager};
+ use crate::webview::{MINIMUM_WEBVIEW_SIZE, WebView, WebViewInner};
+ use crate::webview_delegate::{
+-    AllowOrDenyRequest, AuthenticationRequest, BluetoothDeviceSelectionRequest, EmbedderControl,
+-    FilePicker, NavigationRequest, PermissionRequest, ProtocolHandlerRegistration, WebResourceLoad,
++    AllowOrDenyRequest, AuthenticationRequest, BluetoothDeviceSelectionRequest, DownloadRequest,
++    EmbedderControl, FilePicker, NavigationRequest, PermissionRequest, ProtocolHandlerRegistration, WebResourceLoad,
+ };
+ 
+ #[cfg(feature = "media-gstreamer")]
+@@ -473,6 +473,23 @@ impl ServoInner {
+                         .request_authentication(webview, authentication_request);
+                 }
+             },
++            NetToEmbedderMsg::RequestDownload(webview_id, details, response_sender) => {
++                if let Some(webview) = self.get_webview_handle(webview_id) {
++                    let request = DownloadRequest::new(
++                        details,
++                        response_sender,
++                        self.servo_errors.sender(),
++                    );
++                    webview.delegate().request_download(webview, request);
++                }
++            },
++            NetToEmbedderMsg::DownloadFinished(webview_id, path, result) => {
++                if let Some(webview) = self.get_webview_handle(webview_id) {
++                    webview
++                        .delegate()
++                        .notify_download_finished(webview, path, result);
++                }
++            },
+             NetToEmbedderMsg::EmbedderCookieOperationResponseWithCookies(operation_id, cookies) => {
+                 self.site_data_manager.handle_cookie_response(
+                     operation_id,
+diff --git a/servo/webview_delegate.rs b/servo/webview_delegate.rs
+index f18540b..ccf9c2e 100644
+--- a/servo/webview_delegate.rs
++++ b/servo/webview_delegate.rs
+@@ -23,6 +23,8 @@ use tokio::sync::oneshot::Sender;
+ use url::Url;
+ use webrender_api::units::{DeviceIntPoint, DeviceIntRect, DeviceIntSize};
+ 
++use net::download::DownloadDetails;
++
+ use crate::proxies::ConstellationProxy;
+ use crate::responders::{AutomaticResponder, OneshotSender, ServoErrorSender};
+ use crate::{RegisterOrUnregister, Servo, WebView, WebViewBuilder};
+@@ -234,6 +236,57 @@ impl AuthenticationRequest {
+     }
+ }
+ 
++/// A top-level navigation in a [`WebView`] led to a download: the response is an attachment,
++/// or Servo cannot display its content type. The current page stays. Call
++/// [`DownloadRequest::save_to`] to save the response; dropping the request discards it.
++pub struct DownloadRequest {
++    pub(crate) details: DownloadDetails,
++    pub(crate) responder: AutomaticResponder<Option<PathBuf>>,
++    pub(crate) error_sender: ServoErrorSender,
++}
++
++impl DownloadRequest {
++    pub(crate) fn new(
++        details: DownloadDetails,
++        response_sender: Sender<Option<PathBuf>>,
++        error_sender: ServoErrorSender,
++    ) -> Self {
++        Self {
++            details,
++            responder: AutomaticResponder::new_same_process(
++                Box::new(OneshotSender::from(response_sender)),
++                None,
++            ),
++            error_sender,
++        }
++    }
++
++    /// The URL of the response being downloaded.
++    pub fn url(&self) -> &Url {
++        self.details.url.as_url()
++    }
++    /// The file name the server suggested, or the last segment of the URL. It is not
++    /// sanitized and may contain path separators.
++    pub fn suggested_filename(&self) -> &str {
++        &self.details.suggested_filename
++    }
++    /// The essence of the response's MIME type, if it declared one.
++    pub fn mime_type(&self) -> Option<&str> {
++        self.details.mime_type.as_deref()
++    }
++    /// The response's `Content-Length`, if known.
++    pub fn content_length(&self) -> Option<u64> {
++        self.details.content_length
++    }
++    /// Save the response to `path`, replacing any file there.
++    /// [`WebViewDelegate::notify_download_finished`] reports the outcome.
++    pub fn save_to(mut self, path: PathBuf) {
++        if let Err(error) = self.responder.send(Some(path)) {
++            self.error_sender.raise_response_send_error(error);
++        }
++    }
++}
++
+ /// Information related to the loading of a web resource. These are created for all HTTP requests.
+ /// The client may choose to intercept the load of web resources and send an alternate response
+ /// by calling [`WebResourceLoad::intercept`].
+@@ -957,6 +1010,17 @@ pub trait WebViewDelegate {
+     /// responsibility to remove the [`WebView`] from the interface when this notification
+     /// occurs.
+     fn notify_closed(&self, _webview: WebView) {}
++    /// A navigation in this [`WebView`] led to a download. Dropping the request discards it.
++    fn request_download(&self, _webview: WebView, _request: DownloadRequest) {}
++    /// A download accepted with [`DownloadRequest::save_to`] finished. On failure, the
++    /// partial file has been removed.
++    fn notify_download_finished(
++        &self,
++        _webview: WebView,
++        _path: PathBuf,
++        _result: Result<(), String>,
++    ) {
++    }
+ 
+     /// An input event passed to this [`WebView`] via [`WebView::notify_input_event`] has been handled
+     /// by Servo. This allows post-procesing of input events, such as chaining up unhandled events

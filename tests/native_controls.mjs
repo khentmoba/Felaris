@@ -82,6 +82,7 @@ export async function checkBrowserControls(sidebar, command, origin, port, artif
   assert.equal(await other.evaluate('localStorage.getItem("controls")'), 'keep-other');
   assert.equal(await other.evaluate('document.cookie.includes("controls=keep-other")'), true);
   assert.equal(await sidebar.evaluate(`currentState.tabs.find(t=>t.id===${a}).is_muted`), true, 'mute survives reload');
+  await page.evaluate('window.controlsViewMarker="before-sleep";true');
   await command('switch_tab',{id:b});
   await until(()=>sidebar.evaluate(`currentState.active_tab_id===${b}`),'leave muted tab');
   await command('toggle_sleep',{id:a});
@@ -89,8 +90,15 @@ export async function checkBrowserControls(sidebar, command, origin, port, artif
   await command('switch_tab',{id:a});
   const awakened=await connect(target=>target.url===origin+'/controls-a',port);
   await until(()=>awakened.evaluate('document.readyState==="complete"'),'wake muted tab');
+  assert.equal(await awakened.evaluate('typeof window.controlsViewMarker'), 'undefined', 'wake creates a fresh document');
   await awakened.call('Runtime.evaluate',{expression:'window.recreatedAudio=new AudioContext();window.recreatedTone=recreatedAudio.createOscillator();recreatedTone.connect(recreatedAudio.destination);recreatedTone.start();recreatedAudio.resume();true',userGesture:true});
-  await until(()=>sidebar.evaluate(`currentState.tabs.find(t=>t.id===${a}).is_playing_audio`),'audio event from recreated view');
+  console.log('Recreated audio probe', await awakened.evaluate(`({state:recreatedAudio.state,time:recreatedAudio.currentTime,visibility:document.visibilityState,focus:document.hasFocus()})`));
+  try {
+    await until(()=>sidebar.evaluate(`currentState.tabs.find(t=>t.id===${a}).is_playing_audio`),'audio event from recreated view');
+  } catch (error) {
+    console.error('Recreated audio failure state', await awakened.evaluate(`({state:recreatedAudio.state,time:recreatedAudio.currentTime,visibility:document.visibilityState,focus:document.hasFocus()})`));
+    throw error;
+  }
   assert.equal(await sidebar.evaluate(`currentState.tabs.find(t=>t.id===${a}).is_muted`),true,'native mute is reapplied before loading a recreated page');
   await awakened.evaluate('recreatedTone.stop();recreatedAudio.close();true');
   console.log('Native tab ordering, workspace rename/delete with live draft retention, audio/mute events, and origin-scoped cookie/storage clearing passed.');

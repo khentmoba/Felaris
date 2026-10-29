@@ -1,0 +1,124 @@
+diff --git a/servo/webview.rs b/servo/webview.rs
+index 51cea79..1ddf9b1 100644
+--- a/servo/webview.rs
++++ b/servo/webview.rs
+@@ -209,6 +209,7 @@ impl WebView {
+             webview_id: webview.id(),
+             viewport_details,
+             user_content_manager_id,
++            is_private: builder.private,
+         };
+ 
+         // There are two possibilities here. Either the WebView is a new toplevel
+@@ -1072,6 +1073,7 @@ pub struct WebViewBuilder {
+     clipboard_delegate: Option<Rc<dyn ClipboardDelegate>>,
+     #[cfg(feature = "gamepad")]
+     gamepad_delegate: Option<Rc<dyn GamepadDelegate>>,
++    private: bool,
+ }
+ 
+ impl WebViewBuilder {
+@@ -1091,6 +1093,7 @@ impl WebViewBuilder {
+             clipboard_delegate: None,
+             #[cfg(feature = "gamepad")]
+             gamepad_delegate: None,
++            private: false,
+         }
+     }
+ 
+@@ -1111,6 +1114,15 @@ impl WebViewBuilder {
+         self
+     }
+ 
++    /// Make the [`WebView`] being created use private browsing: separate, in-memory
++    /// cookies, HTTP cache, authentication cache and storage that are never written to
++    /// disk. Webviews created through `WebViewDelegate::request_create_new` ignore this
++    /// and inherit privacy from their opener.
++    pub fn private(mut self, private: bool) -> Self {
++        self.private = private;
++        self
++    }
++
+     /// Set the initial URL to load in the [`WebView`] being created.
+     pub fn url(mut self, url: Url) -> Self {
+         self.url = Some(url);
+diff --git a/servo-embedder-traits/lib.rs b/servo-embedder-traits/lib.rs
+index 950e17b..a86f2e5 100644
+--- a/servo-embedder-traits/lib.rs
++++ b/servo-embedder-traits/lib.rs
+@@ -1153,6 +1153,9 @@ pub struct NewWebViewDetails {
+     pub webview_id: WebViewId,
+     pub viewport_details: ViewportDetails,
+     pub user_content_manager_id: Option<UserContentManagerId>,
++    /// Whether the top-level browsing context uses private network state and storage.
++    /// Auxiliary webviews inherit privacy from their opener instead.
++    pub is_private: bool,
+ }
+ 
+ #[derive(Serialize, Deserialize, Debug)]
+diff --git a/servo-constellation/constellation.rs b/servo-constellation/constellation.rs
+index c1735a6..001ea22 100644
+--- a/servo-constellation/constellation.rs
++++ b/servo-constellation/constellation.rs
+@@ -3071,6 +3071,8 @@ where
+         };
+         let viewport_details = browsing_context.viewport_details;
+         let pipeline_id = browsing_context.pipeline_id;
++        // The crash page must stay in the private event loop of a private webview.
++        let is_private = browsing_context.is_private;
+ 
+         let Some(pipeline) = self.pipelines.get(&pipeline_id) else {
+             return warn!("failed pipeline is missing");
+@@ -3107,7 +3109,6 @@ where
+             ..old_load_data.clone()
+         };
+ 
+-        let is_private = false;
+         self.new_pipeline(
+             new_pipeline_id,
+             browsing_context_id,
+@@ -3347,12 +3348,12 @@ where
+             webview_id,
+             viewport_details,
+             user_content_manager_id,
++            is_private,
+         }: NewWebViewDetails,
+     ) {
+         let pipeline_id = PipelineId::new();
+         let browsing_context_id = BrowsingContextId::from(webview_id);
+         let load_data = LoadData::new_for_new_unrelated_webview(url);
+-        let is_private = false;
+ 
+         // Register this new top-level browsing context id as a webview and set
+         // its focused browsing context to be itself.
+@@ -3718,10 +3719,12 @@ where
+                 opener_webview_id,
+                 webview_id_sender,
+             ));
++        // Auxiliary webviews inherit privacy from their opener below.
+         let NewWebViewDetails {
+             webview_id: new_webview_id,
+             viewport_details,
+             user_content_manager_id,
++            is_private: _,
+         } = match webview_id_receiver.recv() {
+             Ok(Some(new_webview_details)) => new_webview_details,
+             Ok(None) | Err(_) => {
+diff --git a/servo-storage/storage_thread.rs b/servo-storage/storage_thread.rs
+index 7aaec6a..ea35d60 100644
+--- a/servo-storage/storage_thread.rs
++++ b/servo-storage/storage_thread.rs
+@@ -50,9 +50,12 @@ pub fn new_storage_threads(
+     config_dir: Option<PathBuf>,
+     temporary_storage: bool,
+ ) -> (StorageThreads, StorageThreads) {
++    // Private browsing must not read or write the profile on disk, so private storage
++    // gets no config directory: web storage stays in memory and the rest uses a
++    // temporary directory that is removed with the storage threads.
+     let private_storage_threads = new_storage_thread_group(
+         mem_profiler_chan.clone(),
+-        config_dir.clone(),
++        None,
+         temporary_storage,
+         "private",
+     );

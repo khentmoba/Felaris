@@ -205,6 +205,22 @@ window.runChecks=async()=>{
  check('palette input receives focus',nd.activeElement===ni);
  check('palette entry respects reduced motion',n.matchMedia('(prefers-reduced-motion: reduce)').matches?!nd.getAnimations().some(animation=>animation.id==='palette-open'):nd.getAnimations().some(animation=>animation.id==='palette-open'));
  check('palette scrim fades without repainting its fill',nd.getAnimations().filter(animation=>animation.id==='palette-scrim').every(animation=>animation.effect.getKeyframes().every(frame=>!('backgroundColor' in frame)))&&n.getComputedStyle(nd.querySelector('.scrim')).pointerEvents==='none');
+ if(!n.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  const opening=nd.getAnimations().find(animation=>animation.id==='palette-open');
+  opening.pause(); opening.currentTime=90;
+  const panel=nd.querySelector('.palette');
+  const before=n.getComputedStyle(panel).transform;
+  n.openNewTab(structuredClone(fixtureState));
+  const reopened=nd.getAnimations().find(animation=>animation.id==='palette-open');
+  reopened.pause(); reopened.currentTime=0;
+  check('reopening preserves the visible palette position',n.getComputedStyle(panel).transform===before);
+  reopened.finish();
+  const beforeCancel=messages.length;
+  n.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));
+  n.openNewTab(structuredClone(fixtureState));
+  await settle();
+  check('reopening cancels pending dismissal IPC',messages.length===beforeCancel&&!ni.readOnly);
+ }
  change('new search query');
  check('palette identifies Brave Search',nd.querySelector('.option-detail').textContent==='Search with Brave');
  check('search queries keep the search icon',!nd.querySelector('.option-icon img'));

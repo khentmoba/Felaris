@@ -17,6 +17,35 @@ try {
     if (!topbar) await new Promise(resolve => setTimeout(resolve, 100));
   }
   assert.ok(topbar, 'Top bar target missing');
+  await topbar.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
+  const loadingProbe = `(() => {
+    setLoading(true);
+    const bar=document.getElementById('bar');
+    const animation=bar.getAnimations().find(item=>item.id==='loading-progress');
+    animation.pause(); animation.currentTime=3000;
+    const before=getComputedStyle(bar).transform;
+    setLoading(true);
+    const stable=bar.getAnimations()[0]===animation&&getComputedStyle(bar).transform===before;
+    const frames=animation.effect.getKeyframes();
+    setLoading(false);
+    const completion=bar.getAnimations().find(item=>item.id==='loading-progress');
+    completion.pause(); completion.currentTime=0;
+    const continuous=getComputedStyle(bar).transform===before;
+    completion.finish();
+    setLoading(false);
+    return {stable,continuous,compositor:frames.every(frame=>!('width' in frame)),hidden:getComputedStyle(bar).opacity==='0',animations:bar.getAnimations().length};
+  })()`;
+  const loading = await topbar.evaluate(loadingProbe);
+  const popup = await connect(page => page.title === 'Felaris Popup', port);
+  await popup.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
+  const popupLoading = await popup.evaluate(loadingProbe.replaceAll('setLoading(', "setPopupState('',").replaceAll("'bar'", "'progress'"));
+  assert.deepEqual(popupLoading, loading, 'Popup loading follows the same continuity and completion behavior');
+  assert.deepEqual(loading, { stable:true, continuous:true, compositor:true, hidden:true, animations:0 }, 'Loading survives duplicate updates and completes from its visible position');
+  await topbar.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+  assert.equal(await topbar.evaluate(`setLoading(true); document.getElementById('bar').getAnimations().length`), 0, 'Reduced-motion loading stays static');
+  assert.equal(await topbar.evaluate(`setLoading(false); getComputedStyle(document.getElementById('bar')).opacity`), '0');
+  await topbar.call('Emulation.setEmulatedMedia', { features: [] });
+  console.log('Loading continuity, duplicate updates, compositor keyframes, completion and reduced motion passed.');
   await sidebar.evaluate(`(async()=>{
     while(!currentState.tabs.length) await new Promise(resolve=>setTimeout(resolve,20));
     if(!currentState.sidebar_collapsed) window.ipc.postMessage(JSON.stringify({action:'toggle_sidebar'}));

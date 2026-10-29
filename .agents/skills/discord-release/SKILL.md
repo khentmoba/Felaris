@@ -1,11 +1,25 @@
 ---
 name: discord-release
-description: Build release, binary upload to Discord, and human-readable changelog publication for Felaris. Use when publishing releases, uploading compiled felaris.exe binaries, or notifying the Discord #felaris-releases channel.
+description: Package Felaris, publish GitHub release assets, and announce the Windows installer in Discord #felaris-releases. Use for releases or release announcements.
 ---
 
 # Discord & GitHub Release Pipeline for Felaris
 
-Automates building Felaris in release mode, creating GitHub Releases with `felaris.exe` assets (enabling the built-in auto-updater), uploading to Discord `#felaris-releases`, and notifying the community via webhook.
+Builds and verifies Felaris, publishes GitHub release assets, and announces the
+Windows installer in Discord `#felaris-releases`.
+
+## Artifact selection
+
+Discord distributes `target/release/felaris-setup.exe`. The notifier attaches it
+when it exists and is at most 10 MiB. Otherwise, including `--no-upload`, it links
+to `felaris-setup.exe` on the matching GitHub release. Verify that asset exists
+before announcing a link, especially with `--skip-github` or a notification-only
+request. Use `--installer <path>` for a custom installer location; `--exe` remains
+a compatibility alias and must also receive an installer.
+
+GitHub retains `felaris.exe`, `felaris-setup.exe`, and `SHA256SUMS`. Keep the raw
+`felaris.exe` asset and `version.json` download URL for the built-in auto-updater.
+Discord's download and installation instructions use `felaris-setup.exe`.
 
 ## Quick Commands
 
@@ -38,8 +52,11 @@ request uses the existing release without a version bump or rebuild.
 4. Wait for successful Windows push CI on the exact current `origin/main` SHA.
    From a clean checkout of that commit, run `python scripts/build.py --dry-run`,
    then `python scripts/build.py` to package, publish GitHub assets, and notify Discord.
-5. Verify the tag points to the release commit, the assets are uploaded, and Discord
-   returned a message ID. Retain the release URL and message ID in the result.
+5. Verify the tag points to the release commit and all three assets are uploaded.
+   Inspect `python scripts/notify_discord.py --dry-run` before a manual announcement.
+   Confirm Discord returned a message ID and that the message attaches
+   `felaris-setup.exe` or links to that installer on the matching release. Retain
+   the release URL and message ID in the result.
 
 GitHub publication reads committed metadata, verifies the package, and pins the tag
 to that SHA. GitHub failures stop the Discord announcement; `--skip-github` is the

@@ -13,6 +13,19 @@
     }
     return window.Felaris.searchUrl + encodeURIComponent(text);
   }
+  const suggestionMetadata=new Map();
+  function metadata(entry) {
+    const title=entry.title||entry.url;
+    let data=suggestionMetadata.get(entry.url);
+    if(!data||data.title!==title) {
+     const url=entry.url.toLowerCase();
+     const lowerTitle=title.toLowerCase();
+     data={title,key:url.replace(/\/+$/,''),lowerTitle,text:lowerTitle+' '+url};
+     if(suggestionMetadata.size>=4096) suggestionMetadata.clear();
+     suggestionMetadata.set(entry.url,data);
+    }
+    return data;
+  }
   function suggestions(value,state={},historyEntries=[]) {
     const query=value.trim();
     const needle=query.toLowerCase();
@@ -21,25 +34,43 @@
     const seen=new Set();
     const norm=u=>(u||'').replace(/\/+$/,'').toLowerCase();
     const words=needle.split(/\s+/);
-    function relevance(option) {
+    const limit=target?7:8;
+    function relevance(data,url) {
      if(!needle) return 0;
-     const title=(option.title||'').toLowerCase();
-     const url=option.url.toLowerCase();
-     if(!words.every(word=>(title+' '+url).includes(word))) return -1;
-     let host='';
-     try { host=new URL(option.url).hostname.replace(/^www\./,'').toLowerCase(); } catch {}
-     if(needle===host||needle===host.split('.')[0]) return 100;
-     if(needle===title) return 95;
-     if(needle.length>=2&&host.startsWith(needle)) return 90;
-     if(needle.length>=2&&title.startsWith(needle)) return 80;
+     if(!words.every(word=>data.text.includes(word))) return -1;
+     if(data.host===undefined) {
+      data.host='';
+      try { data.host=new URL(url).hostname.replace(/^www\./,'').toLowerCase(); } catch {}
+      data.site=data.host.split('.')[0];
+     }
+     if(needle===data.host||needle===data.site) return 100;
+     if(needle===data.lowerTitle) return 95;
+     if(needle.length>=2&&data.host.startsWith(needle)) return 90;
+     if(needle.length>=2&&data.lowerTitle.startsWith(needle)) return 80;
      return 40;
     }
-    function add(option) {
-     if(!option.url||seen.has(norm(option.url))) return;
-     const score=relevance(option);
+    function add(entry,kind) {
+     if(!entry?.url) return;
+     const data=metadata(entry);
+     if(seen.has(data.key)) return;
+     const score=relevance(data,entry.url);
      if(score<0) return;
-     seen.add(norm(option.url));
-     options.push({option,score});
+     seen.add(data.key);
+     let index=options.findIndex(item=>item.score<score);
+     if(index<0) index=options.length;
+     if(index>=limit) return;
+     let option;
+     if(kind==='tab') {
+      const workspace=(state.workspaces||[]).find(space=>space.id===entry.workspace_id);
+      option={title:data.title,detail:`Switch to tab${workspace?' · '+workspace.name:''} · ${entry.url}`,id:entry.id,url:entry.url,favicon:entry.favicon};
+     } else {
+      const label=kind==='bookmark'?'Bookmark':kind==='history'?'History':'Shortcut';
+      option={title:data.title,detail:`${label} · ${entry.url}`,url:entry.url};
+      if(kind==='shortcut') option.favicon=entry.favicon;
+      option[kind]=true;
+     }
+     options.splice(index,0,{option,score});
+     if(options.length>limit) options.pop();
     }
     let fallback;
     if(target) {
@@ -47,26 +78,17 @@
      fallback={option:{title:query,detail:search?'Search with '+Felaris.searchName.replace(/ Search$/,''):'Open in a new tab',url:target,search},score:search?60:110};
      seen.add(norm(target));
     }
-    for(const tab of (state.tabs||[]).filter(tab=>!['felaris://newtab','felaris://blank'].includes(tab.url)).slice(0,needle?Infinity:6)) {
-     const workspace=(state.workspaces||[]).find(space=>space.id===tab.workspace_id);
-     add({title:tab.title||tab.url,detail:`Switch to tab${workspace?' · '+workspace.name:''} · ${tab.url}`,id:tab.id,url:tab.url,favicon:tab.favicon});
+    let tabCount=0;
+    for(const tab of state.tabs||[]) {
+     if(['felaris://newtab','felaris://blank'].includes(tab.url)) continue;
+     if(!needle&&tabCount++>=6) break;
+     add(tab,'tab');
     }
-    for(const entry of (state.bookmarks||[])) {
-     if(!entry?.url) continue;
-     add({title:entry.title||entry.url,detail:`Bookmark · ${entry.url}`,url:entry.url,bookmark:true});
-    }
-    for(const entry of historyEntries) {
-     if(!entry?.url) continue;
-     add({title:entry.title||entry.url,detail:`History · ${entry.url}`,url:entry.url,history:true});
-    }
-    for(const item of (state.shortcuts||[])) {
-     if(!item?.url) continue;
-     add({title:item.title||item.url,detail:`Shortcut · ${item.url}`,url:item.url,favicon:item.favicon,shortcut:true});
-    }
-    options.sort((a,b)=>b.score-a.score);
-    const ranked=options.slice(0,fallback?7:8);
-    if(fallback) ranked.push(fallback);
-    return ranked.sort((a,b)=>b.score-a.score).map(item=>item.option);
+    for(const entry of state.bookmarks||[]) add(entry,'bookmark');
+    for(const entry of historyEntries) add(entry,'history');
+    for(const entry of state.shortcuts||[]) add(entry,'shortcut');
+    if(fallback) options.push(fallback);
+    return options.sort((a,b)=>b.score-a.score).map(item=>item.option);
   }
   window.Felaris = { send, resolveAddress, suggestions, navigate: url => send('navigate', { url }), searchUrl: 'https://search.brave.com/search?q=', searchName: 'Brave Search' };
   const postShortcut = window.ipc?.postMessage.bind(window.ipc);

@@ -80,7 +80,7 @@ pub fn reveal_download(id: usize) -> Result<(), String> {
         .find(|item| item.id == id && item.status == "complete")
         .ok_or("This download is not complete yet.")?;
     std::process::Command::new("explorer.exe")
-        .arg(format!("/select,{}", item.path))
+        .args(["/select,", &item.path])
         .spawn()
         .map_err(|error| format!("Could not show the downloaded file: {error}"))?;
     Ok(())

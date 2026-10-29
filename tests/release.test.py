@@ -25,10 +25,10 @@ SHA = 'a' * 40
 class NotificationTests(unittest.TestCase):
     def test_payload_matches_delivery_and_normalizes_bullets(self):
         with tempfile.TemporaryDirectory() as directory:
-            binary = Path(directory) / 'felaris.exe'
+            binary = Path(directory) / 'felaris-setup.exe'
             binary.write_bytes(b'fixture')
-            for upload in (True, False):
-                arguments = ['notify', '--version', '1.2.3', '--summary', '* Fixed hover\n- Added prompts', '--exe', str(binary)]
+            for option, upload in (('--installer', True), ('--exe', True), ('--installer', False)):
+                arguments = ['notify', '--version', '1.2.3', '--summary', '* Fixed hover\n- Added prompts', option, str(binary)]
                 if not upload:
                     arguments.append('--no-upload')
                 with patch('sys.argv', arguments), patch.object(notify, 'get_webhook_url', return_value='https://example.test/webhook'), \
@@ -44,6 +44,51 @@ class NotificationTests(unittest.TestCase):
                 self.assertEqual(embed['fields'][2]['name'], 'Attached File' if upload else 'Download')
                 self.assertEqual(send.call_args.kwargs['file_path'], binary if upload else None)
                 self.assertIn('attached' if upload else 'link below', payload['content'])
+
+    def test_default_delivery_uses_installer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            installer = root / 'target/release/felaris-setup.exe'
+            installer.parent.mkdir(parents=True)
+            (installer.parent / 'felaris.exe').write_bytes(b'raw executable')
+            for mode in ('attached', 'oversized', 'missing', 'no-upload'):
+                with self.subTest(mode=mode):
+                    installer.write_bytes(b'installer')
+                    if mode == 'oversized':
+                        with installer.open('r+b') as artifact:
+                            artifact.truncate(10 * 1024 * 1024 + 1)
+                    elif mode == 'missing':
+                        installer.unlink()
+                    arguments = ['notify', '--version', '1.2.3', '--summary', 'Fixed release']
+                    if mode == 'no-upload':
+                        arguments.append('--no-upload')
+                    with patch('sys.argv', arguments), patch.object(notify, 'PROJECT_ROOT', root), \
+                            patch.object(notify, 'get_webhook_url', return_value='https://example.test/webhook'), \
+                            patch.object(notify, 'urlopen', return_value=io.BytesIO(b'{"id":"123"}')) as post, \
+                            contextlib.redirect_stdout(io.StringIO()):
+                        notify.main()
+                    request = post.call_args.args[0]
+                    if mode == 'attached':
+                        self.assertIn(b'filename="felaris-setup.exe"', request.data)
+                        self.assertIn(b'installer', request.data)
+                        self.assertNotIn(b'filename="felaris.exe"', request.data)
+                    else:
+                        payload = json.loads(request.data)
+                        self.assertEqual(payload['embeds'][0]['fields'][2]['value'],
+                                         '[felaris-setup.exe](https://github.com/khentmoba/Felaris/releases/download/v1.2.3/felaris-setup.exe)')
+                    self.assertIn(b'Run felaris-setup.exe', request.data)
+
+    @unittest.skipUnless(sys.platform == 'win32', 'PowerShell entry point is Windows-only')
+    def test_powershell_installer_path_and_legacy_alias(self):
+        script = str(ROOT / 'scripts/notify-discord.ps1').replace("'", "''")
+        for parameter in ('InstallerPath', 'ExePath'):
+            command = ("function python { ConvertTo-Json -InputObject @($args) -Compress; $global:LASTEXITCODE = 37 }; "
+                       f"& '{script}' -{parameter} 'C:\\release files\\felaris-setup.exe' -DryRun; exit $LASTEXITCODE")
+            encoded = base64.b64encode(command.encode('utf-16le')).decode('ascii')
+            result = subprocess.run(['powershell', '-NoProfile', '-EncodedCommand', encoded], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 37, result.stderr)
+            self.assertEqual(json.loads(result.stdout), [str(ROOT / 'scripts/notify_discord.py'), '--dry-run',
+                             '--installer', 'C:\\release files\\felaris-setup.exe'])
 
     def test_webhook_requests_message_receipt(self):
         response = io.BytesIO(b'{"id":"123"}')
@@ -132,6 +177,10 @@ class ReleaseTests(unittest.TestCase):
         github, notification = self.published()
         self.assertEqual(github[github.index('--target') + 1], SHA)
         self.assertIn('Committed notes', notification)
+        self.assertEqual(github[4:7], [str(self.root / 'target/release' / name)
+                                     for name in ('felaris.exe', 'felaris-setup.exe', 'SHA256SUMS')])
+        self.assertEqual(json.loads(self.manifest.read_text())['download_url'],
+                         release.manifest_for('1.2.3', 'Committed notes')['download_url'])
 
     def test_prepare_only_writes_metadata(self):
         self.invoke('--prepare', '--summary', 'New notes')

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Felaris Discord Release & Update Notification Tool
-Uploads build binaries (.exe) and announcements to Discord via Webhook.
+Uploads the Windows installer and announcements to Discord via Webhook.
 """
 
 import os
@@ -104,8 +104,8 @@ def main():
     parser.add_argument("--test", action="store_true", help="Send a webhook connection test message")
     parser.add_argument("--version", "-v", help="Release version (defaults to Cargo.toml)")
     parser.add_argument("--summary", "-s", help="Release notes or announcement summary")
-    parser.add_argument("--exe", help="Path to compiled felaris.exe binary")
-    parser.add_argument("--no-upload", action="store_true", help="Skip uploading the .exe binary")
+    parser.add_argument("--installer", "--exe", dest="installer", help="Path to felaris-setup.exe installer (--exe is a compatibility alias)")
+    parser.add_argument("--no-upload", action="store_true", help="Link to the installer instead of attaching it")
     parser.add_argument("--webhook", help="Explicit webhook URL")
     parser.add_argument("--dry-run", action="store_true", help="Print payload without sending")
 
@@ -152,21 +152,21 @@ def main():
 
     exe_file = None
     if not args.no_upload:
-        candidate = Path(args.exe) if args.exe else PROJECT_ROOT / 'target/release/felaris.exe'
+        candidate = Path(args.installer) if args.installer else PROJECT_ROOT / 'target/release/felaris-setup.exe'
         # Larger binaries use the public release asset to fit the default upload budget.
         if candidate.is_file() and candidate.stat().st_size <= 10 * 1024 * 1024:
             exe_file = candidate
-    download_url = f'https://github.com/khentmoba/Felaris/releases/download/v{ver}/felaris.exe'
+    download_url = f'https://github.com/khentmoba/Felaris/releases/download/v{ver}/felaris-setup.exe'
     delivery = ({"name": "Attached File", "value": f'{exe_file.name} ({exe_file.stat().st_size / (1024 * 1024):.2f} MB)', "inline": True}
-                if exe_file else {"name": "Download", "value": f'[felaris.exe]({download_url})', "inline": True})
+                if exe_file else {"name": "Download", "value": f'[felaris-setup.exe]({download_url})', "inline": True})
     payload = {
         "username": "Felaris Release Bot",
         "avatar_url": DEFAULT_AVATAR,
-        "content": f"New Release: **Felaris v{ver}** is now available! " + ('Download the attached file.' if exe_file else 'Download felaris.exe using the link below.'),
+        "content": f"New Release: **Felaris v{ver}** is now available! " + ('Download the attached installer.' if exe_file else 'Download felaris-setup.exe using the link below.'),
         "allowed_mentions": {"parse": []},
         "embeds": [{
             "title": f"Release: Felaris v{ver}",
-            "description": "Run felaris.exe on Windows to start browsing.",
+            "description": "Run felaris-setup.exe on Windows to install Felaris.",
             "color": 4363994,
             "fields": [
                 {"name": "Version", "value": f"v{ver}", "inline": True},
@@ -182,12 +182,12 @@ def main():
     if args.dry_run:
         print("[DryRun] Release payload:", json.dumps(payload, indent=2))
         if exe_file:
-            print(f"[DryRun] Attaching binary: {exe_file}")
+            print(f"[DryRun] Attaching installer: {exe_file}")
         return
 
     print(f"[Felaris] Publishing v{ver} release to Discord...")
     if exe_file:
-        print(f"[Felaris] Attaching binary: {exe_file.name}")
+        print(f"[Felaris] Attaching installer: {exe_file.name}")
     message = send_webhook(webhook_url, payload, file_path=exe_file)
     print(f"[Felaris] Discord message ID: {message['id']}")
     print(f"[Felaris] Successfully published v{ver} to #felaris-releases!")

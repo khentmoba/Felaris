@@ -11,7 +11,8 @@ param(
     [Parameter(Position = 1)]
     [string]$Summary,
 
-    [string]$ExePath,
+    [Alias('ExePath')]
+    [string]$InstallerPath,
 
     [string]$WebhookUrl,
 
@@ -29,7 +30,7 @@ if ($DryRun) { $pyArgs += "--dry-run" }
 if ($NoUpload) { $pyArgs += "--no-upload" }
 if ($Version) { $pyArgs += @("--version", $Version) }
 if ($Summary) { $pyArgs += @("--summary", $Summary) }
-if ($ExePath) { $pyArgs += @("--exe", $ExePath) }
+if ($InstallerPath) { $pyArgs += @("--installer", $InstallerPath) }
 if ($WebhookUrl) { $pyArgs += @("--webhook", $WebhookUrl) }
 
 python $pyScript @pyArgs

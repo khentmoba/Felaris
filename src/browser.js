@@ -35,6 +35,8 @@
     const norm=u=>(u||'').replace(/\/+$/,'').toLowerCase();
     const words=needle.split(/\s+/);
     const limit=target?7:8;
+    const maxScore=needle?100:0;
+    const complete=()=>options.length===limit&&options[limit-1].score===maxScore;
     function relevance(data,url) {
      if(!needle) return 0;
      if(!words.every(word=>data.text.includes(word))) return -1;
@@ -71,6 +73,7 @@
      }
      options.splice(index,0,{option,score});
      if(options.length>limit) options.pop();
+     return score===maxScore&&complete();
     }
     let fallback;
     if(target) {
@@ -82,11 +85,14 @@
     for(const tab of state.tabs||[]) {
      if(['felaris://newtab','felaris://blank'].includes(tab.url)) continue;
      if(!needle&&tabCount++>=6) break;
-     add(tab,'tab');
+     if(add(tab,'tab')) break;
     }
-    for(const entry of state.bookmarks||[]) add(entry,'bookmark');
-    for(const entry of historyEntries) add(entry,'history');
-    for(const entry of state.shortcuts||[]) add(entry,'shortcut');
+    for(const [entries,kind] of [[state.bookmarks,'bookmark'],[historyEntries,'history'],[state.shortcuts,'shortcut']]) {
+     if(complete()) break;
+     for(const entry of entries||[]) {
+      if(add(entry,kind)) break;
+     }
+    }
     if(fallback) options.push(fallback);
     return options.sort((a,b)=>b.score-a.score).map(item=>item.option);
   }

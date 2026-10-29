@@ -163,7 +163,7 @@ try {
 
   await command('new_tab', { url: origin + '/location' });
   const locator = await connect(page => page.url === origin + '/location', contentPort);
-  await until(() => locator.evaluate('document.readyState === "complete"'), 'location fixture ready');
+  await until(() => locator.evaluate(`location.href === ${JSON.stringify(origin + '/location')} && document.readyState === "complete"`), 'location fixture ready');
   await locator.call('Runtime.evaluate', { expression: 'navigator.geolocation.getCurrentPosition(()=>{},()=>{});true', userGesture: true });
   await until(() => permission.evaluate('current?.kind === "location"'), 'location prompt');
   const staleToken = await permission.evaluate('current.token');

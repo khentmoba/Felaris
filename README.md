@@ -130,6 +130,21 @@ The compiled release executable will be located at:
 target/release/felaris.exe
 ```
 
+Development builds use line-table debug information to reduce compilation and linking
+work while preserving source locations in backtraces. For full debugger support,
+including local variables and types, override it in PowerShell:
+
+```powershell
+$env:CARGO_PROFILE_DEV_DEBUG = '2'
+cargo run
+Remove-Item Env:CARGO_PROFILE_DEV_DEBUG
+```
+
+Cargo already enables incremental compilation for `cargo run`. `cargo-blaze` 0.0.1
+currently supports macOS and Linux and requires Rust 1.99; it cannot accelerate
+Felaris's Windows/MSVC build. See [the benchmark evidence](docs/pr-evidence/search-and-build-performance/README.md)
+for measured rebuild and suggestion timings.
+
 ---
 
 ## UI Verification

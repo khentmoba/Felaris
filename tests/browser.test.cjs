@@ -61,6 +61,14 @@ const sameUrl=[{title:'Unrelated',url:'https://same.example'},{title:'GitHub',ur
 assert.equal(suggest('github',{},sameUrl)[0].history,true,'A nonmatching duplicate must not hide a matching title');
 const ties=Array.from({length:40},(_,id)=>({id,title:'Guide '+id,url:'https://example.com/'+id}));
 assert.deepEqual(Array.from(suggest('guide',{tabs:ties}).filter(option=>!option.search),option=>option.id),[0,1,2,3,4,5,6],'Equal scores preserve source order at the result limit');
+const saturated=Array.from({length:7},(_,id)=>({id,title:'GitHub '+id,url:'https://github.com/'+id}));
+const unread={get url(){throw Error('A full list of maximum-score matches must not inspect later entries');}};
+assert.deepEqual(Array.from(suggest('github',{tabs:[...saturated,unread]},[unread]).filter(option=>!option.search),option=>option.id),[0,1,2,3,4,5,6]);
+assert.equal(suggest('',{bookmarks:[...ties.slice(0,8),unread]},[unread]).length,8,'Empty input stops once eight unique entries fill the list');
+const lateBest={tabs:ties.map(entry=>({...entry,title:'GitHub guide '+entry.id})),bookmarks:saturated};
+assert.deepEqual(Array.from(suggest('github',lateBest).filter(option=>!option.search),option=>option.url),saturated.map(entry=>entry.url),'Only maximum-score results permit early termination');
+const duplicateTop=[...saturated.map(entry=>({...entry,url:saturated[0].url})),...saturated.slice(1)];
+assert.equal(suggest('github',{bookmarks:duplicateTop},[unread]).length,8,'Duplicates do not count toward a full result list');
 suggest('overflow',{},Array.from({length:5000},(_,i)=>({title:'Overflow '+i,url:'https://overflow.test/'+i})));
 assert.equal(suggest('gitlab',changing)[0].id,70,'Eviction changes speed only, never suggestion results');
 assert.equal(suggest('gitlab',{tabs:JSON.parse(JSON.stringify(changing.tabs))})[0].title,'Updated project','Replaced IPC objects retain current values');

@@ -88,7 +88,7 @@
 
 The sidebar has no fixed shortcut-tile dock. Search opens/closes with short, interruptible motion, and tab and workspace changes retain visual continuity. Reduced-motion preferences skip spatial effects. Home-page shortcuts rank your most-visited sites (such as YouTube or X) first and fill any remaining slots from the default 8 shortcuts.
 
-Web searches use **Brave Search** by default (Settings can switch to DuckDuckGo, Google, or Bing) throughout the sidebar, Home page, and floating search bar. Suggestions come from your local open tabs, bookmarks, history, and shortcuts; no remote autocomplete requests are sent while typing.
+Web searches use **Brave Search** by default (Settings can switch to DuckDuckGo, Google, or Bing) throughout the sidebar, Home page, and floating search bar. Suggestions come from your local open tabs, bookmarks, history, and shortcuts; no remote autocomplete requests are sent while typing. Strong site or title matches appear before web search and are selected when you press Enter. Ordinary queries and weak matches keep web search first, and an explicit web search choice is always available.
 
 Shortcuts work while browser chrome or page content has focus. In pages they are caught natively before the page sees the key, so sites and focused iframes can't swallow them; `Ctrl + S`, `Ctrl + F`, and other keys not listed stay with the page. Right-clicking any tab in the sidebar opens quick actions to pin/unpin, duplicate, sleep/wake, move to another workspace, or close it. The bottom sidebar menu contains pin/unpin, reopen, and close-other-tabs actions. Close Others keeps pinned tabs, affects only the current workspace, and can be undone one tab at a time with Reopen.
 
